@@ -23,6 +23,11 @@
 		suggestedContent?: string | null;
 		onclose: () => void;
 		onupdated?: () => void;
+		/** Fired after a successful update via the "save & re-run" action so the
+		 *  parent can re-queue the card for a fresh run with the improved prompt
+		 *  (K4 — closes the needs_improvement loop). When absent, the re-run
+		 *  button is hidden. */
+		onsavedrequeue?: () => void;
 	}
 
 	let {
@@ -31,7 +36,8 @@
 		kanbanAgentId,
 		suggestedContent = null,
 		onclose,
-		onupdated
+		onupdated,
+		onsavedrequeue
 	}: Props = $props();
 
 	let prompt = $state<Prompt | null>(null);
@@ -77,15 +83,17 @@
 		error = null;
 	}
 
-	async function submit(): Promise<void> {
-		if (!promptId || !prompt) return;
+	/** Persists the prompt update. Returns true on success (shared by the
+	 *  plain "save" and the "save & re-run" actions). */
+	async function persistUpdate(): Promise<boolean> {
+		if (!promptId || !prompt) return false;
 		if (!summary.trim()) {
 			error = $i18n('kanban_improve_summary_required');
-			return;
+			return false;
 		}
 		if (content.trim() === prompt.content.trim()) {
 			error = $i18n('kanban_improve_no_change');
-			return;
+			return false;
 		}
 		submitting = true;
 		try {
@@ -95,12 +103,30 @@
 				editedBy: kanbanAgentId ? `agent:${kanbanAgentId}` : 'user',
 				editSummary: summary.trim()
 			});
-			onupdated?.();
-			onclose();
+			return true;
 		} catch (e) {
 			error = getErrorMessage(e);
+			return false;
 		} finally {
 			submitting = false;
+		}
+	}
+
+	async function submit(): Promise<void> {
+		if (await persistUpdate()) {
+			onupdated?.();
+			onclose();
+		}
+	}
+
+	/** K4: save the improved prompt AND re-queue the card for a fresh run, so
+	 *  the corrected prompt is actually exercised (closes the needs_improvement
+	 *  loop) instead of only benefiting future occurrences. */
+	async function submitAndRequeue(): Promise<void> {
+		if (await persistUpdate()) {
+			onupdated?.();
+			onsavedrequeue?.();
+			onclose();
 		}
 	}
 </script>
@@ -137,9 +163,14 @@
 		<Button variant="ghost" onclick={onclose} disabled={submitting}>
 			{$i18n('common_cancel')}
 		</Button>
-		<Button variant="primary" onclick={submit} disabled={submitting || !prompt}>
+		<Button variant="secondary" onclick={submit} disabled={submitting || !prompt}>
 			{$i18n('common_save')}
 		</Button>
+		{#if onsavedrequeue}
+			<Button variant="primary" onclick={submitAndRequeue} disabled={submitting || !prompt}>
+				{$i18n('kanban_improve_save_and_rerun')}
+			</Button>
+		{/if}
 	{/snippet}
 </Modal>
 

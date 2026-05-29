@@ -312,4 +312,75 @@ mod tests {
         let expected = Utc.with_ymd_and_hms(2026, 5, 22, 12, 46, 0).unwrap();
         assert_eq!(next, expected);
     }
+
+    /// CRUD round-trip over the DB-backed `_core` helpers: create persists the
+    /// row (enabled by default + computed next_run_at), get/list read it back,
+    /// update mutates the recurrence and applies the tri-state `enabled`
+    /// disable, delete removes it.
+    #[tokio::test]
+    async fn crud_roundtrip_creates_updates_and_deletes_schedule() {
+        let (state, _g) = crate::test_utils::setup_test_state().await;
+        let template = uuid::Uuid::new_v4().to_string();
+
+        let created = create_kanban_schedule_core(
+            &state.db,
+            KanbanScheduleCreate {
+                card_template_id: template.clone(),
+                days_of_week: vec![0, 2, 4],
+                hour: 9,
+                minute: 30,
+                skip_if_pending: true,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(created.card_template_id, template);
+        assert_eq!(created.days_of_week, vec![0, 2, 4]);
+        assert_eq!(created.hour, 9);
+        assert_eq!(created.minute, 30);
+        assert!(created.enabled, "a freshly created schedule is enabled");
+        assert!(created.skip_if_pending);
+
+        // get + list read the persisted row back.
+        let fetched = get_kanban_schedule_core(&state.db, &created.id)
+            .await
+            .unwrap();
+        assert_eq!(fetched.id, created.id);
+        let all = list_kanban_schedules_core(&state.db).await.unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].id, created.id);
+
+        // update mutates the recurrence and disables via the tri-state enabled.
+        let updated = update_kanban_schedule_core(
+            &state.db,
+            &created.id,
+            KanbanScheduleUpdate {
+                days_of_week: Some(vec![1]),
+                hour: Some(14),
+                minute: Some(0),
+                enabled: Some(Some(false)),
+                skip_if_pending: Some(false),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated.days_of_week, vec![1]);
+        assert_eq!(updated.hour, 14);
+        assert_eq!(updated.minute, 0);
+        assert!(!updated.enabled, "enabled=Some(Some(false)) must disable");
+        assert!(!updated.skip_if_pending);
+
+        // delete removes the row.
+        delete_kanban_schedule_core(&state.db, &created.id)
+            .await
+            .unwrap();
+        let err = get_kanban_schedule_core(&state.db, &created.id)
+            .await
+            .unwrap_err();
+        assert!(err.contains("not found"), "got: {err}");
+        assert!(list_kanban_schedules_core(&state.db)
+            .await
+            .unwrap()
+            .is_empty());
+    }
 }

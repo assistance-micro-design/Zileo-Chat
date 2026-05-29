@@ -22,10 +22,18 @@
 
 <script lang="ts">
 	import { visibleToasts, toastStore } from '$lib/stores/toast';
+	import { userQuestionStore } from '$lib/stores/user-question';
 	import ToastItem from './ToastItem.svelte';
 
 	function handleNavigate(workflowId: string): void {
 		toastStore.requestNavigation(workflowId);
+		// Open the (root-mounted) question modal directly so a worker question
+		// raised outside /agent (e.g. on /kanban) is answerable in place. The
+		// navigationStore above is only consumed by the agent page; without this
+		// the "go to workflow" toast button was a dead end on other routes.
+		// `openForWorkflow` is a no-op when no question is queued for this
+		// workflow, so this stays safe for plain completion toasts.
+		userQuestionStore.openForWorkflow(workflowId);
 		toastStore.dismissForWorkflow(workflowId);
 	}
 </script>

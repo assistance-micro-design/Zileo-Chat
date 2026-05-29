@@ -25,6 +25,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { get } from 'svelte/store';
 import type { UserQuestionStreamPayload } from '$types/user-question';
 
 const invokeMock = vi.fn();
@@ -102,5 +103,50 @@ describe('userQuestionStore — H1 workflowId propagation', () => {
 			questionId: QUESTION_ID,
 			workflowId: WORKFLOW_ID
 		});
+	});
+});
+
+describe('userQuestionStore — openForWorkflow (toast "go to workflow" on any route)', () => {
+	beforeEach(() => {
+		invokeMock.mockReset();
+		invokeMock.mockResolvedValue(undefined);
+		userQuestionStore.cleanup();
+	});
+
+	// Locks the behavior the toast "go to workflow" button now relies on
+	// (ToastContainer.handleNavigate → openForWorkflow): a question raised by a
+	// worker on a route OTHER than /agent is buffered (modal closed), and the
+	// toast button must be able to open the root-mounted modal in place so the
+	// user can answer — previously a dead end off /agent.
+	it('opens the modal for a queued non-viewed question', () => {
+		const payload: UserQuestionStreamPayload = {
+			questionId: QUESTION_ID,
+			question: 'Continue?',
+			questionType: 'checkbox',
+			options: undefined,
+			textPlaceholder: undefined,
+			textRequired: false,
+			context: undefined
+		};
+		// isViewed = false → queued only, modal stays closed.
+		userQuestionStore.handleQuestionForWorkflow(payload, WORKFLOW_ID, false);
+		expect(get(userQuestionStore).isModalOpen).toBe(false);
+
+		userQuestionStore.openForWorkflow(WORKFLOW_ID);
+
+		const state = get(userQuestionStore);
+		expect(state.isModalOpen).toBe(true);
+		expect(state.currentQuestion?.id).toBe(QUESTION_ID);
+		expect(state.currentQuestion?.workflowId).toBe(WORKFLOW_ID);
+	});
+
+	// Safety: plain completion toasts (no queued question) must not pop an empty
+	// modal — openForWorkflow is a no-op when nothing is queued for the workflow.
+	it('is a no-op when no question is queued for the workflow', () => {
+		userQuestionStore.openForWorkflow('wf-with-no-questions');
+
+		const state = get(userQuestionStore);
+		expect(state.isModalOpen).toBe(false);
+		expect(state.currentQuestion).toBeNull();
 	});
 });

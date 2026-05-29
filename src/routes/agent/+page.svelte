@@ -32,7 +32,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 	// Component imports
 	import { AgentHeader, WorkflowSidebar, ChatContainer } from '$lib/components/agent';
-	import { TokenDisplay, UserQuestionModal } from '$lib/components/workflow';
+	import { TokenDisplay } from '$lib/components/workflow';
 	import { Button } from '$lib/components/ui';
 	import { MessageSquare, Settings, Bot } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
@@ -711,9 +711,12 @@ Uses extracted components, services, and stores for clean architecture.
 			await selectWorkflow(initialSelection.workflowIdToSelect);
 		}
 
-		// Initialize validation and user question stores
+		// Initialize the validation store. The userQuestionStore is NOT reset
+		// here: it is now driven globally (the UserQuestionModal lives in the
+		// root layout, K3) so a question raised by a Kanban worker must survive
+		// navigation into/out of /agent — resetting it on mount/destroy would
+		// wipe a pending cross-page question.
 		await validationStore.init();
-		userQuestionStore.init();
 
 		// Reload the agent list whenever a sibling Settings page broadcasts a
 		// CRUD event. Without this, the sidebar (and the New Workflow modal,
@@ -731,7 +734,9 @@ Uses extracted components, services, and stores for clean architecture.
 		// backgroundWorkflowsStore lifecycle owned by +layout.svelte so its
 		// listeners survive page navigation — don't destroy it here.
 		validationStore.cleanup();
-		userQuestionStore.cleanup();
+		// userQuestionStore is intentionally NOT cleaned up here — it is owned
+		// globally now (root-layout modal, K3). Resetting it on /agent destroy
+		// would wipe a pending question raised by a Kanban worker.
 		unsubscribeSettingsRefresh?.();
 		unsubscribeSettingsRefresh = null;
 	});
@@ -916,9 +921,6 @@ Uses extracted components, services, and stores for clean architecture.
 			/>
 		{/await}
 	{/if}
-
-	<!-- User Question Modal -->
-	<UserQuestionModal />
 </div>
 
 <style>

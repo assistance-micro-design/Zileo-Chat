@@ -182,6 +182,5 @@ pub mod validation;
 pub mod validation_audit;
 pub mod workflow;
 pub mod workflow_folder;
-pub mod workflow_slots;
 
 pub use security::SecureKeyStore;

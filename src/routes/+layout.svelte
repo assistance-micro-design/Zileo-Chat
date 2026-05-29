@@ -26,6 +26,7 @@
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import LegalModal from '$lib/components/legal/LegalModal.svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
+	import { UserQuestionModal } from '$lib/components/workflow';
 	import { sttSettingsStore } from '$lib/stores/sttSettings';
 	import { backgroundWorkflowsStore } from '$lib/stores/background-workflows';
 	import { kanbanEventsStore } from '$lib/stores/kanban-events';
@@ -114,3 +115,11 @@
 
 <!-- Legal modals accessible from Tauri Help menu -->
 <LegalModal type={legalModalType} open={legalModalOpen} onclose={() => (legalModalOpen = false)} />
+
+<!--
+  User question modal (global, K3): mounted at the root so a question raised by
+  ANY workflow — including a Kanban worker running while the user is on /kanban
+  (which does not host its own modal) — surfaces on every route. Driven entirely
+  by the workflow-aware userQuestionStore; no page context required.
+-->
+<UserQuestionModal />

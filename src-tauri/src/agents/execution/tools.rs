@@ -26,10 +26,90 @@ use crate::models::AgentConfig;
 use crate::tools::{
     context::AgentToolContext,
     validation_helper::{is_destructive_file_op, ValidationHelper},
-    Tool, ToolDefinition, ToolFactory,
+    Tool, ToolDefinition, ToolError, ToolFactory, ToolResult,
 };
+use async_trait::async_trait;
+use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
+
+/// Tool decorator that rejects a fixed set of (write) operations while
+/// delegating everything else to the wrapped tool. Used to make the Prompt and
+/// Skill managers read-only in DETACHED runs (K6.1): the Kanban analyze/compose
+/// runs carry no agent context and inject an UNTRUSTED worker report, so a
+/// prompt-injection payload must not be able to rewrite shared prompts/skills.
+/// `list`/`read` operations stay available so the analyzer can still consult
+/// them to inform its verdict.
+pub(crate) struct ReadOnlyToolGuard {
+    inner: Arc<dyn Tool>,
+    forbidden_ops: &'static [&'static str],
+}
+
+impl ReadOnlyToolGuard {
+    pub(crate) fn new(inner: Arc<dyn Tool>, forbidden_ops: &'static [&'static str]) -> Self {
+        Self {
+            inner,
+            forbidden_ops,
+        }
+    }
+}
+
+#[async_trait]
+impl Tool for ReadOnlyToolGuard {
+    fn id(&self) -> &str {
+        self.inner.id()
+    }
+
+    fn definition(&self) -> ToolDefinition {
+        self.inner.definition()
+    }
+
+    async fn execute(&self, input: Value) -> ToolResult<Value> {
+        let op = input
+            .get("operation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if self.forbidden_ops.contains(&op) {
+            return Err(ToolError::PermissionDenied(format!(
+                "Operation '{}' is disabled in a detached run (read-only). Prompt/skill \
+                 edits happen via the card review chat with the user.",
+                op
+            )));
+        }
+        self.inner.execute(input).await
+    }
+
+    fn validate_input(&self, input: &Value) -> ToolResult<()> {
+        self.inner.validate_input(input)
+    }
+}
+
+/// Write operations stripped from the Prompt/Skill managers in detached runs.
+const PROMPT_MANAGER_WRITE_OPS: &[&str] = &["create_prompt", "update_prompt"];
+const SKILL_MANAGER_WRITE_OPS: &[&str] = &[
+    "create_skill",
+    "update_skill",
+    "restore_skill_version",
+    "grant_skill_to_agent",
+    "revoke_skill_from_agent",
+];
+
+/// Wraps the Prompt/Skill manager tools of a DETACHED run so their write
+/// operations are rejected (K6.1). Other tools pass through untouched.
+fn harden_detached_writes(tools: Vec<Arc<dyn Tool>>) -> Vec<Arc<dyn Tool>> {
+    tools
+        .into_iter()
+        .map(|t| match t.id() {
+            "PromptManagerTool" => {
+                Arc::new(ReadOnlyToolGuard::new(t, PROMPT_MANAGER_WRITE_OPS)) as Arc<dyn Tool>
+            }
+            "SkillManagerTool" => {
+                Arc::new(ReadOnlyToolGuard::new(t, SKILL_MANAGER_WRITE_OPS)) as Arc<dyn Tool>
+            }
+            _ => t,
+        })
+        .collect()
+}
 
 /// Collects MCP tool definitions with full metadata from configured servers.
 pub(crate) async fn get_mcp_tool_definitions(
@@ -156,13 +236,13 @@ pub(crate) async fn create_local_tools(
 
     // If this is the primary agent and we have context, use create_tools_with_context
     // (skipped for Kanban agents so the delegation tools are never auto-added).
-    if is_primary_agent && !is_kanban {
-        if let Some(context) = effective_context {
+    let tools = match (is_primary_agent && !is_kanban, effective_context) {
+        (true, Some(context)) => {
             debug!(
                 agent_id = %config.id,
                 "Creating tools with context for primary agent (sub-agent tools available)"
             );
-            return factory
+            factory
                 .create_tools_with_context(
                     &tool_names,
                     workflow_id,
@@ -170,20 +250,33 @@ pub(crate) async fn create_local_tools(
                     Some(context.clone()),
                     true,
                 )
-                .await;
+                .await
         }
-    }
+        _ => {
+            // Sub-agents or agents without context use basic tool creation.
+            debug!(
+                agent_id = %config.id,
+                is_primary_agent = is_primary_agent,
+                has_context = effective_context.is_some(),
+                "Creating basic tools (sub-agent tools NOT available)"
+            );
+            factory
+                .create_tools(&tool_names, workflow_id, config.id.clone(), app_handle)
+                .await
+        }
+    };
 
-    // For sub-agents or agents without context, use basic tool creation
-    debug!(
-        agent_id = %config.id,
-        is_primary_agent = is_primary_agent,
-        has_context = effective_context.is_some(),
-        "Creating basic tools (sub-agent tools NOT available)"
-    );
-    factory
-        .create_tools(&tool_names, workflow_id, config.id.clone(), app_handle)
-        .await
+    // K6.1: a DETACHED run carries no agent context (the Kanban analyze/compose
+    // runs pass `agent_context: None`). With no human in the loop and an
+    // UNTRUSTED worker report injected into analyze, the Prompt/Skill managers
+    // must not be able to WRITE shared prompts/skills — wrap them read-only.
+    // Runs WITH a context (the /agent page, the card review chat) keep full
+    // write access.
+    if effective_context.is_none() {
+        harden_detached_writes(tools)
+    } else {
+        tools
+    }
 }
 
 /// Collects all tool definitions from local tools and MCP tools.
@@ -455,6 +548,191 @@ mod tests {
             ids.contains(&"MemoryTool".to_string()),
             "Kanban agent must still receive its non-delegation tools, got {ids:?}"
         );
+    }
+
+    fn find_tool<'a>(tools: &'a [Arc<dyn Tool>], id: &str) -> &'a Arc<dyn Tool> {
+        tools
+            .iter()
+            .find(|t| t.id() == id)
+            .unwrap_or_else(|| panic!("{id} not found in {:?}", tool_ids(tools)))
+    }
+
+    /// K6.1: a DETACHED run (no agent context — the Kanban analyze/compose path)
+    /// must have PromptManager write operations blocked, while read operations
+    /// stay available.
+    #[tokio::test]
+    async fn detached_run_blocks_prompt_manager_writes() {
+        let (state, _g) = setup_test_state().await;
+        let config = agent_config_from(serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "name": "Detached",
+            "tools": ["PromptManagerTool"],
+        }));
+
+        // agent_context None + context_override None => detached.
+        let tools = create_local_tools(
+            &config,
+            Some(&state.tool_factory),
+            None,
+            Some("wf-1".to_string()),
+            false,
+            None,
+        )
+        .await;
+
+        let pm = find_tool(&tools, "PromptManagerTool");
+        let write = pm
+            .execute(serde_json::json!({
+                "operation": "create_prompt",
+                "name": "x",
+                "content": "y"
+            }))
+            .await;
+        assert!(
+            matches!(write, Err(crate::tools::ToolError::PermissionDenied(_))),
+            "detached create_prompt must be denied, got {write:?}"
+        );
+
+        // Read stays available (not denied).
+        let read = pm
+            .execute(serde_json::json!({"operation": "list_prompts"}))
+            .await;
+        assert!(
+            !matches!(read, Err(crate::tools::ToolError::PermissionDenied(_))),
+            "detached list_prompts must NOT be denied, got {read:?}"
+        );
+    }
+
+    /// K6.1: a run WITH an agent context (the /agent page, the card review chat)
+    /// keeps full PromptManager write access — the guard is detached-only.
+    #[tokio::test]
+    async fn contextful_run_allows_prompt_manager_writes() {
+        let (state, _g) = setup_test_state().await;
+        let context = AgentToolContext::from_app_state_full(&state);
+        let config = agent_config_from(serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "name": "Contextful",
+            "tools": ["PromptManagerTool"],
+        }));
+
+        let tools = create_local_tools(
+            &config,
+            Some(&state.tool_factory),
+            Some(&context),
+            Some("wf-1".to_string()),
+            true,
+            None,
+        )
+        .await;
+
+        let pm = find_tool(&tools, "PromptManagerTool");
+        let write = pm
+            .execute(serde_json::json!({
+                "operation": "create_prompt",
+                "name": "x",
+                "content": "y"
+            }))
+            .await;
+        assert!(
+            !matches!(write, Err(crate::tools::ToolError::PermissionDenied(_))),
+            "contextful create_prompt must NOT be denied by the read-only guard, got {write:?}"
+        );
+    }
+
+    /// K6.1: a DETACHED run must have SkillManager write operations blocked by
+    /// the read-only guard. We assert the GUARD denied it (its distinctive
+    /// message) — not the unrelated `ensure_kanban` gate — to confirm the
+    /// wrapping is what intercepts the write before it reaches the inner tool.
+    #[tokio::test]
+    async fn detached_run_wraps_skill_manager_writes() {
+        let (state, _g) = setup_test_state().await;
+        let config = agent_config_from(serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "name": "KanbanDetached",
+            "kind": "kanban",
+            "tools": ["SkillManagerTool"],
+        }));
+
+        let tools = create_local_tools(
+            &config,
+            Some(&state.tool_factory),
+            None,
+            Some("wf-1".to_string()),
+            false,
+            None,
+        )
+        .await;
+
+        let sm = find_tool(&tools, "SkillManagerTool");
+        let write = sm
+            .execute(serde_json::json!({
+                "operation": "create_skill",
+                "name": "x",
+                "content": "y",
+                "description": "d",
+                "target_agent_id": uuid::Uuid::new_v4().to_string()
+            }))
+            .await;
+        match write {
+            Err(crate::tools::ToolError::PermissionDenied(msg)) => assert!(
+                msg.contains("read-only"),
+                "create_skill must be denied by the read-only GUARD, got: {msg}"
+            ),
+            other => panic!("expected PermissionDenied from the guard, got {other:?}"),
+        }
+    }
+
+    /// K6.1: the `ReadOnlyToolGuard` itself — forbidden ops are denied with the
+    /// read-only message, every other op delegates to the wrapped tool. Covers
+    /// the SkillManager forbidden list (read ops pass through) without the
+    /// `ensure_kanban` confound of a non-persisted agent.
+    #[tokio::test]
+    async fn read_only_guard_blocks_forbidden_and_passes_through() {
+        // Minimal fake tool that echoes the input back on execute.
+        struct EchoTool;
+        #[async_trait]
+        impl Tool for EchoTool {
+            fn id(&self) -> &str {
+                "SkillManagerTool"
+            }
+            fn definition(&self) -> ToolDefinition {
+                ToolDefinition {
+                    id: "SkillManagerTool".to_string(),
+                    name: "SkillManager".to_string(),
+                    summary: String::new(),
+                    description: String::new(),
+                    input_schema: serde_json::json!({}),
+                    output_schema: serde_json::json!({}),
+                    requires_confirmation: false,
+                }
+            }
+            async fn execute(&self, input: Value) -> ToolResult<Value> {
+                Ok(input)
+            }
+            fn validate_input(&self, _input: &Value) -> ToolResult<()> {
+                Ok(())
+            }
+        }
+
+        let guard = ReadOnlyToolGuard::new(Arc::new(EchoTool), SKILL_MANAGER_WRITE_OPS);
+        assert_eq!(guard.id(), "SkillManagerTool", "id delegates to inner");
+
+        for write_op in SKILL_MANAGER_WRITE_OPS {
+            let r = guard
+                .execute(serde_json::json!({"operation": write_op}))
+                .await;
+            assert!(
+                matches!(r, Err(crate::tools::ToolError::PermissionDenied(_))),
+                "write op {write_op} must be denied, got {r:?}"
+            );
+        }
+
+        // A read op delegates to the inner tool (echoes the input back).
+        let read = guard
+            .execute(serde_json::json!({"operation": "list_skills"}))
+            .await
+            .expect("read op must delegate");
+        assert_eq!(read["operation"], "list_skills");
     }
 
     /// A standard (kind = None) agent that lists UserQuestionTool keeps it:

@@ -100,7 +100,7 @@ The kanban toolkit (auto-provisioned at agent creation when `kind: Kanban` is se
 |------|------|
 | `PromptManagerTool` | Read / create / update prompts (no delete; auto-snapshots `prompt_version`) |
 | `SkillManagerTool` | Read / create / update / grant / revoke / list_versions / restore_version on skills |
-| `WorkflowManagerTool` | Read-only access to historical workflows (read, list errors, list sub-agents) for analyzer evidence |
+| `WorkflowManagerTool` | Access to historical workflows (list, read, list errors, list sub-agents) and folder organisation; hidden (card-chat) workflows are always filtered out |
 | `ListAgentsTool` *(private)* | Auto-injected during `compose_card_from_description`; lists standard agents the supervisor may pick as targets |
 | `SubmitComposedCardTool` *(private)* | Auto-injected during compose; terminal call that finalizes the card and validates the prompt-variable contract |
 | `SubmitAnalysisTool` *(private)* | Auto-injected during `analyze_card_report`; terminal call that finalizes the verdict |

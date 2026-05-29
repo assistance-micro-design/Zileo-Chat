@@ -10,7 +10,17 @@
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
 	import { Badge, Button, Spinner } from '$lib/components/ui';
-	import { Eye, Trash2, FileText, Wand2, Repeat, Copy, Pencil, Clock } from '@lucide/svelte';
+	import {
+		Eye,
+		Trash2,
+		FileText,
+		Wand2,
+		Repeat,
+		Copy,
+		Pencil,
+		Clock,
+		RotateCcw
+	} from '@lucide/svelte';
 	import type { KanbanCard, KanbanCardStatus } from '$types/kanban';
 	import { runningWorkflows } from '$lib/stores/background-workflows';
 
@@ -34,6 +44,9 @@
 		onduplicate?: (card: KanbanCard) => void;
 		/** Callback for "edit card" action (any card except running). */
 		onedit?: (card: KanbanCard) => void;
+		/** Callback for "retry" action: re-queue a failed/rejected review card for
+		 *  a fresh run (K5). */
+		onretry?: (card: KanbanCard) => void;
 	}
 
 	let {
@@ -46,7 +59,8 @@
 		ondelete,
 		onschedule,
 		onduplicate,
-		onedit
+		onedit,
+		onretry
 	}: Props = $props();
 
 	const isRunning = $derived(card.column === 'doing');
@@ -58,6 +72,17 @@
 	const isCompleted = $derived(
 		(card.column === 'review' && card.status === 'review') ||
 			(card.column === 'done' && card.status === 'done')
+	);
+	/**
+	 * Eligible for "retry" (K5): a review card that FAILED or was REJECTED
+	 * (carries an error_summary). These would otherwise pile up in review with
+	 * no affordance. Re-queuing relaunches a fresh run (Phase 1 Review→Todo).
+	 * `needs_improvement` is excluded on purpose — it is handled by the
+	 * improve-prompt flow (K4), which re-queues after editing the prompt. A
+	 * success awaiting validation has no error_summary, so it is excluded too.
+	 */
+	const canRetry = $derived(
+		card.column === 'review' && (card.status === 'failed' || !!card.error_summary)
 	);
 	/** Progress chunks for this card (if workflow is running). */
 	const liveProgress = $derived(
@@ -192,6 +217,18 @@
 			>
 				<Eye size={14} />
 				{$i18n('kanban_card_view')}
+			</Button>
+		{/if}
+		{#if canRetry && onretry}
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				onclick={() => onretry?.(card)}
+				ariaLabel={$i18n('kanban_card_retry_aria')}
+			>
+				<RotateCcw size={14} />
+				{$i18n('kanban_card_retry')}
 			</Button>
 		{/if}
 		{#if isReviewable && onimprove && card.prompt_id}

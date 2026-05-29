@@ -242,6 +242,20 @@ impl WorkflowManagerTool {
     ) -> ToolResult<Value> {
         let wid =
             validate_uuid_field(workflow_id, "workflow_id").map_err(ToolError::InvalidInput)?;
+        // Refuse hidden workflows (the confined per-card Kanban review chat):
+        // moving another card's chat into a folder is cross-card tampering
+        // (Sec-I1 / K9). Mirrors rename_workflow's guard.
+        let guard_q = format!(
+            "SELECT meta::id(id) AS id FROM workflow \
+             WHERE meta::id(id) = '{}' AND (hidden_from_list ?? false) = false",
+            wid
+        );
+        let visible = self.db.query_json(&guard_q).await.map_err(|e| {
+            ToolError::DatabaseError(format!("move_workflow_to_folder guard: {}", e))
+        })?;
+        if visible.is_empty() {
+            return Err(ToolError::NotFound(format!("Workflow {}", wid)));
+        }
         let set_clause = match folder_id {
             Some(fid) if !fid.trim().is_empty() => {
                 let v = validate_uuid_field(fid, "folder_id").map_err(ToolError::InvalidInput)?;
@@ -848,6 +862,26 @@ mod tests {
         assert!(
             matches!(err, ToolError::NotFound(_)),
             "hidden workflow must read as NotFound, got {err:?}"
+        );
+    }
+
+    /// K9: move_workflow_to_folder must refuse a hidden workflow — moving
+    /// another card's confined chat into a folder is cross-card tampering.
+    #[tokio::test]
+    async fn move_workflow_to_folder_rejects_hidden() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let hidden = uuid::Uuid::new_v4().to_string();
+        let aid = uuid::Uuid::new_v4().to_string();
+        seed_workflow_hidden(&state.db, &hidden, &aid, true).await;
+
+        let err = tool
+            .move_workflow_to_folder(&hidden, None)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, ToolError::NotFound(_)),
+            "hidden workflow move must fail with NotFound, got {err:?}"
         );
     }
 

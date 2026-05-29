@@ -41,6 +41,17 @@ pub const DONE_CARD_TTL_DAYS: i64 = 3;
 /// Prevents an explosion of cards if the app was closed for weeks.
 pub const MAX_CATCHUP_PER_SCHEDULE: usize = 7;
 
+/// Grace period (seconds) before an orphaned `doing` card is reclaimed.
+///
+/// A card promoted to `doing` whose `kanban:card_ready` event was lost (the
+/// /kanban page was not mounted to consume it) stays `doing` with
+/// `workflow_id = NONE` forever. Since slots are counted by `status='doing'`,
+/// such cards permanently consume the budget and eventually deadlock it. Two
+/// ticks: a healthy card receives its `workflow_id` within seconds of
+/// promotion, so 2× the tick is a safe floor that never reclaims a card still
+/// being wired up by the frontend.
+pub const ORPHAN_DOING_GRACE_SECS: i64 = 2 * SCHEDULER_TICK_SECS as i64;
+
 /// Spawns the kanban scheduler task. The returned handle is parked in
 /// [`crate::state::AppState`] so the runtime owns it and shutdown can
 /// `abort()` it deterministically.
@@ -68,6 +79,18 @@ pub fn spawn_kanban_scheduler_task(
                 Ok(_) => debug!("Kanban scheduler: no schedules due"),
                 Err(e) => warn!(error = %e, "Kanban scheduler: schedules error"),
             }
+            // Reclaim orphaned `doing` cards BEFORE counting slots so any freed
+            // slot is available to the promotion step in the same tick (K1).
+            match reclaim_orphaned_doing_cards_core(&db, ORPHAN_DOING_GRACE_SECS).await {
+                Ok(ids) if !ids.is_empty() => {
+                    info!(
+                        reclaimed = ids.len(),
+                        "Kanban scheduler: reclaimed orphaned doing cards"
+                    )
+                }
+                Ok(_) => debug!("Kanban scheduler: no orphaned doing cards"),
+                Err(e) => warn!(error = %e, "Kanban scheduler: orphan reclaim error"),
+            }
             match start_next_pending_card_core(&db, &app_handle).await {
                 Ok(n) if n > 0 => info!(started = n, "Kanban scheduler: promoted cards"),
                 Ok(_) => debug!("Kanban scheduler: no slots / no cards to promote"),
@@ -86,6 +109,56 @@ pub fn spawn_kanban_scheduler_task(
             }
         }
     })
+}
+
+/// Safety net for orphaned `doing` cards (K1): a card promoted to `doing`
+/// whose `kanban:card_ready` event was lost (no /kanban page mounted to consume
+/// it) stays `doing` with `workflow_id = NONE` forever and, since slots are
+/// counted by `status='doing'`, permanently consumes the budget — eventually
+/// deadlocking promotion entirely.
+///
+/// After `grace_secs` (measured via `updated_at`, stamped at promotion), such
+/// cards are reset to their PRE-promotion state `status='ready', column='todo'`
+/// so the slot frees and the scheduler re-promotes them. Resetting `status`
+/// alone would NOT re-promote — the promotion query requires
+/// `status='ready' AND column='todo'` — hence both fields.
+///
+/// Returns the reclaimed card ids. The UPDATE re-evaluates the same predicate
+/// so a card that received its `workflow_id` between the SELECT and the UPDATE
+/// is spared (ERR_SURREAL race-safety, mirrors the purge).
+pub async fn reclaim_orphaned_doing_cards_core(
+    db: &Arc<DBClient>,
+    grace_secs: i64,
+) -> Result<Vec<String>, String> {
+    let pick_q = format!(
+        "SELECT meta::id(id) AS id FROM kanban_card \
+         WHERE `column` = 'doing' AND workflow_id IS NONE \
+           AND updated_at < time::now() - {}s",
+        grace_secs
+    );
+    let rows = db
+        .query_json(&pick_q)
+        .await
+        .map_err(|e| format!("Failed to pick orphaned doing cards: {}", e))?;
+    let ids: Vec<String> = rows
+        .iter()
+        .filter_map(|r| r["id"].as_str().map(String::from))
+        .collect();
+    if ids.is_empty() {
+        return Ok(ids);
+    }
+
+    let ids_json = serde_json::to_string(&ids)
+        .map_err(|e| format!("Failed to serialize orphan ids: {}", e))?;
+    let upd = format!(
+        "UPDATE kanban_card SET status = 'ready', `column` = 'todo', updated_at = time::now() \
+         WHERE meta::id(id) IN {} AND `column` = 'doing' AND workflow_id IS NONE",
+        ids_json
+    );
+    db.execute(&upd)
+        .await
+        .map_err(|e| format!("Failed to reclaim orphaned doing cards: {}", e))?;
+    Ok(ids)
 }
 
 /// Deletes cards stuck in `done` for more than `DONE_CARD_TTL_DAYS` days,
@@ -203,6 +276,25 @@ pub async fn process_due_schedules_core(db: &Arc<DBClient>) -> Result<usize, Str
             continue;
         }
 
+        // K7 guard: an empty `days_of_week` makes compute_next_run_at return
+        // `now`, so the schedule would fire every tick forever (DoS). Newer
+        // payloads are rejected at validation, but a legacy/forged row could
+        // still carry empty days — auto-disable it so it stops polluting every
+        // tick (the user can re-enable after fixing the days via the UI).
+        if days.is_empty() {
+            let _ = db
+                .execute(&format!(
+                    "UPDATE kanban_schedule:`{}` SET enabled = false",
+                    schedule_id
+                ))
+                .await;
+            warn!(
+                schedule_id = %schedule_id,
+                "Schedule has empty days_of_week — auto-disabled (would fire every tick)"
+            );
+            continue;
+        }
+
         // F: skip-if-pending guard. If a previous instance is still in flight
         // (todo or doing) for this template, do not spawn a new one — just
         // re-arm next_run_at to the next future occurrence so we don't poll
@@ -269,6 +361,17 @@ pub async fn process_due_schedules_core(db: &Arc<DBClient>) -> Result<usize, Str
             }
         }
         spawned += local_spawned;
+
+        // If we hit the cap while still behind `now`, older missed occurrences
+        // were intentionally skipped — surface it (no silent drop).
+        if local_spawned == MAX_CATCHUP_PER_SCHEDULE && cursor <= now {
+            warn!(
+                schedule_id = %schedule_id,
+                template_id = %template_id,
+                cap = MAX_CATCHUP_PER_SCHEDULE,
+                "Catch-up cap reached — older missed occurrences skipped this tick"
+            );
+        }
 
         // Re-arm next_run_at to whatever the cursor ended on (or the next
         // future occurrence relative to now if the cap was hit).
@@ -453,13 +556,45 @@ async fn spawn_card_from_template(db: &Arc<DBClient>, template_id: &str) -> Resu
     Ok(id)
 }
 
-/// Counts how many cards are currently `doing` (in-flight) and promotes the
-/// next `ready` cards from `todo` until the slot budget is used up. Emits
-/// `kanban:card_ready` per promoted card.
-pub async fn start_next_pending_card_core(
+/// Atomically claims a pending card for execution by flipping it to `doing`
+/// ONLY if it is still `status='ready'`. Returns `true` when this caller won
+/// the claim, `false` when a concurrent promoter already flipped it.
+///
+/// `start_next_pending_card_core` is reached from three concurrent sites (the
+/// scheduler tick, the `workflow_complete` listener, `create_kanban_card`), and
+/// the SELECT→UPDATE was previously non-atomic with an UNCONDITIONAL flip, so
+/// two promoters could each emit `card_ready` for the same card → two workflows
+/// for one card. The `WHERE status='ready'` guard makes the flip the single
+/// atomic gate: only the first UPDATE matches; the rest return zero rows and
+/// MUST NOT emit `card_ready`.
+async fn try_claim_pending_card_core(db: &Arc<DBClient>, card_id: &str) -> Result<bool, String> {
+    // card_id comes from `meta::id(id)` of a prior SELECT (trusted clean UUID),
+    // so format! is safe here (security rules: validated record ids).
+    let q = format!(
+        "UPDATE kanban_card:`{}` SET status = 'doing', `column` = 'doing', \
+         updated_at = time::now() WHERE status = 'ready' RETURN meta::id(id) AS id",
+        card_id
+    );
+    let rows = db
+        .query_json(&q)
+        .await
+        .map_err(|e| format!("Failed to claim card for promotion: {}", e))?;
+    Ok(!rows.is_empty())
+}
+
+/// Slot-budget + candidate selection for promotion, WITHOUT the per-card claim
+/// or the `kanban:card_ready` emit.
+///
+/// Extracted from `start_next_pending_card_core` so the slot accounting (an
+/// empty result when in-flight `doing` cards saturate
+/// `DEFAULT_MAX_CONCURRENT_WORKFLOWS`), the schedule-template exclusion and the
+/// `column_order` ordering can be asserted without a Tauri `AppHandle` (the
+/// emit is impossible to mock from a unit test). Returns the ready `todo` cards
+/// (`id`, `title`, `target_agent_id`, …) the caller should try to claim, capped
+/// at the number of free slots.
+pub(crate) async fn select_cards_to_promote_core(
     db: &Arc<DBClient>,
-    app_handle: &AppHandle,
-) -> Result<usize, String> {
+) -> Result<Vec<serde_json::Value>, String> {
     // 1. Slot budget.
     let in_flight_q = "SELECT count() AS c FROM kanban_card WHERE status = 'doing' GROUP ALL";
     let rows = db
@@ -473,7 +608,7 @@ pub async fn start_next_pending_card_core(
         .unwrap_or(0) as usize;
     let free = DEFAULT_MAX_CONCURRENT_WORKFLOWS.saturating_sub(in_flight);
     if free == 0 {
-        return Ok(0);
+        return Ok(Vec::new());
     }
 
     // 2. Pull the next N ready cards in `todo` column ordered by column_order.
@@ -493,10 +628,19 @@ pub async fn start_next_pending_card_core(
          ORDER BY `column_order` ASC, created_at ASC LIMIT {}",
         free
     );
-    let cards = db
-        .query_json(&pick_q)
+    db.query_json(&pick_q)
         .await
-        .map_err(|e| format!("Failed to pick ready cards: {}", e))?;
+        .map_err(|e| format!("Failed to pick ready cards: {}", e))
+}
+
+/// Counts how many cards are currently `doing` (in-flight) and promotes the
+/// next `ready` cards from `todo` until the slot budget is used up. Emits
+/// `kanban:card_ready` per promoted card.
+pub async fn start_next_pending_card_core(
+    db: &Arc<DBClient>,
+    app_handle: &AppHandle,
+) -> Result<usize, String> {
+    let cards = select_cards_to_promote_core(db).await?;
 
     let mut promoted = 0usize;
     for card in cards {
@@ -504,16 +648,21 @@ pub async fn start_next_pending_card_core(
         if card_id.is_empty() {
             continue;
         }
-        // 3. Flip to `doing` (status + column). workflow_id stays NONE — the
-        //    frontend sets it once execute_workflow_streaming returns the wf id.
-        let upd = format!(
-            "UPDATE kanban_card:`{}` SET status = 'doing', `column` = 'doing', \
-             updated_at = time::now()",
-            card_id
-        );
-        if let Err(e) = db.execute(&upd).await {
-            warn!(card_id = %card_id, error = %e, "Failed to promote card");
-            continue;
+        // 3. Atomically claim the card (flip to doing only if still `ready`).
+        //    workflow_id stays NONE — the frontend sets it once
+        //    execute_workflow_streaming returns the wf id. If another promoter
+        //    already claimed it, skip WITHOUT emitting card_ready (avoids a
+        //    duplicate workflow — K2 double-promotion race).
+        match try_claim_pending_card_core(db, &card_id).await {
+            Ok(true) => {}
+            Ok(false) => {
+                debug!(card_id = %card_id, "Card already claimed by another promoter, skipping");
+                continue;
+            }
+            Err(e) => {
+                warn!(card_id = %card_id, error = %e, "Failed to claim card for promotion");
+                continue;
+            }
         }
         // 4. Notify frontend.
         let _ = app_handle.emit(
@@ -582,68 +731,245 @@ mod tests {
     use super::*;
     use crate::test_utils::setup_test_state;
 
-    // start_next_pending_card_core is exercised via the spawn loop; here we
-    // only cover mark_card_done_core which has no AppHandle dependency.
-    // The promotion-slot logic relies on a real Tauri AppHandle for the
-    // event emit, which cannot be mocked from a unit test.
+    /// Seeds a `kanban_card`. `kanban_agent_id` == `target_agent_id` == the
+    /// passed `agent_id` so the `skip_if_pending` triplet match is predictable.
+    async fn seed_card(
+        db: &Arc<DBClient>,
+        card_id: &str,
+        agent_id: &str,
+        title: &str,
+        column: &str,
+        status: &str,
+    ) {
+        let q = format!(
+            "CREATE kanban_card:`{card_id}` CONTENT {{
+                id: '{card_id}', title: '{title}', description: '',
+                kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                target_folder_id: NONE, status: '{status}', `column`: '{column}',
+                `column_order`: 0, workflow_id: NONE, error_summary: NONE,
+                created_at: time::now(), updated_at: time::now()
+            }}"
+        );
+        db.execute(&q).await.unwrap();
+    }
 
-    /// Regression: a card that is referenced as `card_template_id` by an
-    /// enabled schedule must never be promoted to `doing`. The template is
-    /// the user's blueprint; only fresh clones spawned by the schedule are
-    /// eligible for execution. Mirrors the WHERE clause in
-    /// `start_next_pending_card_core`.
+    /// Seeds an enabled schedule for `template_id`. `due=true` sets
+    /// `next_run_at` in the past (now - 1h); all 7 weekdays so the re-arm
+    /// always lands a future occurrence after one catch-up step.
+    async fn seed_schedule(
+        db: &Arc<DBClient>,
+        schedule_id: &str,
+        template_id: &str,
+        due: bool,
+        skip_if_pending: bool,
+    ) {
+        let next = if due {
+            "time::now() - 1h"
+        } else {
+            "time::now() + 7d"
+        };
+        let q = format!(
+            "CREATE kanban_schedule:`{schedule_id}` CONTENT {{
+                id: '{schedule_id}', card_template_id: '{template_id}',
+                days_of_week: [0, 1, 2, 3, 4, 5, 6], hour: 9, minute: 0,
+                next_run_at: {next},
+                last_run_at: NONE, enabled: true, skip_if_pending: {skip_if_pending},
+                created_at: time::now()
+            }}"
+        );
+        db.execute(&q).await.unwrap();
+    }
+
+    /// `select_cards_to_promote_core` excludes cards referenced as a schedule
+    /// template (the user's blueprint) and surfaces only regular ready/todo
+    /// cards. Exercises the real helper (replaces the old query-duplicating
+    /// test that only mirrored the WHERE clause).
     #[tokio::test]
-    async fn test_promotion_query_excludes_schedule_templates() {
+    async fn select_to_promote_excludes_schedule_templates() {
         let (state, _g) = setup_test_state().await;
         let agent_id = uuid::Uuid::new_v4().to_string();
         let template_id = uuid::Uuid::new_v4().to_string();
         let regular_id = uuid::Uuid::new_v4().to_string();
-
-        for (cid, title) in [(&template_id, "template"), (&regular_id, "regular")] {
-            let q = format!(
-                "CREATE kanban_card:`{cid}` CONTENT {{
-                    id: '{cid}', title: '{title}', description: '',
-                    kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
-                    prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
-                    target_folder_id: NONE, status: 'ready', `column`: 'todo',
-                    `column_order`: 0, workflow_id: NONE, error_summary: NONE,
-                    created_at: time::now(), updated_at: time::now()
-                }}"
-            );
-            state.db.execute(&q).await.unwrap();
-        }
-
-        // Attach an enabled schedule to the template card.
+        seed_card(
+            &state.db,
+            &template_id,
+            &agent_id,
+            "template",
+            "todo",
+            "ready",
+        )
+        .await;
+        seed_card(
+            &state.db,
+            &regular_id,
+            &agent_id,
+            "regular",
+            "todo",
+            "ready",
+        )
+        .await;
         let sid = uuid::Uuid::new_v4().to_string();
-        let sched = format!(
-            "CREATE kanban_schedule:`{sid}` CONTENT {{
-                id: '{sid}', card_template_id: '{template_id}',
-                days_of_week: [0], hour: 9, minute: 0,
-                next_run_at: time::now() + 7d,
-                last_run_at: NONE, enabled: true, skip_if_pending: false,
-                created_at: time::now()
-            }}"
-        );
-        state.db.execute(&sched).await.unwrap();
+        seed_schedule(&state.db, &sid, &template_id, false, false).await;
 
-        // Run the same query the production code uses.
-        let pick_q = "SELECT meta::id(id) AS id, title, `column_order`, created_at \
-             FROM kanban_card \
-             WHERE status = 'ready' AND `column` = 'todo' \
-               AND meta::id(id) NOT IN (SELECT VALUE card_template_id FROM kanban_schedule WHERE enabled = true) \
-             ORDER BY `column_order` ASC, created_at ASC";
-        let rows = state.db.query_json(pick_q).await.unwrap();
-        let ids: Vec<String> = rows
+        let cards = select_cards_to_promote_core(&state.db).await.unwrap();
+        let ids: Vec<String> = cards
             .iter()
-            .filter_map(|r| r["id"].as_str().map(String::from))
+            .filter_map(|c| c["id"].as_str().map(String::from))
             .collect();
         assert!(
             !ids.contains(&template_id),
-            "template card must be excluded from promotion"
+            "template card must be excluded from promotion, got {ids:?}"
         );
         assert!(
             ids.contains(&regular_id),
-            "regular ready card must remain eligible"
+            "regular ready card must remain eligible, got {ids:?}"
+        );
+    }
+
+    /// Slot accounting: when in-flight `doing` cards saturate
+    /// `DEFAULT_MAX_CONCURRENT_WORKFLOWS`, the helper offers nothing for
+    /// promotion (free == 0) even with a ready card waiting.
+    #[tokio::test]
+    async fn select_to_promote_returns_empty_when_slots_full() {
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        for _ in 0..DEFAULT_MAX_CONCURRENT_WORKFLOWS {
+            let cid = uuid::Uuid::new_v4().to_string();
+            seed_card(&state.db, &cid, &agent_id, "inflight", "doing", "doing").await;
+        }
+        let ready = uuid::Uuid::new_v4().to_string();
+        seed_card(&state.db, &ready, &agent_id, "waiting", "todo", "ready").await;
+
+        let cards = select_cards_to_promote_core(&state.db).await.unwrap();
+        assert!(
+            cards.is_empty(),
+            "no promotion while all {} slots are full, got {cards:?}",
+            DEFAULT_MAX_CONCURRENT_WORKFLOWS
+        );
+    }
+
+    /// A due schedule spawns at least one fresh todo/ready clone (bounded by the
+    /// catch-up cap) and re-arms `next_run_at` into the future while staying
+    /// enabled.
+    #[tokio::test]
+    async fn process_due_spawns_card_and_rearms() {
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let template_id = uuid::Uuid::new_v4().to_string();
+        seed_card(
+            &state.db,
+            &template_id,
+            &agent_id,
+            "Recurring",
+            "done",
+            "done",
+        )
+        .await;
+        let sid = uuid::Uuid::new_v4().to_string();
+        seed_schedule(&state.db, &sid, &template_id, true, false).await;
+
+        let spawned = process_due_schedules_core(&state.db).await.unwrap();
+        assert!(spawned >= 1, "a due schedule must spawn at least one card");
+        assert!(
+            spawned <= MAX_CATCHUP_PER_SCHEDULE,
+            "spawns must never exceed the catch-up cap"
+        );
+
+        let clones = state
+            .db
+            .query_json(
+                "SELECT meta::id(id) AS id FROM kanban_card \
+                 WHERE title = 'Recurring' AND `column` = 'todo' AND status = 'ready'",
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            clones.len(),
+            spawned,
+            "one fresh todo/ready clone per spawn"
+        );
+
+        let sched = state
+            .db
+            .query_json(&format!(
+                "SELECT enabled, next_run_at FROM kanban_schedule:`{}`",
+                sid
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            sched[0]["enabled"], true,
+            "a healthy schedule stays enabled"
+        );
+        let next = sched[0]["next_run_at"]
+            .as_str()
+            .expect("next_run_at must be present");
+        let next_dt = chrono::DateTime::parse_from_rfc3339(next)
+            .expect("next_run_at must be rfc3339")
+            .with_timezone(&Utc);
+        assert!(
+            next_dt > Utc::now(),
+            "next_run_at must be re-armed into the future, got {next}"
+        );
+    }
+
+    /// `skip_if_pending=true`: when a previous instance of the template is still
+    /// pending (matching title + agents in `todo`), the due schedule must NOT
+    /// spawn a duplicate.
+    #[tokio::test]
+    async fn process_due_skips_spawn_when_instance_pending() {
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let template_id = uuid::Uuid::new_v4().to_string();
+        seed_card(&state.db, &template_id, &agent_id, "Daily", "done", "done").await;
+        // A pending instance with the same triplet (title + agents) in todo.
+        let pending = uuid::Uuid::new_v4().to_string();
+        seed_card(&state.db, &pending, &agent_id, "Daily", "todo", "ready").await;
+        let sid = uuid::Uuid::new_v4().to_string();
+        seed_schedule(&state.db, &sid, &template_id, true, true).await;
+
+        let spawned = process_due_schedules_core(&state.db).await.unwrap();
+        assert_eq!(
+            spawned, 0,
+            "skip_if_pending must suppress spawn while an instance is pending"
+        );
+
+        let todo = state
+            .db
+            .query_json(
+                "SELECT meta::id(id) AS id FROM kanban_card \
+                 WHERE title = 'Daily' AND `column` = 'todo'",
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            todo.len(),
+            1,
+            "no new clone must be spawned, only the pre-existing instance"
+        );
+    }
+
+    /// A due schedule whose template card no longer exists must auto-disable
+    /// itself (so it stops polluting every tick) and spawn nothing.
+    #[tokio::test]
+    async fn process_due_auto_disables_schedule_with_missing_template() {
+        let (state, _g) = setup_test_state().await;
+        let missing_template = uuid::Uuid::new_v4().to_string(); // no card created
+        let sid = uuid::Uuid::new_v4().to_string();
+        seed_schedule(&state.db, &sid, &missing_template, true, false).await;
+
+        let spawned = process_due_schedules_core(&state.db).await.unwrap();
+        assert_eq!(spawned, 0, "an orphan schedule spawns nothing");
+
+        let sched = state
+            .db
+            .query_json(&format!("SELECT enabled FROM kanban_schedule:`{}`", sid))
+            .await
+            .unwrap();
+        assert_eq!(
+            sched[0]["enabled"], false,
+            "orphan schedule (missing template) must auto-disable"
         );
     }
 
@@ -760,6 +1086,176 @@ mod tests {
         assert!(
             interactions.is_empty(),
             "interaction rows must be cascaded on purge"
+        );
+    }
+
+    /// K1: an orphaned `doing` card (workflow_id NONE, older than the grace
+    /// period) must be reset to `status='ready', column='todo'` so the slot
+    /// frees and the scheduler re-promotes it. A recent `doing` card (within
+    /// grace) and a `doing` card that already has a workflow_id are spared.
+    #[tokio::test]
+    async fn test_reclaim_orphaned_doing_cards() {
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        let orphan = uuid::Uuid::new_v4().to_string(); // doing, no wf, old -> reclaimed
+        let recent = uuid::Uuid::new_v4().to_string(); // doing, no wf, fresh -> spared
+        let linked = uuid::Uuid::new_v4().to_string(); // doing, has wf, old -> spared
+        let wf = uuid::Uuid::new_v4().to_string();
+
+        let seed = |cid: &str, wf_sql: &str, ts: &str| {
+            format!(
+                "CREATE kanban_card:`{cid}` CONTENT {{
+                    id: '{cid}', title: 't', description: '',
+                    kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                    prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                    target_folder_id: NONE, status: 'doing', `column`: 'doing',
+                    `column_order`: 0, workflow_id: {wf_sql}, error_summary: NONE,
+                    created_at: {ts}, updated_at: {ts}
+                }}"
+            )
+        };
+        state
+            .db
+            .execute(&seed(&orphan, "NONE", "time::now() - 200s"))
+            .await
+            .unwrap();
+        state
+            .db
+            .execute(&seed(&recent, "NONE", "time::now()"))
+            .await
+            .unwrap();
+        state
+            .db
+            .execute(&seed(&linked, &format!("'{}'", wf), "time::now() - 200s"))
+            .await
+            .unwrap();
+
+        let reclaimed = reclaim_orphaned_doing_cards_core(&state.db, ORPHAN_DOING_GRACE_SECS)
+            .await
+            .unwrap();
+        assert_eq!(
+            reclaimed,
+            vec![orphan.clone()],
+            "only the old orphan is reclaimed"
+        );
+
+        let check = |cid: String| {
+            let db = state.db.clone();
+            async move {
+                let rows = db
+                    .query_json(&format!(
+                        "SELECT status, `column` FROM kanban_card:`{}`",
+                        cid
+                    ))
+                    .await
+                    .unwrap();
+                (
+                    rows[0]["status"].as_str().unwrap_or("").to_string(),
+                    rows[0]["column"].as_str().unwrap_or("").to_string(),
+                )
+            }
+        };
+        assert_eq!(check(orphan).await, ("ready".into(), "todo".into()));
+        assert_eq!(check(recent).await, ("doing".into(), "doing".into()));
+        assert_eq!(check(linked).await, ("doing".into(), "doing".into()));
+    }
+
+    /// K7: a legacy/forged enabled schedule with empty `days_of_week` must be
+    /// auto-disabled by the scheduler instead of spawning a card every tick.
+    #[tokio::test]
+    async fn test_process_due_auto_disables_empty_days_schedule() {
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let template_id = uuid::Uuid::new_v4().to_string();
+        let sid = uuid::Uuid::new_v4().to_string();
+
+        // Template card for the schedule to clone (so spawn would otherwise work).
+        let card = format!(
+            "CREATE kanban_card:`{template_id}` CONTENT {{
+                id: '{template_id}', title: 't', description: '',
+                kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                target_folder_id: NONE, status: 'ready', `column`: 'todo',
+                `column_order`: 0, workflow_id: NONE, error_summary: NONE,
+                created_at: time::now(), updated_at: time::now()
+            }}"
+        );
+        state.db.execute(&card).await.unwrap();
+
+        // Forged enabled schedule with empty days, due now.
+        let sched = format!(
+            "CREATE kanban_schedule:`{sid}` CONTENT {{
+                id: '{sid}', card_template_id: '{template_id}',
+                days_of_week: [], hour: 9, minute: 0,
+                next_run_at: time::now() - 1h,
+                last_run_at: NONE, enabled: true, skip_if_pending: false,
+                created_at: time::now()
+            }}"
+        );
+        state.db.execute(&sched).await.unwrap();
+
+        let spawned = process_due_schedules_core(&state.db).await.unwrap();
+        assert_eq!(spawned, 0, "empty-days schedule must not spawn any card");
+
+        let rows = state
+            .db
+            .query_json(&format!("SELECT enabled FROM kanban_schedule:`{}`", sid))
+            .await
+            .unwrap();
+        assert_eq!(
+            rows[0]["enabled"], false,
+            "empty-days schedule must be auto-disabled"
+        );
+    }
+
+    /// K2: the claim must be atomic. A first claim on a `ready` card wins
+    /// (flips to doing, returns true); a second concurrent claim on the same
+    /// card loses (returns false, no second flip) — this is what prevents the
+    /// three concurrent promoters from each emitting `card_ready` and starting
+    /// two workflows for one card.
+    #[tokio::test]
+    async fn test_try_claim_pending_card_is_atomic() {
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let card_id = uuid::Uuid::new_v4().to_string();
+        let q = format!(
+            "CREATE kanban_card:`{card_id}` CONTENT {{
+                id: '{card_id}', title: 't', description: '',
+                kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                target_folder_id: NONE, status: 'ready', `column`: 'todo',
+                `column_order`: 0, workflow_id: NONE, error_summary: NONE,
+                created_at: time::now(), updated_at: time::now()
+            }}"
+        );
+        state.db.execute(&q).await.unwrap();
+
+        // First claim wins.
+        let first = try_claim_pending_card_core(&state.db, &card_id)
+            .await
+            .expect("claim query runs");
+        assert!(first, "first claim on a ready card must win");
+
+        // Card is now doing.
+        let after = state
+            .db
+            .query_json(&format!(
+                "SELECT status, `column` FROM kanban_card:`{}`",
+                card_id
+            ))
+            .await
+            .unwrap();
+        assert_eq!(after[0]["status"], "doing");
+        assert_eq!(after[0]["column"], "doing");
+
+        // Second claim loses (no longer ready) — no double promotion.
+        let second = try_claim_pending_card_core(&state.db, &card_id)
+            .await
+            .expect("claim query runs");
+        assert!(
+            !second,
+            "second claim must lose the race (card already doing)"
         );
     }
 

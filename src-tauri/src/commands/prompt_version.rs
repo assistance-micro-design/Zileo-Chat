@@ -16,7 +16,7 @@ use crate::security::{
 use crate::AppState;
 use serde_json::json;
 use tauri::State;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 const PROMPT_VERSION_FIELDS: &str = "meta::id(id) AS id, prompt_id, version, name, description, \
     category, content, variables_json, edited_by, edit_summary, edited_at";
@@ -198,8 +198,19 @@ pub async fn restore_prompt_version_core(
     let desc_json = serialize_for_query(&target.description, "description")?;
     let cat_json = serialize_for_query(&target.category, "category")?;
     let content_json = serialize_for_query(&target.content, "content")?;
+    // A version's variables_json should always be valid JSON, but if a legacy
+    // row carries a corrupt value, warn loudly instead of silently restoring an
+    // empty variable set (which would quietly drop the prompt's variables).
     let variables: serde_json::Value =
-        serde_json::from_str(&target.variables_json).unwrap_or_else(|_| json!([]));
+        serde_json::from_str(&target.variables_json).unwrap_or_else(|e| {
+            warn!(
+                prompt_id = %prompt_id,
+                version = target.version,
+                error = %e,
+                "variables_json on the restored version is not valid JSON — restoring an empty set"
+            );
+            json!([])
+        });
     let variables_json = serialize_for_query(&variables, "variables")?;
 
     let query = format!(
@@ -435,5 +446,75 @@ mod tests {
         assert!(delete_prompt_version_core(&state.db, "not-a-uuid")
             .await
             .is_err());
+    }
+
+    /// Restore reverts the live prompt to the targeted version's content AND
+    /// first snapshots the pre-restore state (reversibility / audit trail), so
+    /// the operation is never destructive.
+    #[tokio::test]
+    async fn test_restore_prompt_version_reverts_content_and_snapshots_current() {
+        let (state, _g) = setup_test_state().await;
+        // seed creates the prompt with content '# c' and snapshots it as v1.
+        let (prompt_id, version_ids) = seed_prompt_with_versions(&state.db, 1).await;
+
+        // Drift the live prompt away from v1.
+        state
+            .db
+            .execute(&format!(
+                "UPDATE prompt:`{}` SET content = '# modified', updated_at = time::now()",
+                prompt_id
+            ))
+            .await
+            .unwrap();
+
+        restore_prompt_version_core(&state.db, &prompt_id, &version_ids[0], "user")
+            .await
+            .unwrap();
+
+        // The live prompt is back to v1's content.
+        let live = state
+            .db
+            .query_json(&format!("SELECT content FROM prompt:`{}`", prompt_id))
+            .await
+            .unwrap();
+        assert_eq!(
+            live[0]["content"], "# c",
+            "restore must revert the prompt content"
+        );
+
+        // A reversibility snapshot captured the pre-restore '# modified' state.
+        let versions = state
+            .db
+            .query_json(&format!(
+                "SELECT version, content, edit_summary FROM prompt_version \
+                 WHERE prompt_id = '{}' ORDER BY version ASC",
+                prompt_id
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            versions.len(),
+            2,
+            "restore must add a reversibility snapshot"
+        );
+        assert_eq!(
+            versions[1]["content"], "# modified",
+            "the new snapshot captures the pre-restore content"
+        );
+        assert_eq!(versions[1]["edit_summary"], "Restore to version 1");
+    }
+
+    /// Restore refuses a version that belongs to a different prompt (cross-tenant
+    /// guard) — it must never overwrite a prompt with a foreign version.
+    #[tokio::test]
+    async fn test_restore_prompt_version_rejects_foreign_version() {
+        let (state, _g) = setup_test_state().await;
+        let (prompt_a, _va) = seed_prompt_with_versions(&state.db, 1).await;
+        let (_prompt_b, vb) = seed_prompt_with_versions(&state.db, 1).await;
+
+        let err = restore_prompt_version_core(&state.db, &prompt_a, &vb[0], "user")
+            .await
+            .unwrap_err();
+        assert!(err.contains("does not belong"), "got: {err}");
     }
 }

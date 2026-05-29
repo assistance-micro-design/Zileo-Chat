@@ -36,7 +36,7 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
     )
     .use_when(&[
         "You are composing a kanban card and need to pick the target agent that will execute it",
-        "You want to inspect an agent's name, description, and authorized folders before delegating",
+        "You want to inspect an agent's name, system_prompt, and authorized folders before delegating",
     ])
     .do_not_use(&[
         "To delegate actual work - this tool is read-only and does not execute anything",
@@ -44,7 +44,7 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
     ])
     .operations(&[(
         "list",
-        "Takes no parameters. Returns up to 100 agents with id, name, description, folders, has_file_manager.",
+        "Takes no parameters. Returns up to 100 agents with id, name, system_prompt, tools, folders and has_file_manager (true when the agent can read/write files via FileManagerTool).",
     )])
     .examples(&[json!({})])
     .build(),
@@ -67,7 +67,8 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
                         "name": {"type": "string"},
                         "system_prompt": {"type": "string"},
                         "tools": {"type": "array", "items": {"type": "string"}},
-                        "folders": {"type": "array", "items": {"type": "string"}}
+                        "folders": {"type": "array", "items": {"type": "string"}},
+                        "has_file_manager": {"type": "boolean"}
                     }
                 }
             }
@@ -109,11 +110,26 @@ impl Tool for ListAgentsTool {
              ORDER BY name ASC \
              LIMIT {LIST_LIMIT}"
         );
-        let rows = self
+        let mut rows = self
             .db
             .query_json(&query)
             .await
             .map_err(|e| ToolError::DatabaseError(format!("Failed to list agents: {}", e)))?;
+
+        // K8: the description/output advertised `has_file_manager` but the SELECT
+        // never produced it. Derive it from `tools` (mirrors
+        // delegate_task_execution.rs) so a Kanban composer knows whether a
+        // candidate target can read/write files before delegating.
+        for row in rows.iter_mut() {
+            let has_file_manager = row
+                .get("tools")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().any(|t| t.as_str() == Some("FileManagerTool")))
+                .unwrap_or(false);
+            if let Some(obj) = row.as_object_mut() {
+                obj.insert("has_file_manager".to_string(), json!(has_file_manager));
+            }
+        }
 
         debug!(count = rows.len(), "ListAgentsTool returning agents");
         Ok(json!({
@@ -177,6 +193,58 @@ mod tests {
         assert!(ids.contains(&worker_id.as_str()));
         assert!(ids.contains(&legacy_id.as_str()));
         assert!(!ids.contains(&kanban_id.as_str()));
+    }
+
+    /// K8: `has_file_manager` is derived from each agent's `tools` and included
+    /// in the output (it was advertised by the description but never produced).
+    #[tokio::test]
+    async fn computes_has_file_manager_from_tools() {
+        let (state, _g) = setup_test_state().await;
+        let with_fm = uuid::Uuid::new_v4().to_string();
+        let without_fm = uuid::Uuid::new_v4().to_string();
+
+        let seed_with_tools = |id: &str, name: &str, tools: &str| {
+            format!(
+                "CREATE agent:`{id}` SET id = '{id}', name = '{name}', lifecycle = 'permanent', \
+                 llm = {{ provider: 'mistral', model: 'mistral-medium', temperature: 0.7, max_tokens: 4000 }}, \
+                 tools = {tools}, mcp_servers = [], system_prompt = 'sp', max_tool_iterations = 50, \
+                 reasoning_effort = NONE, kind = NONE, created_at = time::now(), updated_at = time::now()"
+            )
+        };
+        state
+            .db
+            .execute(&seed_with_tools(
+                &with_fm,
+                "fm",
+                "['FileManagerTool', 'MemoryTool']",
+            ))
+            .await
+            .unwrap();
+        state
+            .db
+            .execute(&seed_with_tools(&without_fm, "nofm", "['MemoryTool']"))
+            .await
+            .unwrap();
+
+        let tool = ListAgentsTool::new(state.db.clone());
+        let out = tool.execute(json!({})).await.unwrap();
+        let agents = out["agents"].as_array().expect("agents array");
+        let find = |id: &str| {
+            agents
+                .iter()
+                .find(|a| a["id"].as_str() == Some(id))
+                .unwrap()
+        };
+        assert_eq!(
+            find(&with_fm)["has_file_manager"],
+            json!(true),
+            "agent with FileManagerTool must report has_file_manager=true"
+        );
+        assert_eq!(
+            find(&without_fm)["has_file_manager"],
+            json!(false),
+            "agent without FileManagerTool must report has_file_manager=false"
+        );
     }
 
     #[tokio::test]

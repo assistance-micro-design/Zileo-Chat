@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import { i18n } from '$lib/i18n';
 	import { tauriListen, tauriInvoke as invoke, type TauriUnlistenFn } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
@@ -52,6 +53,8 @@
 	let improvePromptId = $state<string | null>(null);
 	let improveKanbanAgentId = $state<string | null>(null);
 	let improveSuggestedContent = $state<string | null>(null);
+	/** Card whose prompt is being improved — needed to re-queue it (K4). */
+	let improveCardId = $state<string | null>(null);
 	let scheduleModalOpen = $state(false);
 	let scheduleModalCard = $state<KanbanCard | null>(null);
 	let editModalOpen = $state(false);
@@ -177,6 +180,7 @@
 				improvePromptId = card.prompt_id;
 				improveKanbanAgentId = card.kanban_agent_id;
 				improveSuggestedContent = pending.suggestedPromptEdit;
+				improveCardId = card.id;
 				improveOpen = true;
 			} catch (e) {
 				pageError = getErrorMessage(e);
@@ -243,7 +247,34 @@
 		window.addEventListener('settings:refresh', onSettingsRefresh);
 		unlistenSettingsRefresh = () =>
 			window.removeEventListener('settings:refresh', onSettingsRefresh);
+
+		// K1(b): reconcile cards the scheduler promoted to `doing` while this
+		// page was not mounted to consume `kanban:card_ready` — they are stuck
+		// `doing` with no workflow_id. Relaunch their worker now.
+		void reconcileOrphanedDoingCards();
 	});
+
+	/**
+	 * Reclaims orphaned `doing` cards on mount (K1 frontend half). The scheduler
+	 * promotes ready cards to `doing` and emits `kanban:card_ready`, but that
+	 * event is only consumed while /kanban is mounted; cards promoted while the
+	 * user was elsewhere stay `doing` with `workflow_id` NONE. Re-launch their
+	 * worker. `runCardWorkflow` re-verifies the card is still `doing`+unlinked
+	 * right before acting, so a card the backend orphan-reclaim just reset to
+	 * `todo` (or one already linked to a running workflow) is skipped — no
+	 * duplicate or stale launch.
+	 */
+	async function reconcileOrphanedDoingCards(): Promise<void> {
+		try {
+			await kanbanStore.loadCards(agentFilter || undefined);
+			const orphans = get(kanbanCards).filter((c) => c.column === 'doing' && !c.workflow_id);
+			for (const c of orphans) {
+				await runCardWorkflow(c.id);
+			}
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
+	}
 
 	onDestroy(() => {
 		unlistenReady?.();
@@ -486,6 +517,7 @@
 		}
 		improvePromptId = card.prompt_id;
 		improveKanbanAgentId = card.kanban_agent_id;
+		improveCardId = card.id;
 		improveOpen = true;
 	}
 
@@ -494,6 +526,39 @@
 		improvePromptId = null;
 		improveKanbanAgentId = null;
 		improveSuggestedContent = null;
+		improveCardId = null;
+	}
+
+	/**
+	 * K5: re-queue a failed/rejected review card for a fresh run. Reuses the
+	 * Phase 1 re-queue (Review→Todo resets status='ready' regardless of the
+	 * card's failed/done status) so the scheduler relaunches it. Failed cards
+	 * are never auto-deleted — this just makes them actionable.
+	 */
+	async function retryCard(card: KanbanCard): Promise<void> {
+		try {
+			await kanbanStore.moveCard(card.id, 'todo', 0);
+			await kanbanStore.loadCards(agentFilter || undefined);
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
+	}
+
+	/**
+	 * K4: after the prompt is improved, re-queue the card (Review→Todo, which
+	 * Phase 1 resets to status='ready') so the scheduler relaunches a FRESH run
+	 * that reads the corrected prompt — closing the needs_improvement loop
+	 * instead of leaving a stale report in review.
+	 */
+	async function improveSavedRequeue(): Promise<void> {
+		const cardId = improveCardId;
+		if (!cardId) return;
+		try {
+			await kanbanStore.moveCard(cardId, 'todo', 0);
+			await kanbanStore.loadCards(agentFilter || undefined);
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
 	}
 
 	/**
@@ -508,6 +573,12 @@
 		await kanbanStore.loadCards(agentFilter || undefined);
 		const card = await kanbanStore.getCard(cardId);
 		if (!card) return;
+		// Re-verify the card still needs a worker run: it must be in `doing` with
+		// no workflow yet (K1). Guards a stale card_ready or the mount
+		// reconciliation racing the backend orphan-reclaim, which may have just
+		// reset the card to todo — relaunching then would start a workflow on a
+		// todo card. Also skips a duplicate launch once workflow_id is set.
+		if (card.column !== 'doing' || card.workflow_id) return;
 
 		// Build the message: inline_prompt or fetch the prompt content.
 		let message = card.inline_prompt ?? '';
@@ -637,6 +708,7 @@
 				onschedule={openSchedule}
 				onduplicate={duplicateAsTemplate}
 				onedit={openEdit}
+				onretry={retryCard}
 			/>
 		{/snippet}
 	</KanbanBoard>
@@ -676,6 +748,7 @@
 	suggestedContent={improveSuggestedContent}
 	onclose={closeImprove}
 	onupdated={() => kanbanStore.loadCards(agentFilter || undefined)}
+	onsavedrequeue={improveSavedRequeue}
 />
 
 <KanbanCardReportViewer

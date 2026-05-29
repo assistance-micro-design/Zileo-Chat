@@ -167,8 +167,6 @@ async fn main() -> anyhow::Result<()> {
             commands::kanban_schedule::list_kanban_schedules,
             commands::kanban_schedule::update_kanban_schedule,
             commands::kanban_schedule::delete_kanban_schedule,
-            // Workflow slots (backend source of truth for max-concurrent)
-            commands::workflow_slots::get_workflow_slots_available,
             commands::compose_card::compose_card_from_description,
             // Agent commands (CRUD)
             commands::agent::list_agents,

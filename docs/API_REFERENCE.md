@@ -347,7 +347,7 @@ Kanban card CRUD and column transitions.
 | `get_kanban_card` | Get a single card by id (full state including the linked `workflow_id` if execution started). |
 | `list_kanban_cards` | List all cards ordered by `column` then `column_order`. |
 | `update_kanban_card` | Partial update of a card. Status / column transitions go through the dedicated `move_kanban_card`. |
-| `delete_kanban_card` | Delete a card (cascade-removes linked `kanban_card_interaction` rows; the underlying `workflow` row is preserved). Force-delete is allowed even when the card is in `doing` (covers crashed workflows that never emitted `workflow_complete`). |
+| `delete_kanban_card` | Params: `card_id`, `also_delete_schedule?: bool` (default `false`). Delete a card: cascade-removes linked `kanban_card_interaction` rows AND the `review_chat_workflow_id` hidden workflow with all its rows (messages, tool executions, thinking steps); the worker `workflow` row is preserved. `also_delete_schedule=true` also deletes the linked `kanban_schedule` row. Force-delete is allowed even when the card is in `doing` (covers crashed workflows that never emitted `workflow_complete`). |
 | `set_kanban_card_workflow_id` | Link the card to an executing workflow. Used by the scheduler when it transitions a card from `ready` to `doing`. |
 | `duplicate_kanban_card_as_template` | Clone a card as a recurrence template (target of `create_kanban_schedule`). |
 | `move_kanban_card` | Move a card to a different column (`todo / doing / review / done`) and a new `column_order` index. |

@@ -69,7 +69,17 @@ pub struct KanbanScheduleUpdate {
 }
 
 /// Validates a schedule create payload. Returns error if any field is out of range.
+///
+/// Reused by both create and update (the update path builds a
+/// `KanbanScheduleCreate` from the merged fields) and by the ScheduleCard tool,
+/// so the guards here cover every entry point.
 pub fn validate_schedule_create(create: &KanbanScheduleCreate) -> Result<(), String> {
+    // An empty `days_of_week` makes compute_next_run_at return `now`, so the
+    // schedule fires every tick and spawns up to MAX_CATCHUP_PER_SCHEDULE cards
+    // per minute, indefinitely (K7 DoS). A recurrence needs at least one day.
+    if create.days_of_week.is_empty() {
+        return Err("days_of_week must be non-empty".to_string());
+    }
     if create.hour > 23 {
         return Err(format!("hour must be 0..=23, got {}", create.hour));
     }
@@ -98,6 +108,21 @@ mod tests {
             skip_if_pending: false,
         };
         assert!(validate_schedule_create(&c).is_ok());
+    }
+
+    #[test]
+    fn test_validate_schedule_rejects_empty_days() {
+        // K7: an empty days_of_week is a DoS vector (fires every tick) and must
+        // be rejected at the validation boundary (covers create + update + tool).
+        let c = KanbanScheduleCreate {
+            card_template_id: "c1".to_string(),
+            days_of_week: vec![],
+            hour: 9,
+            minute: 0,
+            skip_if_pending: false,
+        };
+        let err = validate_schedule_create(&c).unwrap_err();
+        assert!(err.contains("days_of_week"), "got: {err}");
     }
 
     #[test]

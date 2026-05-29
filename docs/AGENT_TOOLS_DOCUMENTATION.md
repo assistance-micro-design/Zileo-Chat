@@ -294,10 +294,10 @@ Loads an image file and surfaces it to the next LLM iteration as a multimodal us
 
 ### Operations
 
-- `list` -- List all prompt templates (id, name, description, category, variable names)
-- `get` -- Get a single prompt by id (full content + variables)
-- `create` -- Create a new prompt (`name`, `description`, `category`, `content`, `variables[]`)
-- `update` -- Partial update of an existing prompt (`prompt_id`, any subset of fields, optional `edit_summary`). Auto-snapshots a `prompt_version` row before applying.
+- `list_prompts` -- List all prompt templates (id, name, description, category, variable names)
+- `get_prompt` -- Get a single prompt by id (full content + variables)
+- `create_prompt` -- Create a new prompt (`name`, `description`, `category`, `content`, `variables[]`)
+- `update_prompt` -- Partial update of an existing prompt (`prompt_id`, any subset of fields, optional `edit_summary`). Auto-snapshots a `prompt_version` row before applying.
 
 ### Versioning
 
@@ -313,22 +313,22 @@ Every successful `update` writes a `prompt_version` row with the previous conten
 
 ### Operations
 
-- `list` -- List all skills (id, name, description, category, enabled)
-- `get` -- Get a single skill (full content)
-- `create` -- Create a new skill (`name`, `description`, `category`, `content`)
-- `update` -- Partial update (`skill_id`, any subset, optional `edit_summary`). Auto-snapshots a `skill_version` row before applying.
+- `list_skills` -- List all skills (id, name, description, category, enabled)
+- `read_skill` -- Get a single skill by name (full content)
+- `create_skill` -- Create a new skill (`name`, `description`, `category`, `content`)
+- `update_skill` -- Partial update (`skill_id`, any subset, optional `edit_summary`). Auto-snapshots a `skill_version` row before applying.
 - `grant_skill_to_agent` -- Attach an EXISTING skill (`skill_name`) to `target_agent_id`'s allowlist. The skill and agent must exist and share the same kind (a kanban skill only grants to a kanban agent, a standard skill to a standard agent); cross-kind grants are rejected. Idempotent. Distinct from `create_skill`, which auto-grants the freshly-created skill where the same-kind invariant holds by construction.
 - `revoke_skill_from_agent` -- Remove a skill from a target agent (`skill_name`, `target_agent_id`)
-- `list_versions` -- List version snapshots for a skill (most recent first)
-- `restore_version` -- Restore a prior version (writes a new snapshot of the current content before overwriting, so restore is itself versioned)
+- `list_skill_versions` -- List version snapshots for a skill (most recent first)
+- `restore_skill_version` -- Restore a prior version (writes a new snapshot of the current content before overwriting, so restore is itself versioned)
 
 ### Architecture
 
 Split into a folder for testability and clarity:
 - `mod.rs` -- Tool struct, top-level dispatch, ToolDefinition
-- `crud.rs` -- `list / get / create / update` against the `skill` table
-- `grant.rs` -- `grant / revoke` against `agent.skills`
-- `versions.rs` -- `list_versions / restore_version` against `skill_version`
+- `crud.rs` -- `list_skills / read_skill / create_skill / update_skill` against the `skill` table
+- `grant.rs` -- `grant_skill_to_agent / revoke_skill_from_agent` against `agent.skills`
+- `versions.rs` -- `list_skill_versions / restore_skill_version` against `skill_version`
 - `validators.rs` -- Shared input validation (name slug, category allowlist, content cap)
 - `tests.rs` -- Unit tests (~500 LOC)
 
@@ -336,16 +336,18 @@ Split into a folder for testability and clarity:
 
 ## 9. WorkflowManagerTool
 
-**Purpose**: Read-only access to historical workflow data so the Kanban analyzer can ground its verdict on real execution artefacts.
+**Purpose**: Access to historical workflow data and folder organisation so the Kanban analyzer can ground its verdict on real execution artefacts.
 
 **Access**: Kanban agents only.
 
 ### Operations
 
-- `list_workflows` -- List workflows (id, name, agent, status, timestamps, token totals)
+- `list_workflows` -- List workflows (id, name, agent, status, timestamps, token totals); hidden workflows excluded
 - `rename_workflow` -- Rename a workflow (`workflow_id`, `name`)
-- `folders_create / folders_list / folders_rename / folders_delete` -- Folder CRUD for organisation
-- `read_workflow` -- Fetch the full state of a workflow (messages, tool executions, thinking steps, sub-agent reports) for analysis
+- `list_workflow_folders` -- List all workflow folders
+- `create_workflow_folder` -- Create a new folder (`name`, `color`)
+- `move_workflow_to_folder` -- Move a workflow to a folder (`workflow_id`, `folder_id`)
+- `read_workflow` -- Fetch the full state of a workflow (messages, tool executions, thinking steps, sub-agent reports) for analysis; hidden workflows excluded
 - `list_workflow_errors` -- Extract just the tool errors and failure events of a workflow (cheaper than `read_workflow` when the analyzer only needs the failure surface)
 - `list_workflow_sub_agents` -- List sub-agent executions for a workflow with their final reports
 

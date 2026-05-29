@@ -11,7 +11,7 @@
 
 use crate::agents::core::agent::Report;
 use crate::agents::execution::tool_loop::PricingCache;
-use crate::db::DBClient;
+use crate::db::{sanitize_for_surrealdb, DBClient};
 use crate::models::kanban_card_interaction::{
     InteractionIteration, InteractionKind, InteractionToolCall, KanbanCardInteraction,
 };
@@ -234,8 +234,14 @@ pub(crate) async fn persist_interaction(
         InteractionKind::Analyze => "analyze",
     };
 
-    let iterations_json = serde_json::to_value(&iterations)
-        .map_err(|e| format!("Failed to serialize iterations: {}", e))?;
+    // These payloads originate from the LLM (iterations / response / summary)
+    // and from the caller's task input. Sanitize them before persistence to
+    // strip null bytes that panic SurrealDB (ERR_SURREAL_006); the binding
+    // already blocks injection. `sanitize_for_surrealdb` is depth-limited.
+    let iterations_json = sanitize_for_surrealdb(
+        serde_json::to_value(&iterations)
+            .map_err(|e| format!("Failed to serialize iterations: {}", e))?,
+    );
     let task_input_capped = truncate_chars(task_input, MAX_TASK_INPUT_CHARS);
     let final_response_text = iterations.last().and_then(|i| i.response_content.clone());
 
@@ -268,15 +274,18 @@ pub(crate) async fn persist_interaction(
         ),
         ("provider".to_string(), json!(llm.provider.clone())),
         ("model_id_used".to_string(), json!(llm.model.clone())),
-        ("task_input".to_string(), json!(task_input_capped)),
+        (
+            "task_input".to_string(),
+            sanitize_for_surrealdb(json!(task_input_capped)),
+        ),
         ("iterations".to_string(), iterations_json),
         (
             "final_payload_summary".to_string(),
-            json!(final_payload_summary.map(|s| s.to_string())),
+            sanitize_for_surrealdb(json!(final_payload_summary.map(|s| s.to_string()))),
         ),
         (
             "final_response_text".to_string(),
-            json!(final_response_text),
+            sanitize_for_surrealdb(json!(final_response_text)),
         ),
         (
             "total_tokens_input".to_string(),

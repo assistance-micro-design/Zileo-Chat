@@ -494,15 +494,15 @@ Kanban board card. One row per work item. Lifecycle: `todo -> ready -> doing -> 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | id | string | | UUID |
-| title | string (1-256 chars) | | Card title |
-| description | option\<string\> | | Free-text body |
-| kanban_agent_id | option\<string\> | | Kanban-kind agent that composed the card (null on manual creation) |
+| title | string (1-200 chars) | | Card title |
+| description | string | | Free-text body (max 5000 chars) |
+| kanban_agent_id | string | | Kanban-kind agent that composed the card |
 | target_agent_id | string | | Standard agent that will execute the card |
 | prompt_id | option\<string\> | | Reference to a stored prompt template |
 | inline_prompt | option\<string\> | | Ad-hoc prompt body when `prompt_id` is not set (mutually exclusive) |
 | variables | string (JSON) | '{}' | Prompt variables as `HashMap<string,string>`, JSON-string-encoded (ERR_SURREAL_001) |
 | target_folder_id | option\<string\> | | Optional FileManager folder constraint for the run |
-| status | string ASSERT IN [todo, ready, doing, review, done] | todo | Logical state |
+| status | string ASSERT IN [todo, ready, doing, review, done, failed] | todo | Logical state |
 | column | string ASSERT IN [todo, doing, review, done] | todo | Board column (mirror of status, drag-free) |
 | column_order | int | 0 | Sort index within the column |
 | workflow_id | option\<string\> | | Set when the scheduler transitions the card to `doing` |
@@ -511,7 +511,7 @@ Kanban board card. One row per work item. Lifecycle: `todo -> ready -> doing -> 
 | created_at | datetime | time::now() | |
 | updated_at | datetime | time::now() | |
 
-**Indexes**: `kanban_card_column_idx` (column, column_order), `kanban_card_workflow_idx` (workflow_id), `kanban_card_review_chat_idx` (review_chat_workflow_id)
+**Indexes**: `kanban_card_status_idx` (status), `kanban_card_column_idx` (column, column_order), `kanban_card_workflow_idx` (workflow_id), `kanban_card_review_chat_idx` (review_chat_workflow_id), `kanban_card_kanban_agent_idx` (kanban_agent_id)
 
 ---
 
@@ -523,16 +523,16 @@ Recurrence schedule attached to a card template (the card row is duplicated on e
 |-------|------|---------|-------------|
 | id | string | | UUID |
 | card_template_id | string | | Reference to the `kanban_card` row used as a blueprint |
-| days_of_week | array\<int\> | | ISO weekday codes (1=Mon … 7=Sun) |
+| days_of_week | array\<int\> (0–6) | | Weekday codes: 0=Monday … 6=Sunday (chrono `num_days_from_monday`) |
 | hour | int (0-23) | | |
 | minute | int (0-59) | | |
 | next_run_at | datetime | | Next scheduled tick; recomputed on every fire and on update |
 | last_run_at | option\<datetime\> | | Last successful fire |
 | enabled | bool | true | When false, the scheduler skips this row entirely |
-| skip_if_pending | bool | true | When true, do not fire if a sibling card created from this template is still in flight (`todo / ready / doing / review`) |
+| skip_if_pending | bool | false | When true, do not fire if a sibling card created from this template is still in flight (`todo / ready / doing / review`) |
 | created_at | datetime | time::now() | |
 
-**Indexes**: `kanban_schedule_template_idx` (card_template_id), `kanban_schedule_next_run_idx` (next_run_at)
+**Indexes**: `kanban_schedule_card_idx` (card_template_id), `kanban_schedule_next_run_idx` (next_run_at, enabled)
 
 ---
 
@@ -549,7 +549,7 @@ Persisted record of each Kanban agent interaction with a card (compose + analyze
 | provider | string | | LLM provider used |
 | model_id_used | string | | Model id resolved at execution time |
 | task_input | string | | The free-text description (compose) or the workflow report (analyze) |
-| iterations | int | 0 | Number of tool-loop iterations |
+| iterations | array\<object\> | [] | Each element is one tool-loop cycle. Sub-fields per element: `iteration_index int`, `reasoning option<string>`, `response_content option<string>`, `tool_calls array<object>` (each: `tool_name string`, `mcp_server option<string>`, `input_json string`, `output_json string`, `duration_ms int`, `success bool`), `tokens_input int`, `tokens_output int`, `cached_tokens int`, `cost_usd float`, `duration_ms int`. All sub-fields declared explicitly with `DEFINE FIELD OVERWRITE` (ERR_SURREAL_001). |
 | final_payload_summary | option\<string\> | | Summary of the submitted payload (composed card or verdict + summary) |
 | final_response_text | option\<string\> | | Final assistant response text |
 | total_tokens_input | int | 0 | |
@@ -557,7 +557,7 @@ Persisted record of each Kanban agent interaction with a card (compose + analyze
 | total_cost_usd | option\<float\> | 0.0 | Aggregated cost across iterations |
 | created_at | datetime | time::now() | |
 
-**Indexes**: `kanban_interaction_card_idx` (card_id), `kanban_interaction_created_idx` (created_at)
+**Indexes**: `kanban_card_interaction_card_idx` (card_id)
 
 ---
 
@@ -575,7 +575,7 @@ Append-only audit trail of prompt edits. Written on every `update_prompt` and `r
 | category | string | | Snapshot of category |
 | content | string | | Snapshot of full content |
 | variables_json | string (JSON) | '[]' | Snapshot of variables array, JSON-string-encoded |
-| edited_by | option\<string\> | | "user" or the Kanban agent id when edited via `PromptManagerTool.update` |
+| edited_by | string | | "user" or the Kanban agent id when edited via `PromptManagerTool.update` |
 | edit_summary | option\<string\> (1-256 chars) | | Short user-supplied edit message (trimmed, control-character rejected) |
 | edited_at | datetime | time::now() | |
 
@@ -596,7 +596,7 @@ Append-only audit trail of skill edits. Same contract as `prompt_version`.
 | description | string | | Snapshot of description |
 | category | string | | Snapshot of category |
 | content | string | | Snapshot of full content |
-| edited_by | option\<string\> | | "user" or the Kanban agent id when edited via `SkillManagerTool.update` |
+| edited_by | string | | "user" or the Kanban agent id when edited via `SkillManagerTool.update` |
 | edit_summary | option\<string\> (1-256 chars) | | Short user-supplied edit message |
 | edited_at | datetime | time::now() | |
 
