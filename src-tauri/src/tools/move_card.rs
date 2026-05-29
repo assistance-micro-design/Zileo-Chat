@@ -8,9 +8,11 @@
 //! Self-gating: the target card is resolved via
 //! `review_chat_workflow_id = <chat workflow id>` (captured at construction).
 //! Outside a card review chat the tool returns a clear error (no-op). Only the
-//! two user-meaningful transitions out of `review` are exposed:
-//! - `validate` -> column `done` (status flips to `done` via move_kanban_card_core)
-//! - `send_back` -> column `doing` (default) or `todo`
+//! two user-meaningful transitions are exposed:
+//! - `validate`  -> column `done` (status flips to `done` via move_kanban_card_core)
+//! - `send_back` -> column `todo` (re-queue): status resets to `ready` and the
+//!   scheduler re-promotes the card to `doing` via the existing promotion path
+//!   (option b, 2026-05-29). `doing` is never a manual target.
 //!
 //! Both wrap `move_kanban_card_core`, so the transition guard
 //! (`is_transition_allowed`) and the status reset stay authoritative.
@@ -25,46 +27,46 @@ use serde_json::{json, Value};
 use std::sync::{Arc, LazyLock};
 use tracing::{debug, info};
 
-static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
     id: "MoveCardTool".to_string(),
     name: "MoveCard".to_string(),
-    summary: "Move the current Kanban card: validate it to Done, or send it back to work"
+    summary: "Move the current Kanban card: validate it to Done, or send it back to the queue"
         .to_string(),
     description: ToolDescriptionBuilder::new(
         "Moves the Kanban card backing the current review chat to Done (validate) or back to \
-         an earlier column (send_back).",
+         the Todo queue (send_back) for a fresh run.",
     )
     .use_when(&[
         "The report is good and you want to validate the card (move it to Done)",
-        "The report needs rework and you want to send the card back to Doing or Todo",
+        "The report needs rework and you want to re-queue the card so it runs again from scratch",
     ])
     .do_not_use(&[
         "You are not in a card review chat (the tool cannot resolve a card and will error)",
-        "You only want to re-generate the report without moving the card (use RerunWorkerTool)",
+        "You only want to re-generate the report without re-queuing the card (use RerunWorkerTool)",
     ])
     .operations(&[
         ("validate", "Move the card to Done (status becomes done)"),
         (
             "send_back",
-            "Move the card back to `target_column` (todo or doing; default doing)",
+            "Re-queue the card to Todo (status becomes ready); the scheduler re-promotes it to Doing automatically",
         ),
     ])
     .examples(&[
         json!({"action": "validate"}),
-        json!({"action": "send_back", "target_column": "doing"}),
-        json!({"action": "send_back", "target_column": "todo"}),
+        json!({"action": "send_back"}),
     ])
     .build(),
     input_schema: json!({
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["validate", "send_back"], "description": "validate -> Done; send_back -> earlier column."},
-            "target_column": {"type": "string", "enum": ["todo", "doing"], "description": "send_back only: destination column (default doing)."}
+            "action": {"type": "string", "enum": ["validate", "send_back"], "description": "validate -> Done; send_back -> re-queue to Todo for a fresh run."}
         },
         "required": ["action"],
     }),
     output_schema: json!({"type": "object"}),
     requires_confirmation: false,
+}
 });
 
 /// Moves the Kanban card backing the current review chat.
@@ -109,16 +111,10 @@ impl Tool for MoveCardTool {
 
         let target = match action {
             "validate" => KanbanColumn::Done,
-            "send_back" => match input["target_column"].as_str() {
-                Some("todo") => KanbanColumn::Todo,
-                Some("doing") | None => KanbanColumn::Doing,
-                Some(other) => {
-                    return Err(ToolError::InvalidInput(format!(
-                        "Invalid target_column '{}'. Use 'todo' or 'doing'.",
-                        other
-                    )));
-                }
-            },
+            // send_back always re-queues to Todo (option b): status resets to
+            // 'ready' in move_kanban_card_core and the scheduler re-promotes the
+            // card to Doing. Doing is never a manual target.
+            "send_back" => KanbanColumn::Todo,
             other => {
                 return Err(ToolError::InvalidInput(format!(
                     "Unknown action '{}'. Use 'validate' or 'send_back'.",
@@ -208,29 +204,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn send_back_moves_card_to_doing_by_default() {
+    async fn send_back_requeues_card_to_todo_as_ready() {
         let (state, _g) = setup_test_state().await;
         let chat_wf = uuid::Uuid::new_v4().to_string();
         let card_id = uuid::Uuid::new_v4().to_string();
+        // seed_review_card seeds status='review'; bump to 'done' to mirror a
+        // real review card (mark_card_done_core) so the reset is meaningful.
         seed_review_card(&state.db, &card_id, &chat_wf).await;
-
-        let tool = MoveCardTool::new(state.db.clone(), Some(chat_wf));
-        let res = tool.execute(json!({"action": "send_back"})).await.unwrap();
-        assert_eq!(res["column"], "doing");
-    }
-
-    #[tokio::test]
-    async fn send_back_to_todo() {
-        let (state, _g) = setup_test_state().await;
-        let chat_wf = uuid::Uuid::new_v4().to_string();
-        let card_id = uuid::Uuid::new_v4().to_string();
-        seed_review_card(&state.db, &card_id, &chat_wf).await;
-
-        let tool = MoveCardTool::new(state.db.clone(), Some(chat_wf));
-        let res = tool
-            .execute(json!({"action": "send_back", "target_column": "todo"}))
+        state
+            .db
+            .execute(&format!(
+                "UPDATE kanban_card:`{card_id}` SET status = 'done'"
+            ))
             .await
             .unwrap();
+
+        let tool = MoveCardTool::new(state.db.clone(), Some(chat_wf));
+        // send_back re-queues to Todo (option b): no target_column accepted.
+        let res = tool.execute(json!({"action": "send_back"})).await.unwrap();
         assert_eq!(res["column"], "todo");
+        // status must reset to 'ready' so the scheduler can re-promote it.
+        assert_eq!(res["status"], "ready");
     }
 }

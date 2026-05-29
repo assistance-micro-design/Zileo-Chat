@@ -100,7 +100,7 @@ pub async fn purge_stale_done_cards_core(db: &Arc<DBClient>) -> Result<Vec<Strin
     // 1. Resolve the victim set first. We need the ids both to cascade
     //    interactions and to ship them to the frontend listener.
     let pick_q = format!(
-        "SELECT meta::id(id) AS id FROM kanban_card \
+        "SELECT meta::id(id) AS id, review_chat_workflow_id FROM kanban_card \
          WHERE `column` = 'done' \
            AND updated_at < time::now() - {}d \
            AND meta::id(id) NOT IN \
@@ -118,6 +118,12 @@ pub async fn purge_stale_done_cards_core(db: &Arc<DBClient>) -> Result<Vec<Strin
     if victims.is_empty() {
         return Ok(victims);
     }
+    // Confined review chat workflows (hidden_from_list) linked to the victims.
+    // Cascaded individually below so they don't leak in the DB (I5).
+    let chat_workflows: Vec<String> = rows
+        .iter()
+        .filter_map(|r| r["review_chat_workflow_id"].as_str().map(String::from))
+        .collect();
 
     // 2. Cascade interactions first (foreign-key-like cleanup; SurrealDB
     //    has no real FK so we do it explicitly).
@@ -130,6 +136,13 @@ pub async fn purge_stale_done_cards_core(db: &Arc<DBClient>) -> Result<Vec<Strin
     db.execute(&del_interactions)
         .await
         .map_err(|e| format!("Failed to cascade interactions: {}", e))?;
+
+    // 2b. Cascade each victim's confined review chat workflow (workflow row +
+    //     messages + execution blocks). Hidden from the sidebar, it would
+    //     otherwise be unreachable and leak forever.
+    for chat_wf in &chat_workflows {
+        crate::commands::kanban_card::cascade_review_chat_workflow(db, chat_wf).await;
+    }
 
     // 3. Delete the cards themselves. Re-evaluate the same predicate to
     //    stay race-safe: if the user just dropped a new schedule on one of
@@ -747,6 +760,74 @@ mod tests {
         assert!(
             interactions.is_empty(),
             "interaction rows must be cascaded on purge"
+        );
+    }
+
+    /// I5: when the scheduler auto-purges a stale `done` card, its confined
+    /// review chat workflow (hidden_from_list) must be cascaded too — otherwise
+    /// the hidden chat + its messages leak in the DB forever.
+    #[tokio::test]
+    async fn test_purge_cascades_review_chat_workflow() {
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let card_id = uuid::Uuid::new_v4().to_string();
+        let chat_wf = uuid::Uuid::new_v4().to_string();
+
+        // Hidden review chat workflow + a message attached to it.
+        let create_wf = format!(
+            "CREATE workflow:`{chat_wf}` SET id = '{chat_wf}', name = 'chat', agent_id = '{agent_id}', \
+             status = 'idle', hidden_from_list = true, pinned = false, \
+             created_at = time::now(), updated_at = time::now()"
+        );
+        state.db.execute(&create_wf).await.unwrap();
+        let mid = uuid::Uuid::new_v4().to_string();
+        let create_msg = format!(
+            "CREATE message:`{mid}` SET id = '{mid}', workflow_id = '{chat_wf}', role = 'assistant', \
+             content = 'seed', tokens = 0, created_at = time::now(), updated_at = time::now()"
+        );
+        state.db.execute(&create_msg).await.unwrap();
+
+        // Stale done card (older than the TTL) linked to the chat workflow.
+        let create_card = format!(
+            "CREATE kanban_card:`{card_id}` CONTENT {{
+                id: '{card_id}', title: 't', description: '',
+                kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                target_folder_id: NONE, status: 'done', `column`: 'done',
+                `column_order`: 0, workflow_id: NONE,
+                review_chat_workflow_id: '{chat_wf}', error_summary: NONE,
+                created_at: time::now() - 4d, updated_at: time::now() - 4d
+            }}"
+        );
+        state.db.execute(&create_card).await.unwrap();
+
+        let purged = purge_stale_done_cards_core(&state.db).await.unwrap();
+        assert_eq!(purged.len(), 1, "the stale card must be purged");
+
+        // Chat workflow + its messages must be cascaded.
+        let wf_rows = state
+            .db
+            .query_json(&format!(
+                "SELECT meta::id(id) AS id FROM workflow:`{}`",
+                chat_wf
+            ))
+            .await
+            .unwrap();
+        assert!(
+            wf_rows.is_empty(),
+            "hidden chat workflow must be cascaded on purge"
+        );
+        let msg_rows = state
+            .db
+            .query_json(&format!(
+                "SELECT meta::id(id) AS id FROM message WHERE workflow_id = '{}'",
+                chat_wf
+            ))
+            .await
+            .unwrap();
+        assert!(
+            msg_rows.is_empty(),
+            "chat messages must be cascaded on purge"
         );
     }
 

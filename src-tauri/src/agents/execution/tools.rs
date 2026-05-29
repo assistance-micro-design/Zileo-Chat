@@ -126,10 +126,18 @@ pub(crate) async fn create_local_tools(
     // force the basic-tools branch below so `create_tools_with_context` (which
     // auto-injects Spawn/Delegate/Parallel for a primary agent) is never taken.
     // Streaming/attribution stay intact — only the sub-agent tools are omitted.
+    //
+    // UserQuestionTool is stripped too: the confined card review chat only runs
+    // on `/kanban`, which does not mount the UserQuestionModal, so a question
+    // would hang in the void until its 5-minute timeout. The Kanban supervisor
+    // must phrase everything as a direct turn, never an interactive prompt.
     let is_kanban = config.kind == Some(AgentKind::Kanban);
     if is_kanban {
         tool_names.retain(|t| {
-            t != "SpawnAgentTool" && t != "DelegateTaskTool" && t != "ParallelTasksTool"
+            t != "SpawnAgentTool"
+                && t != "DelegateTaskTool"
+                && t != "ParallelTasksTool"
+                && t != "UserQuestionTool"
         });
         // Auto-inject the per-card chat tools only when a context is present,
         // i.e. the streaming card review chat (the only Kanban streaming path).
@@ -443,6 +451,71 @@ mod tests {
                 "Kanban agent must NOT receive {forbidden}, got {ids:?}"
             );
         }
+        assert!(
+            ids.contains(&"MemoryTool".to_string()),
+            "Kanban agent must still receive its non-delegation tools, got {ids:?}"
+        );
+    }
+
+    /// A standard (kind = None) agent that lists UserQuestionTool keeps it:
+    /// the `/agent` page mounts the UserQuestionModal that answers the prompt.
+    /// This is the baseline the Kanban gating must NOT reproduce.
+    #[tokio::test]
+    async fn standard_agent_keeps_user_question_tool() {
+        let (state, _g) = setup_test_state().await;
+        let context = AgentToolContext::from_app_state_full(&state);
+        let config = agent_config_from(serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "name": "Std",
+            "tools": ["UserQuestionTool"],
+        }));
+
+        let tools = create_local_tools(
+            &config,
+            Some(&state.tool_factory),
+            Some(&context),
+            Some("wf-1".to_string()),
+            true,
+            None,
+        )
+        .await;
+        let ids = tool_ids(&tools);
+        assert!(
+            ids.contains(&"UserQuestionTool".to_string()),
+            "standard agent must receive UserQuestionTool, got {ids:?}"
+        );
+    }
+
+    /// A Kanban-kind agent must NEVER receive UserQuestionTool, even when it is
+    /// explicitly persisted on the config: the confined card review chat only
+    /// runs on `/kanban`, which does not mount the UserQuestionModal, so a
+    /// question would hang for the full 5-minute timeout in the void. The tool
+    /// is stripped just like the sub-agent delegation tools.
+    #[tokio::test]
+    async fn kanban_agent_never_gets_user_question_tool() {
+        let (state, _g) = setup_test_state().await;
+        let context = AgentToolContext::from_app_state_full(&state);
+        let config = agent_config_from(serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "name": "Kanban",
+            "kind": "kanban",
+            "tools": ["MemoryTool", "UserQuestionTool"],
+        }));
+
+        let tools = create_local_tools(
+            &config,
+            Some(&state.tool_factory),
+            Some(&context),
+            Some("wf-1".to_string()),
+            true,
+            None,
+        )
+        .await;
+        let ids = tool_ids(&tools);
+        assert!(
+            !ids.contains(&"UserQuestionTool".to_string()),
+            "Kanban agent must NOT receive UserQuestionTool, got {ids:?}"
+        );
         assert!(
             ids.contains(&"MemoryTool".to_string()),
             "Kanban agent must still receive its non-delegation tools, got {ids:?}"

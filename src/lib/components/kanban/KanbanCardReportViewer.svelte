@@ -177,13 +177,16 @@
 	// ---------------------------------------------------------------------------
 
 	/**
-	 * Chat is offered for cards in review (remediation) and done (follow-up):
-	 * the supervisor can keep working a card after it has been validated or
-	 * moved, so the conversation must survive the column transition. The backend
-	 * (`open_card_review_chat`) resumes the same hidden workflow regardless of
-	 * the current column.
+	 * Chat is offered for cards in review (remediation) and done (follow-up),
+	 * AND for any card that already has a review chat — so a `send_back`
+	 * re-queue (which moves the card to todo, then the scheduler to doing) never
+	 * makes the conversation disappear. The backend (`open_card_review_chat`)
+	 * resumes the same hidden workflow regardless of the current column, so once
+	 * a chat exists it stays reachable whatever the column.
 	 */
-	const chatEnabled = $derived(card?.column === 'review' || card?.column === 'done');
+	const chatEnabled = $derived(
+		card?.column === 'review' || card?.column === 'done' || !!card?.review_chat_workflow_id
+	);
 
 	let chatWorkflowId = $state<string | null>(null);
 	let chatMessages = $state<Message[]>([]);

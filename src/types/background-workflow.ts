@@ -137,6 +137,16 @@ export interface WorkflowStreamState {
 	/** Whether the workflow is waiting for user input */
 	hasPendingQuestion: boolean;
 	/**
+	 * True when this execution was auto-registered on its first stream chunk
+	 * because it was started on the backend (e.g. `RerunWorkerTool` re-running a
+	 * worker detached from the frontend executor) rather than via
+	 * `WorkflowExecutorService.execute` → `register()`. Backend-initiated runs
+	 * are excluded from the concurrency gate (`canStart` / `canStartNew`): they
+	 * already run regardless of the frontend's slot budget, so counting them
+	 * would wrongly block the next chat/agent turn (Rel-I1).
+	 */
+	backendInitiated: boolean;
+	/**
 	 * Buffer of raw stream chunks received for this workflow.
 	 *
 	 * Used to reconstruct `executionBlocks` when the user switches BACK to a

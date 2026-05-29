@@ -114,15 +114,23 @@ impl WorkflowManagerTool {
         limit: Option<i64>,
     ) -> ToolResult<Value> {
         let limit = limit.unwrap_or(DEFAULT_LIST_LIMIT).clamp(1, 200);
+        // Always exclude `hidden_from_list` workflows (the confined per-card
+        // Kanban review chats): an agent holding this tool in analyze mode must
+        // never be able to enumerate the chats of OTHER cards (Sec-I1).
+        // `(hidden_from_list ?? false)` coalesces legacy rows predating the
+        // field (ERR_SURREAL_011: DEFAULT does not backfill).
         let (where_clause, params): (String, Vec<(String, Value)>) = match folder_id {
             Some(id) if !id.trim().is_empty() => {
                 let v = validate_uuid_field(id, "folder_id").map_err(ToolError::InvalidInput)?;
                 (
-                    "WHERE folder_id = $fid".to_string(),
+                    "WHERE folder_id = $fid AND (hidden_from_list ?? false) = false".to_string(),
                     vec![("fid".to_string(), json!(v))],
                 )
             }
-            _ => (String::new(), Vec::new()),
+            _ => (
+                "WHERE (hidden_from_list ?? false) = false".to_string(),
+                Vec::new(),
+            ),
         };
         let q = format!(
             "SELECT meta::id(id) AS id, name, status, agent_id, folder_id, pinned, \
@@ -140,6 +148,22 @@ impl WorkflowManagerTool {
     async fn rename_workflow(&self, workflow_id: &str, new_name: &str) -> ToolResult<Value> {
         let wid =
             validate_uuid_field(workflow_id, "workflow_id").map_err(ToolError::InvalidInput)?;
+        // Refuse hidden workflows: an agent must not tamper with the confined
+        // per-card Kanban review chat of another card (Sec-I1). A hidden (or
+        // missing) row degrades to NotFound; only then do we run the UPDATE.
+        let guard_q = format!(
+            "SELECT meta::id(id) AS id FROM workflow \
+             WHERE meta::id(id) = '{}' AND (hidden_from_list ?? false) = false",
+            wid
+        );
+        let visible = self
+            .db
+            .query_json(&guard_q)
+            .await
+            .map_err(|e| ToolError::DatabaseError(format!("rename_workflow guard: {}", e)))?;
+        if visible.is_empty() {
+            return Err(ToolError::NotFound(format!("Workflow {}", wid)));
+        }
         let name = Validator::validate_workflow_name(new_name)
             .map_err(|e| ToolError::ValidationFailed(format!("{:?}", e)))?;
         let name_json = serialize_for_query(&name, "name").map_err(ToolError::ExecutionFailed)?;
@@ -247,10 +271,15 @@ impl WorkflowManagerTool {
 
         // Core workflow row + execution metadata so the analyzer can see how
         // long, how expensive and when the workflow finished.
+        //
+        // Excludes `hidden_from_list` workflows so the tool can never read the
+        // confined per-card Kanban review chat of any card (Sec-I1). A hidden
+        // row matches no record and degrades to the NotFound path below. The
+        // worker workflow (not hidden) stays readable for analyze grading.
         let wq = format!(
             "SELECT meta::id(id) AS id, name, status, agent_id, folder_id, completed_at, \
              total_tokens_input, total_tokens_output, total_cost_usd \
-             FROM workflow:`{}`",
+             FROM workflow WHERE meta::id(id) = '{}' AND (hidden_from_list ?? false) = false",
             wid
         );
         let wrows = self
@@ -759,5 +788,91 @@ mod tests {
         let wid = uuid::Uuid::new_v4().to_string();
         let err = tool.read_workflow(&wid, false, None).await.unwrap_err();
         assert!(matches!(err, ToolError::NotFound(_)));
+    }
+
+    /// Seeds a workflow with an explicit `hidden_from_list` flag. Mirrors
+    /// `seed_workflow` but lets the caller mark the row as a confined Kanban
+    /// review chat.
+    async fn seed_workflow_hidden(db: &Arc<DBClient>, wid: &str, agent_id: &str, hidden: bool) {
+        let q = format!(
+            "CREATE workflow:`{wid}` SET \
+                id = '{wid}', name = 'hidden chat', agent_id = '{agent_id}', status = 'idle', \
+                hidden_from_list = {hidden}, \
+                total_tokens_input = 0, total_tokens_output = 0, total_cost_usd = 0.0, \
+                total_cached_tokens = 0, total_cache_write_tokens = 0, \
+                sub_agent_tokens_input = 0, sub_agent_tokens_output = 0, \
+                current_context_tokens = 0, pinned = false, \
+                created_at = time::now(), updated_at = time::now()"
+        );
+        db.execute(&q).await.unwrap();
+    }
+
+    /// Sec-I1: list_workflows must NEVER surface a `hidden_from_list` workflow
+    /// (the per-card Kanban review chat). Otherwise an agent holding this tool
+    /// in analyze mode could enumerate the confined chats of OTHER cards.
+    #[tokio::test]
+    async fn list_workflows_excludes_hidden() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let visible = uuid::Uuid::new_v4().to_string();
+        let hidden = uuid::Uuid::new_v4().to_string();
+        let aid = uuid::Uuid::new_v4().to_string();
+        seed_workflow(&state.db, &visible, &aid).await;
+        seed_workflow_hidden(&state.db, &hidden, &aid, true).await;
+
+        let res = tool.list_workflows(None, Some(50)).await.unwrap();
+        let rows = res["workflows"].as_array().unwrap();
+        let ids: Vec<&str> = rows.iter().filter_map(|r| r["id"].as_str()).collect();
+        assert!(
+            ids.contains(&visible.as_str()),
+            "visible workflow must list"
+        );
+        assert!(
+            !ids.contains(&hidden.as_str()),
+            "hidden review-chat workflow must NEVER appear in list_workflows"
+        );
+    }
+
+    /// Sec-I1: read_workflow must refuse a hidden workflow — reading another
+    /// card's confined chat would leak the conversation. The worker workflow
+    /// (not hidden) stays readable for analyze-mode grading.
+    #[tokio::test]
+    async fn read_workflow_rejects_hidden() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let hidden = uuid::Uuid::new_v4().to_string();
+        let aid = uuid::Uuid::new_v4().to_string();
+        seed_workflow_hidden(&state.db, &hidden, &aid, true).await;
+
+        let err = tool.read_workflow(&hidden, false, None).await.unwrap_err();
+        assert!(
+            matches!(err, ToolError::NotFound(_)),
+            "hidden workflow must read as NotFound, got {err:?}"
+        );
+    }
+
+    /// Sec-I1: rename_workflow must refuse a hidden workflow so an agent cannot
+    /// tamper with another card's confined chat.
+    #[tokio::test]
+    async fn rename_workflow_rejects_hidden() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let hidden = uuid::Uuid::new_v4().to_string();
+        let aid = uuid::Uuid::new_v4().to_string();
+        seed_workflow_hidden(&state.db, &hidden, &aid, true).await;
+
+        let err = tool.rename_workflow(&hidden, "new name").await.unwrap_err();
+        assert!(
+            matches!(err, ToolError::NotFound(_)),
+            "hidden workflow rename must fail with NotFound, got {err:?}"
+        );
+
+        // The hidden row must remain untouched.
+        let rows = state
+            .db
+            .query_json(&format!("SELECT name FROM workflow:`{}`", hidden))
+            .await
+            .unwrap();
+        assert_eq!(rows[0]["name"], "hidden chat", "name must not change");
     }
 }

@@ -128,12 +128,14 @@ pub(crate) fn build_card_chat_seed(input: &CardChatSeedInput, locale: &str) -> S
     if fr {
         s.push_str(
             "Je peux affiner le prompt ou le skill, relancer le worker, déplacer la carte \
-             (valider / renvoyer en travail) ou attacher une récurrence. Que souhaitez-vous faire ?",
+             (la valider ou la renvoyer dans la file pour relancer un run) ou attacher une \
+             récurrence. Que souhaitez-vous faire ?",
         );
     } else {
         s.push_str(
-            "I can refine the prompt or skill, rerun the worker, move the card (validate / \
-             send back) or attach a recurrence. What would you like to do?",
+            "I can refine the prompt or skill, rerun the worker, move the card (validate it or \
+             send it back to the queue for a fresh run) or attach a recurrence. What would you \
+             like to do?",
         );
     }
     s

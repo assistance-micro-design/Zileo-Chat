@@ -425,14 +425,14 @@ Re-running a full worker needs the provider manager, tool factory and MCP manage
 
 ## 14. MoveCardTool (private, card review chat only)
 
-**Purpose**: Move the current card out of `review` once the supervisor has decided.
+**Purpose**: Move the current card to a new column once the supervisor has reached a decision.
 
 ### Operations
 
 - `validate` -- transitions the card to `done`.
-- `send_back` -- returns the card to `doing` or `todo` for more work.
+- `send_back` -- re-queues the card to `todo` (status reset to `ready`); the scheduler re-promotes it to `doing` automatically for a fresh run. `doing` is never a manual target.
 
-Wraps `move_kanban_card_core`. The `is_transition_allowed` guard was extended to permit `Review→Doing` and `Review→Todo` for send-back. Self-gates via `resolve_card_id_by_review_chat` like RerunWorkerTool.
+Wraps `move_kanban_card_core`. `is_transition_allowed` permits: `Review→Done` (validate), `Review→Todo` (re-queue), `Done→Todo` (re-queue a validated card). `Review→Doing` is not a valid transition. Self-gates via `resolve_card_id_by_review_chat` like RerunWorkerTool.
 
 ---
 

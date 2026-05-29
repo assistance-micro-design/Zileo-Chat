@@ -538,6 +538,129 @@ mod tests {
         );
     }
 
+    /// Regression lock for c52622a: a re-run whose worker spawned sub-agents
+    /// must roll their metrics up onto the worker workflow row (and bump the
+    /// cumulative token totals) — the symptom of the original bug was orphan
+    /// sub-agents and stale counters at reload because the detached re-run path
+    /// never called `aggregate_sub_agent_metrics` / `update_workflow_cumulative_metrics`.
+    ///
+    /// Sub-agent executions are persisted at CREATE time by the Spawn/Delegate/
+    /// Parallel tools (here seeded directly), so the rollup reads them from the
+    /// DB rather than from the `Report`. We assert both the sub-agent rollup and
+    /// the cumulative metrics derived from the synthetic `Report`.
+    #[tokio::test]
+    async fn persists_sub_agent_rollup_and_cumulative_metrics() {
+        use crate::agents::core::agent::{Report, ReportMetrics, ReportStatus};
+        use crate::test_utils::{seed_sub_agent_execution, seed_test_workflow};
+
+        let (state, _g) = setup_test_state().await;
+        let workflow_id = seed_test_workflow(&state.db).await;
+        let message_id = uuid::Uuid::new_v4().to_string();
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        // Two completed sub-agents on the worker workflow + one still running
+        // (the latter must be excluded from the rollup).
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-1",
+            "completed",
+            1_000,
+            500,
+            Some(0.05),
+        )
+        .await;
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-2",
+            "completed",
+            2_000,
+            800,
+            Some(0.07),
+        )
+        .await;
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-run",
+            "running",
+            9_999,
+            9_999,
+            Some(99.0),
+        )
+        .await;
+
+        let report = Report {
+            status: ReportStatus::Success,
+            content: "report".to_string(),
+            response: "response".to_string(),
+            metrics: ReportMetrics {
+                duration_ms: 1234,
+                tokens_input: 100,
+                tokens_output: 50,
+                context_tokens: 100,
+                cached_tokens: None,
+                cache_write_tokens: None,
+                thinking_tokens: None,
+                provider_cost_usd: None,
+                tools_used: vec![],
+                mcp_calls: vec![],
+                tool_executions: vec![],
+                reasoning_steps: vec![],
+                iteration_metrics: vec![],
+            },
+        };
+
+        persist_rerun_artifacts_core(&state, &workflow_id, &message_id, &agent_id, &report).await;
+
+        let rows = state
+            .db
+            .query_json(&format!(
+                "SELECT \
+                    (sub_agent_tokens_input ?? 0) AS sub_in, \
+                    (sub_agent_tokens_output ?? 0) AS sub_out, \
+                    (sub_agent_cost_usd ?? 0.0) AS sub_cost, \
+                    (total_tokens_input ?? 0) AS total_in, \
+                    (total_tokens_output ?? 0) AS total_out \
+                 FROM workflow:`{}`",
+                workflow_id
+            ))
+            .await
+            .expect("workflow row query failed");
+        let row = rows.into_iter().next().expect("workflow row missing");
+
+        // Sub-agent rollup: only the two completed executions are summed.
+        assert_eq!(
+            row["sub_in"].as_i64(),
+            Some(3_000),
+            "completed sub-agent inputs summed"
+        );
+        assert_eq!(
+            row["sub_out"].as_i64(),
+            Some(1_300),
+            "completed sub-agent outputs summed"
+        );
+        let sub_cost = row["sub_cost"].as_f64().unwrap_or(0.0);
+        assert!(
+            (sub_cost - 0.12).abs() < 0.000001,
+            "completed sub-agent costs summed (0.05 + 0.07), got {sub_cost}"
+        );
+
+        // Cumulative metrics from the synthetic report (seed_test_workflow
+        // leaves totals at NONE → coalesced to 0 + report values).
+        assert_eq!(
+            row["total_in"].as_i64(),
+            Some(100),
+            "cumulative input bumped from report"
+        );
+        assert_eq!(
+            row["total_out"].as_i64(),
+            Some(50),
+            "cumulative output bumped from report"
+        );
+    }
+
     #[tokio::test]
     async fn errors_when_card_has_no_worker_workflow() {
         let (state, _g) = setup_test_state().await;

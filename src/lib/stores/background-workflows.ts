@@ -139,7 +139,8 @@ let onUserQuestion:
 function createInitialExecution(
 	workflowId: string,
 	agentId: string,
-	workflowName: string
+	workflowName: string,
+	backendInitiated = false
 ): WorkflowStreamState {
 	return {
 		workflowId,
@@ -155,6 +156,7 @@ function createInitialExecution(
 		startedAt: Date.now(),
 		completedAt: null,
 		hasPendingQuestion: false,
+		backendInitiated,
 		chunkHistory: []
 	};
 }
@@ -215,8 +217,11 @@ function handleStreamChunk(chunk: StreamChunk): void {
 	// `workflow_name` is left blank — the only consumer that surfaces it
 	// (BackgroundActivityList) can tolerate empty names, and the persisted
 	// workflow row remains the source of truth for the name elsewhere.
+	// `backendInitiated: true` keeps this run out of the concurrency gate
+	// (canStart / canStartNew) — it already runs regardless of the frontend's
+	// slot budget, so counting it would wrongly block the next turn (Rel-I1).
 	if (!exec) {
-		exec = createInitialExecution(chunk.workflow_id, chunk.agent_id ?? 'unknown', '');
+		exec = createInitialExecution(chunk.workflow_id, chunk.agent_id ?? 'unknown', '', true);
 	}
 
 	// Update background state
@@ -417,8 +422,10 @@ export const backgroundWorkflowsStore = {
 	 */
 	canStart(): boolean {
 		const state = get(store);
+		// Backend-initiated runs (auto-registered, e.g. a detached RerunWorker)
+		// don't consume a frontend slot — exclude them from the gate (Rel-I1).
 		const runningCount = Array.from(state.executions.values()).filter(
-			(e) => e.status === 'running'
+			(e) => e.status === 'running' && !e.backendInitiated
 		).length;
 		const validationState = get(validationSettings);
 		const maxConcurrent =
@@ -532,15 +539,20 @@ export const recentlyCompletedWorkflows = derived(store, ($s) =>
 	Array.from($s.executions.values()).filter((e) => e.status !== 'running')
 );
 
-/** Count of currently running workflows */
+/** Count of currently running workflows (excludes backend-initiated runs, consistent with the concurrency gate — Rel-I1) */
 export const runningCount = derived(
 	store,
-	($s) => Array.from($s.executions.values()).filter((e) => e.status === 'running').length
+	($s) =>
+		Array.from($s.executions.values()).filter((e) => e.status === 'running' && !e.backendInitiated)
+			.length
 );
 
 /** Whether a new workflow can be started (reactive) */
 export const canStartNew = derived([store, validationSettings], ([$s, $vs]) => {
-	const running = Array.from($s.executions.values()).filter((e) => e.status === 'running').length;
+	// Mirror `canStart()`: backend-initiated runs don't consume a slot (Rel-I1).
+	const running = Array.from($s.executions.values()).filter(
+		(e) => e.status === 'running' && !e.backendInitiated
+	).length;
 	const maxConcurrent = $vs?.mode === 'auto' ? MAX_CONCURRENT_AUTO : MAX_CONCURRENT_OTHER;
 	return running < maxConcurrent;
 });

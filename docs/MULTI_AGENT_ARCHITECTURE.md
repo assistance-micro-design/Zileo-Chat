@@ -105,7 +105,7 @@ The kanban toolkit (auto-provisioned at agent creation when `kind: Kanban` is se
 | `SubmitComposedCardTool` *(private)* | Auto-injected during compose; terminal call that finalizes the card and validates the prompt-variable contract |
 | `SubmitAnalysisTool` *(private)* | Auto-injected during `analyze_card_report`; terminal call that finalizes the verdict |
 | `RerunWorkerTool` *(private)* | Auto-injected only inside a card review chat; re-runs the worker workflow detached with an extra instruction (self-gates via `review_chat_workflow_id`) |
-| `MoveCardTool` *(private)* | Auto-injected in the card review chat; `validate` → `done` or `send_back` → `doing`/`todo` |
+| `MoveCardTool` *(private)* | Auto-injected in the card review chat; `validate` → `done` or `send_back` → `todo` (re-queued as `ready` for a fresh scheduler run; `doing` is never a manual target) |
 | `ScheduleCardTool` *(private)* | Auto-injected in the card review chat; attaches a weekly recurrence, turning the card into a template |
 
 Two new agent fields support the Kanban flow:
@@ -125,7 +125,7 @@ scheduler tick    --> ready card --> WorkflowExecutorService --> standard agent 
 workflow_complete --> if target_agent.auto_analyze_reports: Kanban agent (analyze) --> SubmitAnalysisTool --> verdict
                                                             uses: WorkflowManagerTool (read_workflow, list_workflow_errors)
 
-card in review    --> open_card_review_chat --> Kanban agent (chat, hidden workflow) --> RerunWorker / MoveCard / ScheduleCard
+card in review/done --> open_card_review_chat --> Kanban agent (chat, hidden workflow) --> RerunWorker / MoveCard / ScheduleCard
                                                             seeded with report + verdict; resumes idempotently
 ```
 

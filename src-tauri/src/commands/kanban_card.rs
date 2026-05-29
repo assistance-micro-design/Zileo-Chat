@@ -256,6 +256,65 @@ pub async fn update_kanban_card_core(
     get_kanban_card_core(db, &validated_id).await
 }
 
+/// Cascade-deletes a card's confined review chat workflow (the hidden
+/// `review_chat_workflow_id`) and everything attached to it (messages, tool
+/// executions, thinking steps, sub-agent executions, …). The chat is hidden
+/// from the sidebar (`hidden_from_list`), so without this it would leak in the
+/// DB forever once its owning card is deleted or auto-purged (I5).
+///
+/// Mirrors `db::queries::cascade::delete_workflow_related` but takes `&DBClient`
+/// (the kanban-card cores hold a plain client, not an `Arc`) and runs
+/// sequentially. The canonical table list `CASCADE_DELETE_TABLES` is reused so
+/// the two cascades never drift. A pre-SELECT confirms the workflow row exists
+/// first, so a NONE / dangling link is a clean no-op rather than a blind DELETE
+/// fan-out (ERR_SURREAL_013/014). The WORKER workflow (`workflow_id`) is NOT
+/// touched here — it stays consultable independently of its card.
+pub(crate) async fn cascade_review_chat_workflow(db: &DBClient, chat_workflow_id: &str) {
+    // Malformed legacy links carry nothing safe to delete — silently skip.
+    let Ok(wf) = validate_uuid_field(chat_workflow_id, "review_chat_workflow_id") else {
+        return;
+    };
+
+    // Pre-SELECT: only cascade when the chat workflow row actually exists.
+    match db
+        .query_json(&format!("SELECT meta::id(id) AS id FROM workflow:`{}`", wf))
+        .await
+    {
+        Ok(rows) if rows.is_empty() => return,
+        Ok(_) => {}
+        Err(e) => {
+            warn!(workflow_id = %wf, error = %e, "Failed to look up review chat workflow for cascade");
+            return;
+        }
+    }
+
+    // memory_chunk first: its parent link `memory_id.workflow_id` must still
+    // resolve before the parent `memory` rows are removed below.
+    if let Err(e) = db
+        .execute_with_params(
+            "DELETE memory_chunk WHERE memory_id.workflow_id = $wf",
+            vec![("wf".to_string(), json!(wf))],
+        )
+        .await
+    {
+        warn!(workflow_id = %wf, error = %e, "review chat memory_chunk cascade failed (non-fatal)");
+    }
+
+    for table in crate::db::queries::workflow::CASCADE_DELETE_TABLES {
+        let q = format!("DELETE {} WHERE workflow_id = $wf", table);
+        if let Err(e) = db
+            .execute_with_params(&q, vec![("wf".to_string(), json!(wf))])
+            .await
+        {
+            warn!(table = %table, workflow_id = %wf, error = %e, "review chat cascade failed (non-fatal)");
+        }
+    }
+
+    if let Err(e) = db.execute(&format!("DELETE workflow:`{}`", wf)).await {
+        warn!(workflow_id = %wf, error = %e, "Failed to delete review chat workflow row");
+    }
+}
+
 pub async fn delete_kanban_card_core(
     db: &DBClient,
     card_id: &str,
@@ -273,8 +332,17 @@ pub async fn delete_kanban_card_core(
             .map_err(|e| format!("Failed to delete linked schedule: {}", e))?;
     }
 
-    // Non-cascade on workflow per spec: the workflow_id reference becomes
-    // orphan in the workflow table, no cleanup here.
+    // Cascade the confined review chat workflow (hidden_from_list) so it does
+    // not leak (I5). The WORKER `workflow_id` is intentionally preserved — it
+    // stays consultable independently of its card.
+    if let Some(chat_wf) = get_kanban_card_core(db, &validated_id)
+        .await
+        .ok()
+        .and_then(|c| c.review_chat_workflow_id)
+    {
+        cascade_review_chat_workflow(db, &chat_wf).await;
+    }
+
     let query = format!("DELETE kanban_card:`{}`", validated_id);
     db.execute(&query)
         .await
@@ -283,6 +351,11 @@ pub async fn delete_kanban_card_core(
 }
 
 /// Allowed transitions between columns. Returns true if the move is permitted.
+///
+/// `send_back` (MoveCardTool / card chat) always re-queues to `Todo` — the
+/// scheduler then re-promotes the card to `Doing` via the existing promotion
+/// path (option b, 2026-05-29). `Doing` is therefore NEVER a manual target:
+/// it is owned by the scheduler/executor.
 pub fn is_transition_allowed(from: &KanbanColumn, to: &KanbanColumn) -> bool {
     use KanbanColumn::*;
     matches!(
@@ -290,9 +363,9 @@ pub fn is_transition_allowed(from: &KanbanColumn, to: &KanbanColumn) -> bool {
         (Todo, Todo)              // reorder
             | (Review, Done)      // user validates
             | (Review, Review)    // reorder
-            | (Review, Doing)     // send back to work (MoveCardTool / chat)
             | (Review, Todo)      // send back to queue (MoveCardTool / chat)
             | (Done, Done)        // reorder
+            | (Done, Todo)        // re-queue a validated card (MoveCardTool / chat)
             | (Doing, Review)     // auto: workflow failed (backend trigger)
             | (Doing, Done) // auto: workflow ok (backend trigger)
     )
@@ -435,8 +508,16 @@ pub async fn move_kanban_card_core(
     }
     let validated_id = validate_uuid_field(card_id, "card_id")?;
     let column_sql = format!("'{}'", new_column.as_str());
+    // Keep `status` consistent with the destination column:
+    //   * Done  -> 'done'  (validate path).
+    //   * Todo  -> 'ready' (send_back re-queue): a review/done card carries
+    //     status='done', which the scheduler promotion query
+    //     (`WHERE status='ready' AND column='todo'`) would never match —
+    //     resetting to 'ready' re-arms it for re-promotion (option b).
+    // Other targets (Review/Doing reorders, auto transitions) keep status as-is.
     let status_extra = match new_column {
         KanbanColumn::Done => ", status = 'done'",
+        KanbanColumn::Todo => ", status = 'ready'",
         _ => "",
     };
     let query = format!(
@@ -583,27 +664,92 @@ mod tests {
 
     #[test]
     fn test_transition_allowed() {
-        assert!(is_transition_allowed(
-            &KanbanColumn::Review,
-            &KanbanColumn::Done
-        ));
-        // send-back transitions enabled for MoveCardTool / card chat.
-        assert!(is_transition_allowed(
-            &KanbanColumn::Review,
-            &KanbanColumn::Doing
-        ));
-        assert!(is_transition_allowed(
-            &KanbanColumn::Review,
-            &KanbanColumn::Todo
-        ));
-        assert!(!is_transition_allowed(
-            &KanbanColumn::Todo,
-            &KanbanColumn::Doing
-        ));
-        assert!(!is_transition_allowed(
-            &KanbanColumn::Done,
-            &KanbanColumn::Todo
-        ));
+        use KanbanColumn::*;
+        // Validate.
+        assert!(is_transition_allowed(&Review, &Done));
+        // send_back = re-queue to Todo (option b): valid from both review and
+        // done. The scheduler re-promotes via the existing tested path.
+        assert!(is_transition_allowed(&Review, &Todo));
+        assert!(is_transition_allowed(&Done, &Todo));
+        // Reorders.
+        assert!(is_transition_allowed(&Todo, &Todo));
+        assert!(is_transition_allowed(&Review, &Review));
+        assert!(is_transition_allowed(&Done, &Done));
+        // Auto backend transitions (workflow complete).
+        assert!(is_transition_allowed(&Doing, &Review));
+        assert!(is_transition_allowed(&Doing, &Done));
+        // Doing is never a manual send_back target under option (b): a card is
+        // re-queued to Todo and the scheduler promotes it to Doing itself.
+        assert!(!is_transition_allowed(&Review, &Doing));
+        assert!(!is_transition_allowed(&Done, &Doing));
+        assert!(!is_transition_allowed(&Todo, &Doing));
+    }
+
+    /// Option (b): send_back re-queues a card to Todo with `status='ready'` so
+    /// the scheduler re-promotes it (a review/done card carries `status='done'`,
+    /// which the promotion query `WHERE status='ready' AND column='todo'` would
+    /// otherwise never match → dead card). Covers both Review→Todo and
+    /// Done→Todo.
+    #[tokio::test]
+    async fn test_send_back_to_todo_resets_status_to_ready() {
+        use crate::test_utils::setup_test_state;
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        for source_column in ["review", "done"] {
+            let card_id = uuid::Uuid::new_v4().to_string();
+            // A review/done card always has status='done' (mark_card_done_core /
+            // apply_verdict).
+            let q = format!(
+                "CREATE kanban_card:`{card_id}` CONTENT {{
+                    id: '{card_id}', title: 't', description: '',
+                    kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                    prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                    target_folder_id: NONE, status: 'done', `column`: '{source_column}',
+                    `column_order`: 0, workflow_id: NONE, review_chat_workflow_id: NONE,
+                    error_summary: NONE, created_at: time::now(), updated_at: time::now()
+                }}"
+            );
+            state.db.execute(&q).await.unwrap();
+
+            let card = move_kanban_card_core(&state.db, &card_id, KanbanColumn::Todo, 0)
+                .await
+                .expect("send_back to todo succeeds");
+            assert!(matches!(card.column, KanbanColumn::Todo));
+            assert_eq!(
+                card.status,
+                crate::models::kanban_card::KanbanCardStatus::Ready,
+                "send_back from {source_column} must reset status to 'ready' for re-promotion"
+            );
+        }
+    }
+
+    /// Regression lock: Review→Doing is rejected under option (b). The card
+    /// chat can only validate (→Done) or re-queue (→Todo); Doing is owned by the
+    /// scheduler/executor, never a manual target.
+    #[tokio::test]
+    async fn test_send_back_to_doing_is_rejected() {
+        use crate::test_utils::setup_test_state;
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let card_id = uuid::Uuid::new_v4().to_string();
+        let q = format!(
+            "CREATE kanban_card:`{card_id}` CONTENT {{
+                id: '{card_id}', title: 't', description: '',
+                kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                target_folder_id: NONE, status: 'done', `column`: 'review',
+                `column_order`: 0, workflow_id: NONE, review_chat_workflow_id: NONE,
+                error_summary: NONE, created_at: time::now(), updated_at: time::now()
+            }}"
+        );
+        state.db.execute(&q).await.unwrap();
+
+        let err = move_kanban_card_core(&state.db, &card_id, KanbanColumn::Doing, 0).await;
+        assert!(
+            err.is_err(),
+            "Review->Doing must be rejected under option (b)"
+        );
     }
 
     // duplicate_kanban_card_as_template_core: clones a review/done card into
@@ -704,6 +850,91 @@ mod tests {
         assert_eq!(updated.target_agent_id, agent_b);
         // kanban_agent_id must remain untouched (not editable via update).
         assert_eq!(updated.kanban_agent_id, agent_a);
+    }
+
+    /// I5: deleting a card must cascade its confined review chat workflow (the
+    /// hidden `review_chat_workflow_id`) plus everything attached to it. Hidden
+    /// from the sidebar, it would otherwise leak in the DB forever. The WORKER
+    /// workflow (`workflow_id`) stays preserved on purpose (consultable
+    /// independently).
+    #[tokio::test]
+    async fn test_delete_card_cascades_review_chat_workflow() {
+        use crate::test_utils::setup_test_state;
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let card_id = uuid::Uuid::new_v4().to_string();
+        let chat_wf = uuid::Uuid::new_v4().to_string();
+        let worker_wf = uuid::Uuid::new_v4().to_string();
+
+        // Hidden review chat workflow + a message attached to it.
+        let create_wf = format!(
+            "CREATE workflow:`{chat_wf}` SET id = '{chat_wf}', name = 'chat', agent_id = '{agent_id}', \
+             status = 'idle', hidden_from_list = true, pinned = false, \
+             created_at = time::now(), updated_at = time::now()"
+        );
+        state.db.execute(&create_wf).await.unwrap();
+        let mid = uuid::Uuid::new_v4().to_string();
+        let create_msg = format!(
+            "CREATE message:`{mid}` SET id = '{mid}', workflow_id = '{chat_wf}', role = 'assistant', \
+             content = 'seed', tokens = 0, created_at = time::now(), updated_at = time::now()"
+        );
+        state.db.execute(&create_msg).await.unwrap();
+
+        // Worker workflow that must SURVIVE (only the chat is cascaded).
+        let create_worker = format!(
+            "CREATE workflow:`{worker_wf}` SET id = '{worker_wf}', name = 'worker', agent_id = '{agent_id}', \
+             status = 'completed', hidden_from_list = false, pinned = false, \
+             created_at = time::now(), updated_at = time::now()"
+        );
+        state.db.execute(&create_worker).await.unwrap();
+
+        let create_card = format!(
+            "CREATE kanban_card:`{card_id}` CONTENT {{
+                id: '{card_id}', title: 't', description: '',
+                kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                target_folder_id: NONE, status: 'done', `column`: 'done',
+                `column_order`: 0, workflow_id: '{worker_wf}',
+                review_chat_workflow_id: '{chat_wf}', error_summary: NONE,
+                created_at: time::now(), updated_at: time::now()
+            }}"
+        );
+        state.db.execute(&create_card).await.unwrap();
+
+        delete_kanban_card_core(&state.db, &card_id, false)
+            .await
+            .expect("delete succeeds");
+
+        // Chat workflow + its messages must be gone.
+        let wf_rows = state
+            .db
+            .query_json(&format!(
+                "SELECT meta::id(id) AS id FROM workflow:`{}`",
+                chat_wf
+            ))
+            .await
+            .unwrap();
+        assert!(wf_rows.is_empty(), "hidden chat workflow must be cascaded");
+        let msg_rows = state
+            .db
+            .query_json(&format!(
+                "SELECT meta::id(id) AS id FROM message WHERE workflow_id = '{}'",
+                chat_wf
+            ))
+            .await
+            .unwrap();
+        assert!(msg_rows.is_empty(), "chat messages must be cascaded");
+
+        // Worker workflow must SURVIVE.
+        let worker_rows = state
+            .db
+            .query_json(&format!(
+                "SELECT meta::id(id) AS id FROM workflow:`{}`",
+                worker_wf
+            ))
+            .await
+            .unwrap();
+        assert_eq!(worker_rows.len(), 1, "worker workflow must be preserved");
     }
 
     #[tokio::test]
