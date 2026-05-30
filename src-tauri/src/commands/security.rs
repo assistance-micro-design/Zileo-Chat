@@ -14,8 +14,9 @@
 
 //! Security-related Tauri commands for API key management.
 //!
-//! Provides secure storage and retrieval of API keys for LLM providers
-//! using OS keychain + AES-256-GCM encryption.
+//! Provides secure storage and status checks for LLM provider API keys
+//! using OS keychain + AES-256-GCM encryption. Secrets are never returned
+//! through Tauri IPC.
 
 use crate::security::{KeyStore, KeyStoreError, Validator};
 use tauri::State;
@@ -71,12 +72,6 @@ impl SecureKeyStore {
     }
 }
 
-impl Default for SecureKeyStore {
-    fn default() -> Self {
-        Self::new().unwrap_or_else(|_| Self::new_without_encryption())
-    }
-}
-
 /// Saves an API key for a provider.
 ///
 /// The key is validated, encrypted with AES-256-GCM, and stored in the OS keychain.
@@ -112,37 +107,6 @@ pub async fn save_api_key(
 
     info!("API key saved successfully");
     Ok(())
-}
-
-/// Retrieves an API key for a provider.
-///
-/// Returns the decrypted API key if found.
-#[tauri::command]
-#[instrument(name = "get_api_key", skip(keystore), fields(provider = %provider))]
-pub async fn get_api_key(
-    provider: String,
-    keystore: State<'_, SecureKeyStore>,
-) -> Result<String, String> {
-    info!("Retrieving API key");
-
-    // Validate provider
-    let validated_provider = Validator::validate_provider(&provider).map_err(|e| {
-        warn!(error = %e, "Invalid provider name");
-        format!("Invalid provider: {}", e)
-    })?;
-
-    // Get from keystore
-    let api_key = keystore.inner.get(&validated_provider).map_err(|e| {
-        // Normalized error message to prevent provider enumeration
-        warn!("API key operation failed for provider");
-        match &e {
-            KeyStoreError::NotFound(_) => "API key not found".to_string(),
-            _ => "API key operation failed".to_string(),
-        }
-    })?;
-
-    info!("API key retrieved successfully");
-    Ok(api_key)
 }
 
 /// Deletes an API key for a provider.

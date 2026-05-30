@@ -287,14 +287,13 @@ Prompt template CRUD.
 
 ### Security (`commands/security.rs`)
 
-Secure API key storage (AES-256-GCM via SecureKeyStore).
+Secure API key storage (AES-256-GCM via SecureKeyStore). Stored secrets are never returned through IPC; callers can only save, delete, or query key presence.
 
 | Command | Description |
 |---------|-------------|
 | `save_api_key` | Securely store an API key |
-| `get_api_key` | Retrieve a stored API key |
 | `delete_api_key` | Remove a stored API key |
-| `has_api_key` | Check if an API key exists for a provider |
+| `has_api_key` | Check if an API key exists for a provider without exposing it |
 | `list_api_key_providers` | List all providers with stored API keys |
 
 ### Import/Export (`commands/import_export/`)

@@ -105,8 +105,10 @@ async fn main() -> anyhow::Result<()> {
     // Note: Builtin model seeding is handled by the seed_builtin_models Tauri command
     // (invokable from frontend). get_all_builtin_models() returns an empty Vec.
 
-    // Initialize secure keystore (synchronous, instant)
-    let keystore = commands::SecureKeyStore::default();
+    // Initialize secure keystore (synchronous, instant). Fail startup rather than
+    // silently downgrading to unencrypted storage if secure keychain/AES setup fails.
+    let keystore = commands::SecureKeyStore::new()
+        .map_err(|e| format!("Failed to initialize secure keystore: {}", e))?;
     tracing::info!("Secure keystore initialized");
 
     // Run MCP loading, provider init, and embedding init in parallel.
@@ -176,7 +178,6 @@ async fn main() -> anyhow::Result<()> {
             commands::agent::delete_agent,
             // Security commands
             commands::security::save_api_key,
-            commands::security::get_api_key,
             commands::security::delete_api_key,
             commands::security::has_api_key,
             commands::security::list_api_key_providers,

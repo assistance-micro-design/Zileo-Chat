@@ -33,8 +33,8 @@
 //!
 //! ### Security Commands ([`security`])
 //! - `save_api_key` - Securely store API key
-//! - `get_api_key` - Retrieve stored API key
 //! - `delete_api_key` - Remove stored API key
+//! - `has_api_key` - Check whether a provider key exists without exposing it
 //!
 //! ### Model Commands ([`llm_models`])
 //! - `list_models` - List all LLM models (builtin + custom)
