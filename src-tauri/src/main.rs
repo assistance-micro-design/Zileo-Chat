@@ -108,7 +108,7 @@ async fn main() -> anyhow::Result<()> {
     // Initialize secure keystore (synchronous, instant). Fail startup rather than
     // silently downgrading to unencrypted storage if secure keychain/AES setup fails.
     let keystore = commands::SecureKeyStore::new()
-        .map_err(|e| format!("Failed to initialize secure keystore: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to initialize secure keystore: {}", e))?;
     tracing::info!("Secure keystore initialized");
 
     // Run MCP loading, provider init, and embedding init in parallel.
