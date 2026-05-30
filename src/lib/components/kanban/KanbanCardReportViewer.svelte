@@ -21,7 +21,7 @@
 		RefreshCw
 	} from '@lucide/svelte';
 	import { goto } from '$app/navigation';
-	import { invoke } from '@tauri-apps/api/core';
+	import { tauriInvoke as invoke } from '$lib/tauri';
 	import type { KanbanCard, CardReviewChatInit } from '$types/kanban';
 	import type { AgentSummary } from '$types/agent';
 	import type { PromptSummary } from '$types/prompt';

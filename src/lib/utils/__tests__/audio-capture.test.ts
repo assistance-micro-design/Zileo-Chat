@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	AudioCaptureError,
 	blobToBase64,
@@ -28,12 +28,8 @@ import {
 	type MediaRecorderSession
 } from '../audio-capture';
 
-// jsdom's Blob lacks .arrayBuffer() / .stream(). Swap in the Node 22 native
-// Blob (spec-compliant, .arrayBuffer() works) so blobToBase64 round-trips.
-beforeAll(async () => {
-	const { Blob: NodeBlob } = await import('node:buffer');
-	(globalThis as unknown as { Blob: typeof NodeBlob }).Blob = NodeBlob;
-});
+// jsdom's Blob lacks .arrayBuffer() / .stream() in some environments. The pure
+// encoder is browser-compatible; tests use the runtime Blob as provided.
 
 // ---------------------------------------------------------------------------
 // pickSupportedMime — pure

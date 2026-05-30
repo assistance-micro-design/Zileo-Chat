@@ -17,7 +17,7 @@
  * Defense-in-depth: DOMPurify handles XSS, but we also validate
  * before passing URLs to Tauri's openUrl().
  */
-const ALLOWED_SCHEMES = ['https:', 'http:', 'mailto:'];
+const ALLOWED_EXTERNAL_SCHEMES = ['https:', 'http:', 'mailto:'];
 
 /**
  * Checks if a URL has an allowed scheme for external opening.
@@ -38,5 +38,21 @@ export function isAllowedScheme(url: string): boolean {
 	if (colonIndex === -1) return true; // No scheme = relative URL
 
 	const scheme = url.slice(0, colonIndex + 1).toLowerCase();
-	return ALLOWED_SCHEMES.includes(scheme);
+	return ALLOWED_EXTERNAL_SCHEMES.includes(scheme);
+}
+
+/** Returns true for URLs that should be opened outside the app. */
+export function isExternalUrl(url: string): boolean {
+	if (!url) return false;
+
+	const colonIndex = url.indexOf(':');
+	if (colonIndex === -1) return false;
+
+	const scheme = url.slice(0, colonIndex + 1).toLowerCase();
+	return ALLOWED_EXTERNAL_SCHEMES.includes(scheme);
+}
+
+/** Returns true for app-local relative paths and same-page fragments. */
+export function isInternalHref(url: string): boolean {
+	return url.startsWith('/') || url.startsWith('#') || !url.includes(':');
 }

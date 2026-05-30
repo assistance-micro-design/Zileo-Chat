@@ -28,7 +28,8 @@
 	import DOMPurify from 'dompurify';
 	import { openExternalUrl } from '$lib/tauri';
 	import { i18n } from '$lib/i18n';
-	import { isAllowedScheme } from '$lib/utils/url';
+	import { copyToClipboard } from '$lib/utils/clipboard';
+	import { isAllowedScheme, isExternalUrl, isInternalHref } from '$lib/utils/url';
 	import { ExternalLink, Copy, X } from '@lucide/svelte';
 
 	/**
@@ -48,16 +49,17 @@
 	let linkPopup = $state<{ url: string; x: number; y: number } | null>(null);
 	let copied = $state(false);
 
-	function handleClick(event: MouseEvent): void {
-		const target = event.target as HTMLElement;
-		const anchor = target.closest('a');
-		if (!anchor) return;
+	function handleAnchor(anchor: HTMLAnchorElement, event: Event): void {
+		const url = anchor.getAttribute('href');
+		if (!url || !isAllowedScheme(url)) {
+			event.preventDefault();
+			return;
+		}
+
+		if (isInternalHref(url) && !isExternalUrl(url)) return;
 
 		event.preventDefault();
 		event.stopPropagation();
-
-		const url = anchor.getAttribute('href');
-		if (!url || !isAllowedScheme(url)) return;
 
 		const rect = anchor.getBoundingClientRect();
 		linkPopup = {
@@ -66,6 +68,29 @@
 			y: rect.bottom + 4
 		};
 		copied = false;
+	}
+
+	function handleClick(event: MouseEvent): void {
+		const target = event.target as HTMLElement;
+		const anchor = target.closest('a');
+		if (anchor instanceof HTMLAnchorElement) {
+			handleAnchor(anchor, event);
+		}
+	}
+
+	function handleKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Escape' && linkPopup) {
+			event.preventDefault();
+			closePopup();
+			return;
+		}
+
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		const target = event.target as HTMLElement;
+		const anchor = target.closest('a');
+		if (anchor instanceof HTMLAnchorElement) {
+			handleAnchor(anchor, event);
+		}
 	}
 
 	function closePopup(): void {
@@ -81,11 +106,15 @@
 
 	async function handleCopyUrl(): Promise<void> {
 		if (!linkPopup) return;
-		await navigator.clipboard.writeText(linkPopup.url);
-		copied = true;
-		setTimeout(() => {
-			closePopup();
-		}, 1000);
+		try {
+			await copyToClipboard(linkPopup.url);
+			copied = true;
+			setTimeout(() => {
+				closePopup();
+			}, 1000);
+		} catch {
+			copied = false;
+		}
 	}
 </script>
 
@@ -102,16 +131,12 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	class="markdown-content"
-	class:compact
-	onclick={handleClick}
-	onkeydown={(e) => {
-		if (e.key === 'Enter' || e.key === ' ') {
-			handleClick(e as unknown as MouseEvent);
-		}
-	}}
->
-	<!-- eslint-disable-next-line svelte/no-at-html-tags -- Content sanitized via DOMPurify -->
+		class="markdown-content"
+		class:compact
+		onclick={handleClick}
+		onkeydown={handleKeydown}
+	>
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -- Content sanitized via DOMPurify -->
 	{@html html}
 </div>
 

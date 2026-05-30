@@ -26,7 +26,8 @@ const KEYS = {
 	SELECTED_WORKFLOW_ID: 'zileo_last_workflow_id',
 	STATUS_FILTER: 'zileo_sidebar_status_filter',
 	EXPANDED_FOLDER_IDS: 'zileo_expanded_folder_ids',
-	REINDEX_JOB_ID: 'zileo_reindex_job_id'
+	REINDEX_JOB_ID: 'zileo_reindex_job_id',
+	KANBAN_SEEN_CARDS: 'kanban-seen-cards'
 } as const;
 
 type StorageKey = (typeof KEYS)[keyof typeof KEYS] | 'theme' | 'locale';
@@ -38,14 +39,16 @@ export const LocalStorage = {
 	 * @param defaultValue - The default value to return if key doesn't exist or parsing fails
 	 * @returns The stored value or the default value
 	 */
-	get<T>(key: StorageKey, defaultValue: T): T {
+	get<T>(key: StorageKey, defaultValue: T, validate?: (value: unknown) => value is T): T {
 		if (typeof window === 'undefined') {
 			return defaultValue;
 		}
 
 		try {
 			const item = window.localStorage.getItem(key);
-			return item ? JSON.parse(item) : defaultValue;
+			if (!item) return defaultValue;
+			const parsed: unknown = JSON.parse(item);
+			return validate && !validate(parsed) ? defaultValue : (parsed as T);
 		} catch {
 			return defaultValue;
 		}

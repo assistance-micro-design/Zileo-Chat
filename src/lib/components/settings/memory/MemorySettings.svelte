@@ -27,8 +27,7 @@ HNSW index schema.
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-	import { tauriInvoke } from '$lib/tauri';
+	import { tauriInvoke, tauriListen, type TauriUnlistenFn } from '$lib/tauri';
 	import {
 		Button,
 		Select,
@@ -406,8 +405,8 @@ HNSW index schema.
 		loadConfig();
 		void restoreReindexFromStorage();
 
-		let unlistenFn: UnlistenFn | undefined;
-		void listen<ReindexJobStatus>('reindex-progress', (event) => {
+		let unlistenFn: TauriUnlistenFn | undefined;
+		void tauriListen<ReindexJobStatus>('reindex-progress', (event) => {
 			// Strict filter: events from other jobs (rare but possible if the
 			// user re-runs before the previous purge) are ignored.
 			if (!reindexJobId || event.payload.jobId !== reindexJobId) return;

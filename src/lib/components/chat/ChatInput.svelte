@@ -29,8 +29,7 @@
 -->
 <script lang="ts">
 	import { Send, BookOpen, CircleStop, Paperclip, X } from '@lucide/svelte';
-	import { open as openDialog } from '@tauri-apps/plugin-dialog';
-	import { tauriInvoke as invoke } from '$lib/tauri';
+	import { openDialog, tauriInvoke as invoke } from '$lib/tauri';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import PromptSelectorModal from './PromptSelectorModal.svelte';
 	import { i18n } from '$lib/i18n';

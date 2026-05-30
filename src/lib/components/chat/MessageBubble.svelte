@@ -27,6 +27,7 @@
 	import { Clock, Copy, Check, CircleAlert, X } from '@lucide/svelte';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import { i18n } from '$lib/i18n';
+	import { copyToClipboard } from '$lib/utils/clipboard';
 
 	/**
 	 * MessageBubble props
@@ -53,13 +54,17 @@
 	 * so the zoom is implemented as an in-app overlay instead.
 	 */
 	let zoomedAttachment = $state<MessageAttachment | null>(null);
+	let zoomTrigger = $state<HTMLElement | null>(null);
 
-	function openZoom(att: MessageAttachment): void {
+	function openZoom(att: MessageAttachment, trigger: HTMLElement): void {
+		zoomTrigger = trigger;
 		zoomedAttachment = att;
 	}
 
 	function closeZoom(): void {
 		zoomedAttachment = null;
+		zoomTrigger?.focus();
+		zoomTrigger = null;
 	}
 
 	function handleZoomKeydown(event: KeyboardEvent): void {
@@ -89,7 +94,7 @@
 			copyTimer = null;
 		}
 		try {
-			await navigator.clipboard.writeText(message.content);
+			await copyToClipboard(message.content);
 			copied = true;
 			copyTimer = setTimeout(() => {
 				copied = false;
@@ -121,7 +126,7 @@
 					<button
 						type="button"
 						class="attachment-thumb"
-						onclick={() => openZoom(att)}
+						onclick={(e) => openZoom(att, e.currentTarget)}
 						aria-label={att.name ?? $i18n('chat_attachment')}
 					>
 						<img

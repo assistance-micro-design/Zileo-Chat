@@ -28,6 +28,7 @@
 	import { agents as agentsStore, agentStore } from '$lib/stores/agents';
 	import { prompts as promptsStore, promptStore } from '$lib/stores/prompts';
 	import { folders as foldersStore, folderStore } from '$lib/stores/folders';
+	import { LocalStorage, STORAGE_KEYS } from '$lib/services/localStorage.service';
 
 	import KanbanBoard from '$lib/components/kanban/KanbanBoard.svelte';
 	import KanbanCardItem from '$lib/components/kanban/KanbanCardItem.svelte';
@@ -89,32 +90,24 @@
 	let agentFilter = $state('');
 	let folderFilter = $state('');
 
-	const SEEN_CARDS_STORAGE_KEY = 'kanban-seen-cards';
+	function isStringArray(value: unknown): value is string[] {
+		return Array.isArray(value) && value.every((item) => typeof item === 'string');
+	}
+
+	function getSeenCardIds(): string[] {
+		return LocalStorage.get(STORAGE_KEYS.KANBAN_SEEN_CARDS, [], isStringArray);
+	}
 
 	function isCardSeen(cardId: string): boolean {
-		try {
-			const raw = localStorage.getItem(SEEN_CARDS_STORAGE_KEY);
-			if (!raw) return false;
-			const list = JSON.parse(raw) as string[];
-			return Array.isArray(list) && list.includes(cardId);
-		} catch {
-			return false;
-		}
+		return getSeenCardIds().includes(cardId);
 	}
 
 	function markCardSeen(cardId: string): void {
-		try {
-			const raw = localStorage.getItem(SEEN_CARDS_STORAGE_KEY);
-			const list = raw ? (JSON.parse(raw) as string[]) : [];
-			if (!Array.isArray(list)) return;
-			if (!list.includes(cardId)) {
-				list.push(cardId);
-				// Soft cap to prevent unbounded growth — keep the last 500 seen IDs.
-				const trimmed = list.slice(-500);
-				localStorage.setItem(SEEN_CARDS_STORAGE_KEY, JSON.stringify(trimmed));
-			}
-		} catch {
-			/* best-effort persistence */
+		const list = getSeenCardIds();
+		if (!list.includes(cardId)) {
+			list.push(cardId);
+			// Soft cap to prevent unbounded growth — keep the last 500 seen IDs.
+			LocalStorage.set(STORAGE_KEYS.KANBAN_SEEN_CARDS, list.slice(-500));
 		}
 	}
 

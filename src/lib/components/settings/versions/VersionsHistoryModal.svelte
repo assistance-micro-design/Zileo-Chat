@@ -11,7 +11,7 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { invoke } from '@tauri-apps/api/core';
+	import { tauriInvoke as invoke } from '$lib/tauri';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Button, Badge, DeleteConfirmModal } from '$lib/components/ui';

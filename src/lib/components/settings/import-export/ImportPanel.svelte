@@ -80,6 +80,7 @@ Orchestrates the multi-step import process:
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let result = $state<ConfigImportResult | null>(null);
+	let fileInput: HTMLInputElement | null = $state(null);
 
 	/**
 	 * Filter conflicts to only include those for selected entities.
@@ -101,58 +102,59 @@ Orchestrates the multi-step import process:
 	});
 
 	/**
-	 * Handle file upload
+	 * Open the hidden file input.
 	 */
-	async function handleFileUpload(): Promise<void> {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.accept = '.json';
+	function handleFileUpload(): void {
+		if (!fileInput) return;
+		fileInput.value = '';
+		fileInput.click();
+	}
 
-		input.onchange = async (e) => {
-			const file = (e.target as HTMLInputElement).files?.[0];
-			if (!file) return;
+	/**
+	 * Handle selected import file.
+	 */
+	async function handleFileSelected(e: Event): Promise<void> {
+		const file = (e.target as HTMLInputElement).files?.[0];
+		if (!file) return;
 
-			error = null;
+		error = null;
 
-			// Validate file size
-			if (file.size > MAX_IMPORT_FILE_SIZE) {
-				error = $i18n('ie_file_too_large').replace(
-					'{size}',
-					String(MAX_IMPORT_FILE_SIZE / (1024 * 1024))
-				);
+		// Validate file size
+		if (file.size > MAX_IMPORT_FILE_SIZE) {
+			error = $i18n('ie_file_too_large').replace(
+				'{size}',
+				String(MAX_IMPORT_FILE_SIZE / (1024 * 1024))
+			);
+			return;
+		}
+
+		loading = true;
+		try {
+			const text = await file.text();
+			const data = JSON.parse(text) as ExportPackage;
+			importData = data;
+
+			// Validate import
+			validation = await tauriInvoke<ImportValidation>('validate_import', { data: text });
+
+			if (!validation.valid) {
+				error = `${$i18n('ie_invalid_import_file')}: ${validation.errors.join(', ')}`;
+				loading = false;
 				return;
 			}
 
-			loading = true;
-			try {
-				const text = await file.text();
-				const data = JSON.parse(text) as ExportPackage;
-				importData = data;
+			// Initialize selection with all entities - using NAME as identifier (not ID)
+			selection = createSelectionFromValidation(validation);
 
-				// Validate import
-				validation = await tauriInvoke<ImportValidation>('validate_import', { data: text });
+			// Initialize MCP additions for servers with missing env
+			mcpAdditionsMap = createMcpAdditionsMap(validation.missingMcpEnv);
 
-				if (!validation.valid) {
-					error = `${$i18n('ie_invalid_import_file')}: ${validation.errors.join(', ')}`;
-					loading = false;
-					return;
-				}
-
-				// Initialize selection with all entities - using NAME as identifier (not ID)
-				selection = createSelectionFromValidation(validation);
-
-				// Initialize MCP additions for servers with missing env
-				mcpAdditionsMap = createMcpAdditionsMap(validation.missingMcpEnv);
-
-				currentStep = 'preview';
-			} catch (err) {
-				error = `${$i18n('ie_parse_failed')}: ${getErrorMessage(err)}`;
-			} finally {
-				loading = false;
-			}
-		};
-
-		input.click();
+			currentStep = 'preview';
+		} catch (err) {
+			error = `${$i18n('ie_parse_failed')}: ${getErrorMessage(err)}`;
+		} finally {
+			loading = false;
+		}
 	}
 
 	/**
@@ -347,6 +349,7 @@ Orchestrates the multi-step import process:
 </script>
 
 <div class="import-panel">
+	<input bind:this={fileInput} type="file" accept=".json" hidden onchange={handleFileSelected} />
 	<!-- Step Indicator -->
 	<div class="step-indicator">
 		<div

@@ -221,23 +221,39 @@ export function cancelRecording(session: MediaRecorderSession): void {
 	releaseStream(session);
 }
 
+async function readBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+	if (typeof blob.arrayBuffer === 'function') {
+		return blob.arrayBuffer();
+	}
+
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob'));
+		reader.onload = () => resolve(reader.result as ArrayBuffer);
+		reader.readAsArrayBuffer(blob);
+	});
+}
+
 /**
  * Reads a `Blob` and returns its base64-encoded payload without the
  * `data:<mime>;base64,` prefix. Suitable for forwarding to a Tauri command.
  */
 export async function blobToBase64(blob: Blob): Promise<string> {
-	const buffer = await blob.arrayBuffer();
+	const buffer = await readBlobArrayBuffer(blob);
 	const bytes = new Uint8Array(buffer);
-	// Chunked encoding avoids "Maximum call stack size exceeded" on big blobs.
-	let binary = '';
-	const chunkSize = 0x8000;
-	for (let i = 0; i < bytes.length; i += chunkSize) {
-		const chunk = bytes.subarray(i, i + chunkSize);
-		binary += String.fromCharCode.apply(null, Array.from(chunk));
+	const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+	let encoded = '';
+
+	for (let i = 0; i < bytes.length; i += 3) {
+		const first = bytes[i] ?? 0;
+		const second = bytes[i + 1];
+		const third = bytes[i + 2];
+
+		encoded += alphabet[first >> 2];
+		encoded += alphabet[((first & 0x03) << 4) | ((second ?? 0) >> 4)];
+		encoded += second === undefined ? '=' : alphabet[((second & 0x0f) << 2) | ((third ?? 0) >> 6)];
+		encoded += third === undefined ? '=' : alphabet[third & 0x3f];
 	}
-	if (typeof btoa === 'function') {
-		return btoa(binary);
-	}
-	// Node fallback (used by Vitest in jsdom).
-	return Buffer.from(binary, 'binary').toString('base64');
+
+	return encoded;
 }

@@ -50,6 +50,12 @@
 	/** Adjusted position to keep menu within viewport */
 	let adjustedX = $state(0);
 	let adjustedY = $state(0);
+	let hasFocused = $state(false);
+
+	$effect(() => {
+		adjustedX = x;
+		adjustedY = y;
+	});
 
 	$effect(() => {
 		if (menuRef) {
@@ -64,11 +70,11 @@
 			);
 			adjustedX = pos.x;
 			adjustedY = pos.y;
+			if (!hasFocused) {
+				hasFocused = true;
+				void tick().then(() => menuRef?.focus());
+			}
 		}
-	});
-
-	$effect(() => {
-		tick().then(() => menuRef?.focus());
 	});
 
 	/**
@@ -111,18 +117,18 @@
 				event.preventDefault();
 				onclose();
 				break;
-			case 'Home': {
-				event.preventDefault();
-				const first = enabledItems[0];
-				focusedIndex = first ? items.indexOf(first) : 0;
-				break;
-			}
-			case 'End': {
-				event.preventDefault();
-				const last = enabledItems[enabledItems.length - 1];
-				focusedIndex = last ? items.indexOf(last) : items.length - 1;
-				break;
-			}
+				case 'Home': {
+					event.preventDefault();
+					const first = enabledItems[0];
+					focusedIndex = first ? items.indexOf(first) : -1;
+					break;
+				}
+				case 'End': {
+					event.preventDefault();
+					const last = enabledItems[enabledItems.length - 1];
+					focusedIndex = last ? items.indexOf(last) : -1;
+					break;
+				}
 		}
 	}
 

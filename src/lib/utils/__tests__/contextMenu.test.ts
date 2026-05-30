@@ -92,15 +92,12 @@ describe('getNextFocusableIndex', () => {
 		expect(getNextFocusableIndex([], 0, 1)).toBe(-1);
 	});
 
-	it('handles all items disabled', () => {
+	it('returns -1 when all items are disabled', () => {
 		const allDisabled: ContextMenuItem[] = [
 			{ id: 'a', labelKey: 'a', disabled: true },
 			{ id: 'b', labelKey: 'b', disabled: true }
 		];
-		// Should not infinite loop, returns some index
-		const result = getNextFocusableIndex(allDisabled, 0, 1);
-		expect(result).toBeGreaterThanOrEqual(0);
-		expect(result).toBeLessThan(allDisabled.length);
+		expect(getNextFocusableIndex(allDisabled, 0, 1)).toBe(-1);
 	});
 
 	it('moves from -1 (no selection) to first enabled', () => {

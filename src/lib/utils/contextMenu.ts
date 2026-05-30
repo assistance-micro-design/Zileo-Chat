@@ -73,5 +73,5 @@ export function getNextFocusableIndex(
 		attempts++;
 	}
 
-	return nextIndex;
+	return items[nextIndex]?.disabled ? -1 : nextIndex;
 }
