@@ -35,14 +35,6 @@ impl SecureKeyStore {
         })
     }
 
-    /// Creates a SecureKeyStore without encryption (for testing).
-    #[cfg(test)]
-    pub fn new_without_encryption() -> Self {
-        Self {
-            inner: KeyStore::new_without_encryption(),
-        }
-    }
-
     /// Checks if an API key exists for a provider.
     pub fn has_key(&self, provider: &str) -> bool {
         self.inner.get(provider).is_ok()
