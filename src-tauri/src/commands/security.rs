@@ -36,6 +36,7 @@ impl SecureKeyStore {
     }
 
     /// Creates a SecureKeyStore without encryption (for testing).
+    #[cfg(test)]
     pub fn new_without_encryption() -> Self {
         Self {
             inner: KeyStore::new_without_encryption(),

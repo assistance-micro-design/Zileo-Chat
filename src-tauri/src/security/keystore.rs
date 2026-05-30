@@ -87,7 +87,8 @@ impl KeyStore {
 
     /// Creates a KeyStore that only uses keyring without additional encryption.
     ///
-    /// Useful for testing or when AES encryption is not needed.
+    /// Useful for tests that should not depend on AES master-key bootstrap.
+    #[cfg(test)]
     pub fn new_without_encryption() -> Self {
         Self { cipher: None }
     }
