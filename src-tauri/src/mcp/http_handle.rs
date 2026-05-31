@@ -14,23 +14,23 @@
 
 //! MCP HTTP Transport Handle
 //!
-//! Manages communication with remote MCP servers over HTTP/SSE transport.
-//! This is an alternative to the stdio-based `MCPServerHandle` for servers
-//! that expose HTTP endpoints (SaaS, remote servers).
+//! Manages communication with remote MCP servers over HTTP transport. This is
+//! an alternative to the stdio-based `MCPServerHandle` for servers that expose
+//! HTTP endpoints (SaaS, remote servers).
 //!
 //! ## Transport Protocol
 //!
-//! MCP over HTTP uses:
-//! - **POST** requests for JSON-RPC messages (requests and notifications)
-//! - **SSE** (Server-Sent Events) for server-initiated messages and streaming
+//! MCP over HTTP here is **unary POST JSON-RPC**: each request is a single POST
+//! to the base URL and the response is the JSON-RPC reply body. There is NO SSE
+//! / streamable-HTTP channel — no `/sse` endpoint, no server-initiated messages
+//! and no streaming (that part of the MCP HTTP spec is not implemented).
 //!
 //! ## URL Configuration
 //!
-//! For HTTP deployment method, the server `args[0]` should contain the base URL:
+//! For the HTTP deployment method, the server `args[0]` is the base URL:
 //! - `https://api.example.com/mcp` - Base endpoint for the MCP server
 //!
-//! The client will POST JSON-RPC messages to this URL and optionally
-//! connect to `{base_url}/sse` for server-sent events.
+//! The client POSTs JSON-RPC messages to this URL and reads the unary reply.
 
 use crate::mcp::http_auth::build_auth_headers;
 use crate::mcp::protocol::MCPServerCapabilities;

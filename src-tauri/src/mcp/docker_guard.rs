@@ -232,6 +232,16 @@ fn check_forbidden_flag(tok: &str, next: Option<&str>) -> Result<(), String> {
         "--env-file" => Err("docker: '--env-file' reads an arbitrary host file".into()),
         "--volumes-from" => Err("docker: '--volumes-from' is refused".into()),
         "--runtime" => Err("docker: '--runtime' is refused".into()),
+        // P3 (spec l.666): files written to / read from arbitrary host paths,
+        // and flags that tune host kernel / cgroup / group context.
+        "--cidfile" => Err("docker: '--cidfile' writes to an arbitrary host path".into()),
+        "--pidfile" => Err("docker: '--pidfile' writes to an arbitrary host path".into()),
+        "--label-file" => Err("docker: '--label-file' reads an arbitrary host file".into()),
+        "--sysctl" => Err("docker: '--sysctl' tunes host kernel parameters".into()),
+        "--cgroup-parent" => {
+            Err("docker: '--cgroup-parent' places the container in a host cgroup".into())
+        }
+        "--group-add" => Err("docker: '--group-add' adds host groups to the container".into()),
 
         // Global flags that must never appear before `run` (enforced by the
         // subcommand check); refused here too as defense in depth. `-l` is
@@ -514,6 +524,49 @@ mod tests {
     #[test]
     fn refuse_add_host() {
         assert!(docker(&["run", "--add-host", "host:1.2.3.4", "img"]).is_err());
+    }
+
+    // ---------- P3 (spec l.666): additional refused flags ----------
+
+    #[test]
+    fn refuse_cidfile() {
+        // Writes the container id to an arbitrary host path (clobber).
+        assert!(docker(&["run", "--cidfile", "/host/cid", "img"]).is_err());
+        assert!(docker(&["run", "--cidfile=/host/cid", "img"]).is_err());
+    }
+
+    #[test]
+    fn refuse_pidfile() {
+        assert!(docker(&["run", "--pidfile", "/host/pid", "img"]).is_err());
+    }
+
+    #[test]
+    fn refuse_label_file() {
+        // Reads an arbitrary host file.
+        assert!(docker(&["run", "--label-file", "/host/labels", "img"]).is_err());
+    }
+
+    #[test]
+    fn refuse_sysctl() {
+        assert!(docker(&["run", "--sysctl", "net.ipv4.ip_forward=1", "img"]).is_err());
+    }
+
+    #[test]
+    fn refuse_cgroup_parent() {
+        assert!(docker(&["run", "--cgroup-parent", "/host-cgroup", "img"]).is_err());
+    }
+
+    #[test]
+    fn refuse_group_add() {
+        assert!(docker(&["run", "--group-add", "docker", "img"]).is_err());
+    }
+
+    #[test]
+    fn allow_run_without_the_new_blocked_flags() {
+        // A nominal run using only benign flags (none of the new blocklist) still
+        // passes — the additions must not over-reject.
+        let r = docker(&["run", "-i", "--rm", "-e", "KEY=VAL", "img:tag"]);
+        assert!(r.is_ok(), "expected OK, got {r:?}");
     }
 
     // ---------- REGRESSION: `docker exec` is a legitimate subcommand ----------

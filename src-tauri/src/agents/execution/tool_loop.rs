@@ -559,6 +559,9 @@ pub(crate) async fn execute_with_tools(
     let start = std::time::Instant::now();
     let mut tools_used: Vec<String> = Vec::new();
     let mut mcp_calls_made: Vec<String> = Vec::new();
+    // R-SEC-10: cumulative serialized size of successful MCP results across the
+    // whole run, gating the per-run byte budget alongside `mcp_calls_made`.
+    let mut mcp_result_bytes: usize = 0;
     let mut tokens = TokenTracker::new();
     let mut iteration_metrics_data: Vec<IterationMetrics> = Vec::new();
     let mut tool_executions_data: Vec<ToolExecutionData> = Vec::new();
@@ -916,6 +919,7 @@ pub(crate) async fn execute_with_tools(
             tokens: &mut tokens,
             tools_used: &mut tools_used,
             mcp_calls_made: &mut mcp_calls_made,
+            mcp_result_bytes: &mut mcp_result_bytes,
             iteration_metrics_data: &mut iteration_metrics_data,
             tool_executions_data: &mut tool_executions_data,
             reasoning_steps_data: &mut reasoning_steps_data,

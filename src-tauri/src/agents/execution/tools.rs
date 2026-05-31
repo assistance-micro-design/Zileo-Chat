@@ -18,6 +18,7 @@
 //! for both local tools and MCP tools.
 
 use crate::agents::prompt::MCPServerSummary;
+use crate::constants::mcp::{MCP_MAX_CALLS_PER_RUN, MCP_MAX_RESULT_BYTES_PER_RUN};
 use crate::mcp::MCPManager;
 use crate::models::agent::AgentKind;
 use crate::models::function_calling::{FunctionCall, FunctionCallResult};
@@ -361,12 +362,48 @@ fn is_mcp_tool_armed(
     })
 }
 
+/// R-SEC-10 pure decision: may another MCP call proceed in this run?
+///
+/// `calls_so_far` is the number of MCP calls already attempted in the run
+/// (EXCLUDING the one about to be made), and `bytes_so_far` is the cumulative
+/// serialized size of all prior successful MCP results. Returns `Err` with a
+/// human-readable refusal once either the per-run call cap
+/// ([`MCP_MAX_CALLS_PER_RUN`]) or the cumulative byte budget
+/// ([`MCP_MAX_RESULT_BYTES_PER_RUN`]) is reached.
+///
+/// CHECK-BEFORE-REFUSE: consulted *before* a call is dispatched, so exactly
+/// `MCP_MAX_CALLS_PER_RUN` calls are allowed and an in-flight result is never
+/// truncated (truncating would corrupt the JSON and hide information).
+///
+/// # Errors
+/// Returns a refusal string when the per-run call cap or byte budget is reached.
+fn mcp_run_budget_check(calls_so_far: usize, bytes_so_far: usize) -> Result<(), String> {
+    if calls_so_far >= MCP_MAX_CALLS_PER_RUN {
+        return Err(format!(
+            "Per-run MCP call limit reached ({MCP_MAX_CALLS_PER_RUN} calls): this agent run has \
+             made too many MCP tool calls. No further MCP calls are permitted in this run."
+        ));
+    }
+    if bytes_so_far >= MCP_MAX_RESULT_BYTES_PER_RUN {
+        return Err(format!(
+            "Per-run MCP result budget reached ({MCP_MAX_RESULT_BYTES_PER_RUN} bytes): this agent \
+             run has accumulated too much MCP output. No further MCP calls are permitted in this run."
+        ));
+    }
+    Ok(())
+}
+
 /// Executes a single function call (local or MCP tool).
+///
+/// `mcp_result_bytes` is the cumulative serialized size of all prior successful
+/// MCP results in this run, consulted by the R-SEC-10 per-run budget gate
+/// (the caller accumulates it in `iteration.rs` after each successful MCP call).
 pub(crate) async fn execute_function_call(
     call: &FunctionCall,
     ctx: &FunctionCallContext<'_>,
     tools_used: &mut Vec<String>,
     mcp_calls_made: &mut Vec<String>,
+    mcp_result_bytes: usize,
 ) -> FunctionCallResult {
     let start = std::time::Instant::now();
 
@@ -374,6 +411,10 @@ pub(crate) async fn execute_function_call(
     if let Some((server, tool)) = call.parse_mcp_name() {
         // Execute via MCP
         if let Some(mcp) = ctx.mcp_manager {
+            // R-SEC-10: snapshot the pre-call count BEFORE recording this
+            // attempt, so the per-run cap (CHECK-BEFORE-REFUSE) counts only
+            // prior calls and allows EXACTLY MCP_MAX_CALLS_PER_RUN.
+            let calls_before = mcp_calls_made.len();
             mcp_calls_made.push(call.name.clone());
 
             // R-SEC-4: in a DETACHED run there is no human to answer the
@@ -382,6 +423,8 @@ pub(crate) async fn execute_function_call(
             // would otherwise let `Auto` short-circuit to fail-open). Keyed by
             // the immutable `server_id` (resolved from the tool's server name),
             // never the display name. Empty allowlist = nothing armed = refuse.
+            // Evaluated FIRST so an unarmed detached call is refused and audited
+            // as a security refusal even when the run is also over budget.
             if ctx.is_detached {
                 let server_id = mcp.get_server_id_by_name(server).await;
                 let armed = is_mcp_tool_armed(
@@ -432,14 +475,33 @@ pub(crate) async fn execute_function_call(
                     );
                 }
                 // Armed: proceed without the interactive modal (no human present).
-            } else if let Some(helper) = ctx.validation_helper {
-                // Attended run: existing interactive validation modal.
-                if let Err(e) = helper
-                    .request_mcp_validation(ctx.workflow_id, server, tool, call.arguments.clone())
-                    .await
-                {
-                    warn!(tool = %call.name, error = %e, "MCP validation rejected");
-                    return FunctionCallResult::failure(&call.id, &call.name, e.to_string());
+            }
+
+            // R-SEC-10: per-run cap + cumulative byte budget. Checked AFTER the
+            // detached gate (a budget refusal can never short-circuit / fail-open
+            // that gate) and BEFORE the attended modal (don't prompt the human for
+            // a call we will refuse anyway). Applies to BOTH run types. An
+            // in-flight result is never truncated — the NEXT call is refused.
+            if let Err(reason) = mcp_run_budget_check(calls_before, mcp_result_bytes) {
+                warn!(tool = %call.name, reason = %reason, "MCP call refused: per-run budget/cap reached");
+                return FunctionCallResult::failure(&call.id, &call.name, reason);
+            }
+
+            if !ctx.is_detached {
+                if let Some(helper) = ctx.validation_helper {
+                    // Attended run: existing interactive validation modal.
+                    if let Err(e) = helper
+                        .request_mcp_validation(
+                            ctx.workflow_id,
+                            server,
+                            tool,
+                            call.arguments.clone(),
+                        )
+                        .await
+                    {
+                        warn!(tool = %call.name, error = %e, "MCP validation rejected");
+                        return FunctionCallResult::failure(&call.id, &call.name, e.to_string());
+                    }
                 }
             }
 
@@ -983,6 +1045,53 @@ mod tests {
     }
 
     #[test]
+    fn budget_check_allows_under_both_limits() {
+        // R-SEC-10: a run well under both ceilings proceeds.
+        assert!(mcp_run_budget_check(0, 0).is_ok());
+        // One below each limit is still allowed (the cap allows EXACTLY
+        // MCP_MAX_CALLS_PER_RUN calls, so calls_so_far == cap-1 passes).
+        assert!(
+            mcp_run_budget_check(MCP_MAX_CALLS_PER_RUN - 1, MCP_MAX_RESULT_BYTES_PER_RUN - 1)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn budget_check_refuses_at_call_cap() {
+        // At the cap, the NEXT call is refused (check-before-refuse).
+        let err = mcp_run_budget_check(MCP_MAX_CALLS_PER_RUN, 0)
+            .expect_err("reaching the per-run call cap must refuse");
+        assert!(
+            err.contains("call limit reached") && err.contains(&MCP_MAX_CALLS_PER_RUN.to_string()),
+            "the refusal must name the per-run MCP call cap, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn budget_check_refuses_at_byte_budget() {
+        // At the byte budget (with calls under the cap), the next call is refused.
+        let err = mcp_run_budget_check(0, MCP_MAX_RESULT_BYTES_PER_RUN)
+            .expect_err("reaching the per-run byte budget must refuse");
+        assert!(
+            err.contains("result budget reached")
+                && err.contains(&MCP_MAX_RESULT_BYTES_PER_RUN.to_string()),
+            "the refusal must name the per-run MCP byte budget, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn budget_check_cap_takes_precedence_when_both_exceeded() {
+        // When both limits are blown, the message is deterministic (cap first)
+        // so the refusal is stable and testable.
+        let err = mcp_run_budget_check(MCP_MAX_CALLS_PER_RUN, MCP_MAX_RESULT_BYTES_PER_RUN)
+            .expect_err("both limits exceeded must refuse");
+        assert!(
+            err.contains("call limit reached"),
+            "the call cap must take precedence in the refusal message, got: {err:?}"
+        );
+    }
+
+    #[test]
     fn armed_decision_is_fail_closed_on_unresolved_server() {
         let allowlist = vec![allow("srv-id-1", &["read"])];
         // Server name could not be resolved to an id -> refused.
@@ -1035,7 +1144,7 @@ mod tests {
         };
         let ctx = call_ctx(&state.mcp_manager, true, false, &[]);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
         assert!(!res.success, "detached unarmed MCP call must fail");
         let err = res.error.as_deref().unwrap_or("");
         assert!(
@@ -1057,7 +1166,7 @@ mod tests {
         };
         let ctx = call_ctx(&state.mcp_manager, false, false, &[]);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
         assert!(
             !res.error
                 .as_deref()
@@ -1122,7 +1231,7 @@ mod tests {
         };
         let ctx = call_ctx(&state.mcp_manager, true, false, &allowlist);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
 
         assert!(
             !res.success,
@@ -1136,6 +1245,125 @@ mod tests {
         assert!(
             mc.contains(&call.name),
             "the refused MCP call must still be recorded in mcp_calls_made for the per-run audit/budget, got: {mc:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn mcp_call_refused_when_run_byte_budget_exhausted_even_attended() {
+        // R-SEC-10: the per-run byte budget is NOT coupled to detached mode — it
+        // gates ATTENDED runs too, and trips BEFORE the tool is dispatched. Here
+        // the run is attended (is_detached=false), no allowlist, no helper; the
+        // budget is already at the ceiling, so the call is refused for budget
+        // (not for the allowlist, which doesn't apply to attended runs).
+        let (state, _g) = setup_test_state().await;
+        let call = FunctionCall {
+            id: "b1".to_string(),
+            name: "mcp__some-server__read".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        let ctx = call_ctx(&state.mcp_manager, false, false, &[]);
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res =
+            execute_function_call(&call, &ctx, &mut tu, &mut mc, MCP_MAX_RESULT_BYTES_PER_RUN)
+                .await;
+        assert!(!res.success, "an over-budget MCP call must be refused");
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("result budget reached"),
+            "the refusal must come from the per-run byte budget, got: {err:?}"
+        );
+        assert!(
+            mc.contains(&call.name),
+            "the refused attempt must still be recorded in mcp_calls_made, got: {mc:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn mcp_call_refused_when_run_call_cap_reached() {
+        // R-SEC-10: once MCP_MAX_CALLS_PER_RUN calls have been made, the next is
+        // refused (CHECK-BEFORE-REFUSE on the pre-call count). Attended run, no
+        // helper, so the cap is the only thing that can refuse here.
+        let (state, _g) = setup_test_state().await;
+        let call = FunctionCall {
+            id: "b2".to_string(),
+            name: "mcp__some-server__read".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        let ctx = call_ctx(&state.mcp_manager, false, false, &[]);
+        let mut tu = Vec::new();
+        // Pre-fill the per-run counter to exactly the cap.
+        let mut mc: Vec<String> = (0..MCP_MAX_CALLS_PER_RUN)
+            .map(|i| format!("mcp__s__t{i}"))
+            .collect();
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
+        assert!(
+            !res.success,
+            "the call past the per-run cap must be refused"
+        );
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("call limit reached"),
+            "the refusal must come from the per-run call cap, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn mcp_budget_does_not_fail_open_detached_gate() {
+        // R-SEC-10 must NOT fail-open R-SEC-4: a detached UNARMED call that is
+        // also over budget stays refused, and the detached gate runs FIRST so the
+        // refusal is the audited allowlist refusal (not the budget one). The key
+        // invariant is that an over-budget state never lets an unarmed detached
+        // call through.
+        let (state, _g) = setup_test_state().await;
+        let call = FunctionCall {
+            id: "b3".to_string(),
+            name: "mcp__some-server__dangerous_tool".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        let ctx = call_ctx(&state.mcp_manager, true, false, &[]);
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res =
+            execute_function_call(&call, &ctx, &mut tu, &mut mc, MCP_MAX_RESULT_BYTES_PER_RUN)
+                .await;
+        assert!(
+            !res.success,
+            "an unarmed detached call must stay refused even when over budget"
+        );
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("not enabled for this agent"),
+            "the detached allowlist gate must run first (audited refusal), got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn mcp_budget_gates_armed_detached_call_after_the_gate_passes() {
+        // R-SEC-10 applies on the detached path too: an ARMED tool clears the
+        // R-SEC-4 gate but is still refused once the run is over budget (the
+        // budget check sits AFTER the gate, BEFORE execution).
+        let (state, _g) = setup_test_state().await;
+        state
+            .mcp_manager
+            .id_to_name
+            .write()
+            .await
+            .insert("srv-budget-id".to_string(), "srv-budget".to_string());
+        let call = FunctionCall {
+            id: "b4".to_string(),
+            name: "mcp__srv-budget__read".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        let allowlist = vec![allow("srv-budget-id", &["read"])];
+        let ctx = call_ctx(&state.mcp_manager, true, false, &allowlist);
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res =
+            execute_function_call(&call, &ctx, &mut tu, &mut mc, MCP_MAX_RESULT_BYTES_PER_RUN)
+                .await;
+        assert!(!res.success, "an over-budget armed call must be refused");
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("result budget reached"),
+            "an armed tool clears the gate but the budget still refuses it, got: {err:?}"
         );
     }
 
@@ -1184,7 +1412,7 @@ mod tests {
             arguments: serde_json::json!({}),
         };
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
 
         assert!(
             !res.success,
@@ -1227,7 +1455,7 @@ mod tests {
             arguments: serde_json::json!({}),
         };
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
         assert!(
             !res.error
                 .as_deref()
@@ -1269,7 +1497,7 @@ mod tests {
         // even though validation_helper is None (gate is unconditional → 3.2).
         let ctx = call_ctx(&state.mcp_manager, true, true, &strict);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
         assert!(!res.success, "delegated + strict entry must be refused");
         let err = res.error.as_deref().unwrap_or("");
         assert!(
@@ -1281,7 +1509,7 @@ mod tests {
         // → NOT refused by the allowlist (flag is irrelevant for direct runs).
         let ctx_direct = call_ctx(&state.mcp_manager, true, false, &strict);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx_direct, &mut tu, &mut mc).await;
+        let res = execute_function_call(&call, &ctx_direct, &mut tu, &mut mc, 0).await;
         assert!(
             !res.error
                 .as_deref()
@@ -1296,7 +1524,7 @@ mod tests {
         let delegable = vec![allow_delegated("srv-x-id", &["danger"])];
         let ctx_ok = call_ctx(&state.mcp_manager, true, true, &delegable);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx_ok, &mut tu, &mut mc).await;
+        let res = execute_function_call(&call, &ctx_ok, &mut tu, &mut mc, 0).await;
         assert!(
             !res.error
                 .as_deref()

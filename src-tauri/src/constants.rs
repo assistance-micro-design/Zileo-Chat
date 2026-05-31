@@ -82,6 +82,32 @@ pub mod query_limits {
     pub const DEFAULT_MODELS_LIMIT: usize = 100;
 }
 
+/// Per-run MCP resource budget (R-SEC-10).
+///
+/// A single agent run (one tool loop) is bounded independently of the
+/// per-iteration cap so a runaway model or a misbehaving / compromised MCP
+/// server cannot make unbounded calls or stream unbounded data into the
+/// prompt context. Both limits are sized well above any legitimate run and
+/// are enforced CHECK-BEFORE-REFUSE (an in-flight result is never truncated:
+/// the *next* call is refused once a limit is reached).
+pub mod mcp {
+    /// Maximum number of MCP tool calls a single agent run may make.
+    ///
+    /// Grounded well above a legitimate ceiling (the iteration cap clamped to a
+    /// few hundred, times a handful of calls each) so it only trips on a
+    /// runaway or adversarial loop, never on normal use.
+    pub const MCP_MAX_CALLS_PER_RUN: usize = 1000;
+
+    /// Maximum cumulative size, in bytes, of serialized MCP results a single
+    /// agent run may accumulate (50 MiB).
+    ///
+    /// Measured on the post-strip serialized tool result (the same string fed
+    /// to the LLM, persisted, and streamed); image sidecar bytes are accounted
+    /// for separately by the attachment path. Bounds prompt-context inflation
+    /// and memory growth from a server returning very large payloads.
+    pub const MCP_MAX_RESULT_BYTES_PER_RUN: usize = 50 * 1024 * 1024;
+}
+
 /// Centralized validation constants for Tauri commands.
 /// These constants define limits and valid values across the application.
 pub mod commands {

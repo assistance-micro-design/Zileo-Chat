@@ -50,6 +50,10 @@ pub(crate) struct IterationMutState<'a> {
     pub tokens: &'a mut TokenTracker,
     pub tools_used: &'a mut Vec<String>,
     pub mcp_calls_made: &'a mut Vec<String>,
+    /// R-SEC-10: cumulative serialized size of successful MCP results so far in
+    /// this run. Read before each call to gate the per-run byte budget, then
+    /// grown by the serialized result size after each successful MCP call.
+    pub mcp_result_bytes: &'a mut usize,
     pub iteration_metrics_data: &'a mut Vec<IterationMetrics>,
     pub tool_executions_data: &'a mut Vec<ToolExecutionData>,
     pub reasoning_steps_data: &'a mut Vec<ReasoningStepData>,
@@ -363,11 +367,16 @@ pub(crate) async fn run_single_iteration(
             ),
         );
 
+        // R-SEC-10: pass the cumulative MCP byte total so the per-run budget
+        // gate can refuse BEFORE this call is dispatched (read by value here;
+        // accumulated below after a successful MCP call).
+        let mcp_bytes_so_far = *mstate.mcp_result_bytes;
         let mut result = tools::execute_function_call(
             call,
             inputs.call_ctx,
             mstate.tools_used,
             mstate.mcp_calls_made,
+            mcp_bytes_so_far,
         )
         .await;
 
@@ -408,6 +417,15 @@ pub(crate) async fn run_single_iteration(
             serde_json::to_string(&call.arguments).unwrap_or_else(|_| "{}".to_string());
         let output_json =
             serde_json::to_string(&result.result).unwrap_or_else(|_| "{}".to_string());
+
+        // R-SEC-10: grow the per-run MCP byte budget by this result's serialized
+        // size (post image-strip — the same string fed to the LLM, persisted, and
+        // streamed). Only successful MCP calls count; the NEXT MCP call is gated
+        // against the new total (CHECK-BEFORE-REFUSE — never truncates this one).
+        if call.is_mcp_tool() && result.success {
+            *mstate.mcp_result_bytes = mstate.mcp_result_bytes.saturating_add(output_json.len());
+        }
+
         emit_progress(
             ctx.agent_context,
             StreamChunk::tool_call_complete(
