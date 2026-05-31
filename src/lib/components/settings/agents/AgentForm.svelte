@@ -87,7 +87,6 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let selectedMcpServers = $state<string[]>([]);
 	let selectedSkills = $state<string[]>([]);
 	let selectedFolders = $state<string[]>([]);
-	let requireFileConfirmation = $state(true);
 	let systemPrompt = $state('');
 	let kind = $state<AgentKind | undefined>(undefined);
 	let autoAnalyzeReports = $state(false);
@@ -104,7 +103,6 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		selectedMcpServers = agent?.mcp_servers ?? [];
 		selectedSkills = agent?.skills ?? [];
 		selectedFolders = agent?.folders ?? [];
-		requireFileConfirmation = agent?.require_file_confirmation ?? true;
 		systemPrompt = agent?.system_prompt ?? '';
 		kind = agent?.kind ?? undefined;
 		autoAnalyzeReports = agent?.auto_analyze_reports ?? false;
@@ -417,7 +415,6 @@ Be concise, factual, and conservative in your judgements.`;
 			mcpServers: selectedMcpServers,
 			skills: selectedSkills,
 			folders: selectedFolders,
-			requireFileConfirmation,
 			systemPrompt,
 			maxToolIterations,
 			reasoningEffort,
@@ -740,22 +737,6 @@ Be concise, factual, and conservative in your judgements.`;
 							selectedFolders = f;
 						}}
 					/>
-
-					<label class="checkbox-item">
-						<input
-							type="checkbox"
-							checked={requireFileConfirmation}
-							onchange={() => {
-								requireFileConfirmation = !requireFileConfirmation;
-							}}
-						/>
-						<div class="checkbox-content">
-							<span class="checkbox-label">{$i18n('agents_require_file_confirmation')}</span>
-							<span class="checkbox-description"
-								>{$i18n('agents_require_file_confirmation_desc')}</span
-							>
-						</div>
-					</label>
 				</div>
 
 				<!-- System Prompt -->

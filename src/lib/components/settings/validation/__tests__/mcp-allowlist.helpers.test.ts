@@ -1,0 +1,109 @@
+import { describe, expect, it } from 'vitest';
+import type { McpToolAllowlistEntry } from '$types/agent';
+import {
+	buildMcpToolAllowlist,
+	preservedMcpAllowlistEntries,
+	seedMcpArmingState,
+	type McpArmingState
+} from '../mcp-allowlist.helpers';
+
+function entry(
+	server_id: string,
+	tools: string[],
+	allow_in_delegated_runs = false
+): McpToolAllowlistEntry {
+	return { server_id, tools, allow_in_delegated_runs };
+}
+
+describe('buildMcpToolAllowlist (R1 payload from arming state)', () => {
+	it('builds entries with sorted tools and the per-server delegation flag', () => {
+		const armed: McpArmingState = {
+			'srv-1': { tools: ['read', 'list'], allowInDelegatedRuns: true }
+		};
+		const out = buildMcpToolAllowlist(armed, ['srv-1'], []);
+		expect(out).toEqual([entry('srv-1', ['list', 'read'], true)]);
+	});
+
+	it('returns [] when every tool is unchecked (explicit disarm, not undefined)', () => {
+		const armed: McpArmingState = {
+			'srv-1': { tools: [], allowInDelegatedRuns: false }
+		};
+		// Existing had an armed tool; clearing it must yield [] (running server,
+		// nothing checked → pruned, and no stopped entry to preserve).
+		const out = buildMcpToolAllowlist(armed, ['srv-1'], [entry('srv-1', ['read'])]);
+		expect(out).toEqual([]);
+	});
+
+	it('PRESERVES an entry whose server is not enumerable (stopped/absent)', () => {
+		// Piège 2 (the worst miss): a stopped server has no enumerable tools, so
+		// its existing entry must NOT be silently dropped.
+		const armed: McpArmingState = {
+			'srv-running': { tools: ['ok'], allowInDelegatedRuns: false }
+		};
+		const out = buildMcpToolAllowlist(
+			armed,
+			['srv-running'],
+			[entry('srv-stopped', ['exec'], true)]
+		);
+		expect(out).toContainEqual(entry('srv-stopped', ['exec'], true));
+		expect(out).toContainEqual(entry('srv-running', ['ok'], false));
+		expect(out).toHaveLength(2);
+	});
+
+	it('prunes an empty running-server entry but keeps a stopped-server entry', () => {
+		const armed: McpArmingState = {
+			'srv-a': { tools: [], allowInDelegatedRuns: false } // running, nothing checked
+		};
+		const out = buildMcpToolAllowlist(
+			armed,
+			['srv-a', 'srv-b'],
+			[entry('srv-stopped', ['z'], false)]
+		);
+		expect(out).toEqual([entry('srv-stopped', ['z'], false)]);
+	});
+
+	it('round-trips an existing allowlist unchanged when seeded then rebuilt (anti-disarm)', () => {
+		// Point 6: open + save WITHOUT touching the section must reproduce the
+		// existing allowlist identically. The component seeds the arming state
+		// from the existing entries of enumerable servers; rebuilding from that
+		// seed plus the preserved (stopped) entries must equal the input set.
+		const enumerable = ['srv-1', 'srv-2'];
+		const existing = [
+			entry('srv-1', ['read', 'list'], true),
+			entry('srv-2', ['exec'], false),
+			entry('srv-stopped', ['danger'], true) // not enumerable → preserved
+		];
+		const seeded = seedMcpArmingState(existing, enumerable);
+		const rebuilt = buildMcpToolAllowlist(seeded, enumerable, existing);
+
+		// Same set of servers, same tools (as a set) and flags — no disarm.
+		expect(new Set(rebuilt.map((e) => e.server_id))).toEqual(
+			new Set(['srv-1', 'srv-2', 'srv-stopped'])
+		);
+		for (const original of existing) {
+			const got = rebuilt.find((e) => e.server_id === original.server_id);
+			expect(got).toBeDefined();
+			expect([...(got?.tools ?? [])].sort()).toEqual([...original.tools].sort());
+			expect(got?.allow_in_delegated_runs).toBe(original.allow_in_delegated_runs);
+		}
+	});
+});
+
+describe('seedMcpArmingState / preservedMcpAllowlistEntries', () => {
+	it('seeds editable arming only for enumerable servers (pre-checked tools + flag)', () => {
+		const existing = [entry('srv-1', ['read'], true), entry('srv-stopped', ['x'], false)];
+		const seeded = seedMcpArmingState(existing, ['srv-1']);
+		expect(seeded).toEqual({ 'srv-1': { tools: ['read'], allowInDelegatedRuns: true } });
+		// The stopped server is NOT seeded into the editable state.
+		expect('srv-stopped' in seeded).toBe(false);
+	});
+
+	it('returns the non-enumerable (stopped/absent) entries to preserve read-only', () => {
+		const existing = [entry('srv-1', ['read'], true), entry('srv-stopped', ['x'], false)];
+		expect(preservedMcpAllowlistEntries(existing, ['srv-1'])).toEqual([
+			entry('srv-stopped', ['x'], false)
+		]);
+		// A legacy agent with no allowlist preserves nothing.
+		expect(preservedMcpAllowlistEntries([], ['srv-1'])).toEqual([]);
+	});
+});

@@ -181,8 +181,6 @@ export interface AgentSubmitInput {
 	skills: string[];
 	/** Authorized FileManagerTool folders. */
 	folders: string[];
-	/** Whether destructive file ops require confirmation. */
-	requireFileConfirmation: boolean;
 	/** System prompt (will be trimmed). */
 	systemPrompt: string;
 	/** Maximum tool execution iterations. */
@@ -217,7 +215,9 @@ export function buildAgentCreatePayload(input: AgentSubmitInput): AgentConfigCre
 		mcp_servers: input.mcpServers,
 		skills: input.skills,
 		folders: input.folders,
-		require_file_confirmation: input.requireFileConfirmation,
+		// require_file_confirmation is intentionally omitted: per-agent
+		// authorizations live on Settings > Validation, and a new agent takes the
+		// fail-safe backend default (true). See AgentAuthorizations.svelte.
 		system_prompt: input.systemPrompt.trim(),
 		max_tool_iterations: input.maxToolIterations,
 		reasoning_effort: input.reasoningEffort,
@@ -249,7 +249,9 @@ export function buildAgentUpdatePayload(input: AgentSubmitInput): AgentConfigUpd
 		mcp_servers: input.mcpServers,
 		skills: input.skills,
 		folders: input.folders,
-		require_file_confirmation: input.requireFileConfirmation,
+		// require_file_confirmation and mcp_tool_allowlist are intentionally
+		// omitted (tri-state "keep existing"): per-agent authorizations are edited
+		// on Settings > Validation, and AgentForm must never overwrite them.
 		system_prompt: input.systemPrompt.trim(),
 		max_tool_iterations: input.maxToolIterations,
 		reasoning_effort: input.reasoningEffort ?? null,

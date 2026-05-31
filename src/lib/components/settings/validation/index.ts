@@ -15,3 +15,4 @@
  */
 
 export { default as ValidationSettings } from './ValidationSettings.svelte';
+export { default as AgentAuthorizations } from './AgentAuthorizations.svelte';

@@ -130,8 +130,12 @@ export interface AgentConfigCreate {
 	skills: string[];
 	/** Authorized directory paths for FileManagerTool */
 	folders: string[];
-	/** Require user confirmation for destructive file operations (default: true) */
-	require_file_confirmation: boolean;
+	/**
+	 * Require user confirmation for destructive file operations.
+	 * Optional on create: omitted by AgentForm so a new agent takes the
+	 * fail-safe backend default (true). Edited on Settings > Validation.
+	 */
+	require_file_confirmation?: boolean;
 	/** System prompt (1-10000 chars) */
 	system_prompt: string;
 	/** Maximum number of tool execution iterations (1-200, default: 50) */

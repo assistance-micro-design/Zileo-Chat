@@ -186,7 +186,6 @@ function submitInput(overrides: Partial<AgentSubmitInput> = {}): AgentSubmitInpu
 		mcpServers: ['Serena'],
 		skills: ['skill-one'],
 		folders: ['/tmp/agent'],
-		requireFileConfirmation: true,
 		systemPrompt: '  You are helpful.  ',
 		maxToolIterations: 75,
 		reasoningEffort: 'high',
@@ -215,7 +214,9 @@ describe('buildAgentCreatePayload', () => {
 		expect(payload.mcp_servers).toEqual(['Serena']);
 		expect(payload.skills).toEqual(['skill-one']);
 		expect(payload.folders).toEqual(['/tmp/agent']);
-		expect(payload.require_file_confirmation).toBe(true);
+		// require_file_confirmation is no longer set by AgentForm (authorizations
+		// moved to Settings > Validation); a new agent takes the backend default.
+		expect('require_file_confirmation' in payload).toBe(false);
 		expect(payload.max_tool_iterations).toBe(75);
 		expect(payload.reasoning_effort).toBe('high');
 	});
@@ -254,5 +255,16 @@ describe('buildAgentUpdatePayload', () => {
 		const payload = buildAgentUpdatePayload(submitInput());
 
 		expect('lifecycle' in payload).toBe(false);
+	});
+
+	it('omits require_file_confirmation and mcp_tool_allowlist (authorizations live on the validation page)', () => {
+		const payload = buildAgentUpdatePayload(submitInput());
+
+		// AgentForm no longer edits these — they are managed on Settings >
+		// Validation (per-agent authorizations). Omitting them honors the
+		// tri-state "keep existing" contract: AgentForm must never overwrite an
+		// allowlist or confirmation flag set on the validation page.
+		expect('require_file_confirmation' in payload).toBe(false);
+		expect('mcp_tool_allowlist' in payload).toBe(false);
 	});
 });

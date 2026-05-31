@@ -20,7 +20,7 @@ Manages validation settings configuration.
 -->
 
 <script lang="ts">
-	import { ValidationSettings } from '$lib/components/settings/validation';
+	import { ValidationSettings, AgentAuthorizations } from '$lib/components/settings/validation';
 	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { validationSettingsStore } from '$lib/stores/validation-settings';
 	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
@@ -39,4 +39,15 @@ Manages validation settings configuration.
 		helpTutorialKey="help_validation_tutorial"
 	/>
 	<ValidationSettings />
+</section>
+
+<section class="settings-section">
+	<SettingsSectionHeader
+		titleKey="validation_authorizations_title"
+		descriptionKey="validation_authorizations_description"
+		helpTitleKey="help_validation_authorizations_title"
+		helpDescriptionKey="help_validation_authorizations_description"
+		helpTutorialKey="help_validation_authorizations_tutorial"
+	/>
+	<AgentAuthorizations />
 </section>
