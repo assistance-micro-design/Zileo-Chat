@@ -36,19 +36,35 @@
 	interface Props {
 		/** Validation request data */
 		request: ValidationRequest | null;
-		/** Open state */
+		/** Open state — driven ONE-WAY by the store; never mutated locally. */
 		open?: boolean;
+		/** True while a decision is in flight to the backend (disables buttons). */
+		processing?: boolean;
+		/** Last validation error to surface in the modal (null when none). */
+		error?: string | null;
 		/** Approve handler */
 		onapprove?: (request: ValidationRequest) => void;
 		/** Reject handler */
 		onreject?: (request: ValidationRequest, reason?: string) => void;
-		/** Close handler */
-		onclose?: () => void;
 	}
 
-	let { request, open = $bindable(false), onapprove, onreject, onclose }: Props = $props();
+	let {
+		request,
+		open = false,
+		processing = false,
+		error = null,
+		onapprove,
+		onreject
+	}: Props = $props();
 
 	let rejectReason = $state('');
+
+	// Reset the reject reason whenever a NEW request arrives, so a fresh
+	// validation starts with an empty field (mirrors UserQuestionModal). Never
+	// touches `open`: the modal's visibility is owned solely by the store.
+	$effect(() => {
+		if (request) rejectReason = '';
+	});
 
 	/**
 	 * Map risk level to badge variant
@@ -63,33 +79,24 @@
 		return variants[level];
 	}
 
-	/**
-	 * Handle approval
-	 */
+	// Emit the decision and let the STORE close the modal by clearing `pending`
+	// on success. On an IPC error the store keeps `pending` set (only lastError
+	// is posted), so the modal STAYS open and the user can retry — there is no
+	// local `open = false` that would hide a still-pending validation. This is
+	// what makes the error path fail-closed.
 	function handleApprove(): void {
-		if (request) {
-			onapprove?.(request);
-			handleClose();
-		}
+		if (request) onapprove?.(request);
 	}
 
-	/**
-	 * Handle rejection
-	 */
 	function handleReject(): void {
-		if (request) {
-			onreject?.(request, rejectReason || undefined);
-			handleClose();
-		}
+		if (request) onreject?.(request, rejectReason || undefined);
 	}
 
-	/**
-	 * Handle modal close
-	 */
-	function handleClose(): void {
-		open = false;
-		rejectReason = '';
-		onclose?.();
+	// Required by Modal but never fires: backdrop, Escape and the header close
+	// button are all disabled, so there is no dismiss path. Visibility is
+	// entirely store-driven.
+	function onCloseNoop(): void {
+		/* intentionally empty — the modal is non-dismissable */
 	}
 
 	/**
@@ -100,7 +107,24 @@
 	}
 </script>
 
-<Modal {open} title={$i18n('workflow_validation_title')} onclose={handleClose}>
+<!--
+	Fail-safe: this modal must NOT be dismissable without an explicit decision,
+	AND it must not close on a failed decision. Backdrop, Escape and the header
+	close button are all disabled, and the footer has no Cancel. The modal closes
+	ONLY when the STORE clears the pending entry — i.e. a decision that the
+	backend actually confirmed (success), or a backend resolution (timeout). An
+	IPC error keeps the pending entry set, so the modal stays open and the user
+	can retry. Reject is the explicit "no" (optional reason). Buttons are disabled
+	while a decision is in flight to prevent a double / approve-then-reject.
+-->
+<Modal
+	{open}
+	title={$i18n('workflow_validation_title')}
+	onclose={onCloseNoop}
+	closeOnBackdrop={false}
+	closeOnEscape={false}
+	showCloseButton={false}
+>
 	{#snippet body()}
 		{#if request}
 			<div class="validation-content">
@@ -156,14 +180,20 @@
 						rows="2"
 					></textarea>
 				</div>
+
+				{#if error}
+					<p class="validation-error" role="alert">{error}</p>
+				{/if}
 			</div>
 		{/if}
 	{/snippet}
 
 	{#snippet footer()}
-		<Button variant="ghost" onclick={handleClose}>{$i18n('common_cancel')}</Button>
-		<Button variant="danger" onclick={handleReject}>{$i18n('workflow_validation_reject')}</Button>
-		<Button variant="primary" onclick={handleApprove}>{$i18n('workflow_validation_approve')}</Button
+		<Button variant="danger" onclick={handleReject} disabled={processing}
+			>{$i18n('workflow_validation_reject')}</Button
+		>
+		<Button variant="primary" onclick={handleApprove} disabled={processing}
+			>{$i18n('workflow_validation_approve')}</Button
 		>
 	{/snippet}
 </Modal>
@@ -288,5 +318,15 @@
 		outline: none;
 		border-color: var(--color-accent);
 		box-shadow: 0 0 0 3px var(--color-accent-light);
+	}
+
+	.validation-error {
+		margin: 0;
+		padding: var(--spacing-sm);
+		background: var(--color-danger-light);
+		border-left: 3px solid var(--color-danger);
+		border-radius: var(--border-radius-sm);
+		font-size: var(--font-size-sm);
+		color: var(--color-danger);
 	}
 </style>

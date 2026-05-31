@@ -27,6 +27,7 @@ export { default as WorkflowItemCompact } from './WorkflowItemCompact.svelte';
 export { default as WorkflowList } from './WorkflowList.svelte';
 export { default as NewWorkflowModal } from './NewWorkflowModal.svelte';
 export { default as ValidationModal } from './ValidationModal.svelte';
+export { default as GlobalValidationModal } from './GlobalValidationModal.svelte';
 export { default as UserQuestionModal } from './UserQuestionModal.svelte';
 export { default as AgentSelector } from './AgentSelector.svelte';
 export { default as TokenDisplay } from './TokenDisplay.svelte';

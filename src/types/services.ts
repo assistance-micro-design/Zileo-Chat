@@ -20,13 +20,14 @@
  * @module types/services
  */
 
-import type { ValidationRequest } from './validation';
-
 /**
  * Modal state for agent page dialogs.
+ *
+ * Validation is NOT a variant here: the human-in-the-loop ValidationModal is
+ * mounted globally (GlobalValidationModal in the root layout) and driven by the
+ * validationStore, so it is not part of the agent page's local modal machine.
  */
 export type ModalState =
 	| { type: 'none' }
 	| { type: 'new-workflow' }
-	| { type: 'delete-workflow'; workflowId: string }
-	| { type: 'validation'; request: ValidationRequest };
+	| { type: 'delete-workflow'; workflowId: string };

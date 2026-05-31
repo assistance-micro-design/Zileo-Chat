@@ -26,7 +26,7 @@
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import LegalModal from '$lib/components/legal/LegalModal.svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
-	import { UserQuestionModal } from '$lib/components/workflow';
+	import { UserQuestionModal, GlobalValidationModal } from '$lib/components/workflow';
 	import { sttSettingsStore } from '$lib/stores/sttSettings';
 	import { backgroundWorkflowsStore } from '$lib/stores/background-workflows';
 	import { kanbanEventsStore } from '$lib/stores/kanban-events';
@@ -123,3 +123,12 @@
   by the workflow-aware userQuestionStore; no page context required.
 -->
 <UserQuestionModal />
+
+<!--
+  Human-in-the-loop validation modal (global): same rationale as above. An
+  ATTENDED workflow (e.g. a Kanban card supervisor chat) that requests a tool
+  validation must surface its prompt on every route, not only /agent — otherwise
+  the backend poll times out and applies the default (reject) silently. Owns the
+  validationStore lifecycle; /agent no longer hosts its own validation branch.
+-->
+<GlobalValidationModal />

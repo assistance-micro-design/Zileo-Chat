@@ -253,7 +253,7 @@ MCP servers are preserved verbatim by the allowlist helpers.
 	}
 
 	.subsection-title {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-semibold);
 		margin: 0;
 	}

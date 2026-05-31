@@ -93,6 +93,9 @@
   --color-primary-dark: #5ec7c6;
   --color-danger: var(--color-error);
   --color-danger-bg: rgba(239, 68, 68, 0.1);
+  /* Subtle danger surface for emphasis elements (badges, error banners) — a
+     touch stronger than --color-danger-bg so they read as accented, not flat. */
+  --color-danger-light: rgba(239, 68, 68, 0.12);
   --color-info: var(--color-status-running);
   --color-text-on-accent: var(--color-accent-text);
 
@@ -198,6 +201,9 @@
   --color-warning: #fbbf24;
   --color-warning-bg: rgba(234, 179, 8, 0.15);
   --color-danger-bg: rgba(239, 68, 68, 0.15);
+  /* Subtle danger surface for emphasis elements (badges, error banners) — a
+     touch stronger than --color-danger-bg so they read as accented, not flat. */
+  --color-danger-light: rgba(239, 68, 68, 0.18);
 }
 
 body {

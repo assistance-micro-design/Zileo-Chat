@@ -28,7 +28,6 @@ Uses extracted components, services, and stores for clean architecture.
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { Message, MessageAttachment } from '$types/message';
 	import type { ModalState } from '$types/services';
-	import type { ValidationRequest } from '$types/validation';
 
 	// Component imports
 	import { AgentHeader, WorkflowSidebar, ChatContainer } from '$lib/components/agent';
@@ -71,7 +70,6 @@ Uses extracted components, services, and stores for clean architecture.
 		executionTasks as executionTasks$,
 		executionWorkflowId as executionWorkflowId$
 	} from '$lib/stores/execution-blocks';
-	import { validationStore, pendingValidation } from '$lib/stores/validation';
 	import { validationSettingsStore } from '$lib/stores/validation-settings';
 	import { userQuestionStore } from '$lib/stores/user-question';
 	import {
@@ -592,25 +590,6 @@ Uses extracted components, services, and stores for clean architecture.
 	}
 
 	/**
-	 * Handle validation approval.
-	 */
-	async function handleApproveValidation(_request: ValidationRequest): Promise<void> {
-		await validationStore.approve();
-		modalState = { type: 'none' };
-	}
-
-	/**
-	 * Handle validation rejection.
-	 */
-	async function handleRejectValidation(
-		_request: ValidationRequest,
-		reason?: string
-	): Promise<void> {
-		await validationStore.reject(reason);
-		modalState = { type: 'none' };
-	}
-
-	/**
 	 * Initialize component on mount.
 	 */
 	onMount(async () => {
@@ -711,12 +690,11 @@ Uses extracted components, services, and stores for clean architecture.
 			await selectWorkflow(initialSelection.workflowIdToSelect);
 		}
 
-		// Initialize the validation store. The userQuestionStore is NOT reset
-		// here: it is now driven globally (the UserQuestionModal lives in the
-		// root layout, K3) so a question raised by a Kanban worker must survive
-		// navigation into/out of /agent — resetting it on mount/destroy would
-		// wipe a pending cross-page question.
-		await validationStore.init();
+		// Validation and user-question modals are BOTH driven globally now
+		// (GlobalValidationModal + UserQuestionModal in the root layout). This
+		// page no longer initializes nor resets their stores — doing so on
+		// mount/destroy would wipe a pending cross-page prompt raised by a
+		// Kanban worker while the user navigates into/out of /agent.
 
 		// Reload the agent list whenever a sibling Settings page broadcasts a
 		// CRUD event. Without this, the sidebar (and the New Workflow modal,
@@ -731,12 +709,11 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Cleanup on component destroy.
 	 */
 	onDestroy(() => {
-		// backgroundWorkflowsStore lifecycle owned by +layout.svelte so its
-		// listeners survive page navigation — don't destroy it here.
-		validationStore.cleanup();
-		// userQuestionStore is intentionally NOT cleaned up here — it is owned
-		// globally now (root-layout modal, K3). Resetting it on /agent destroy
-		// would wipe a pending question raised by a Kanban worker.
+		// backgroundWorkflowsStore, validationStore and userQuestionStore are all
+		// owned globally (+layout.svelte / root-layout modals) so their listeners
+		// survive page navigation — don't destroy them here. Cleaning them up on
+		// /agent destroy would drop a pending cross-page prompt raised by a
+		// Kanban worker.
 		unsubscribeSettingsRefresh?.();
 		unsubscribeSettingsRefresh = null;
 	});
@@ -754,21 +731,6 @@ Uses extracted components, services, and stores for clean architecture.
 	$effect(() => {
 		const filter = $statusFilter$;
 		LocalStorage.set(STORAGE_KEYS.STATUS_FILTER, filter);
-	});
-
-	/**
-	 * React to pending validation requests.
-	 * Opens the validation modal when a new request arrives, and closes it
-	 * when the backend resolves the request server-side (e.g. timeout) so the
-	 * pending entry transitions back to null.
-	 */
-	$effect(() => {
-		const request = $pendingValidation;
-		if (request) {
-			modalState = { type: 'validation', request };
-		} else if (modalState.type === 'validation') {
-			modalState = { type: 'none' };
-		}
 	});
 
 	/**
@@ -908,16 +870,6 @@ Uses extracted components, services, and stores for clean architecture.
 				deletingLabelKey="workflow_deleting"
 				onConfirm={() => handleDeleteWorkflow(workflowId)}
 				onCancel={() => (modalState = { type: 'none' })}
-			/>
-		{/await}
-	{:else if modalState.type === 'validation'}
-		{#await import('$lib/components/workflow/ValidationModal.svelte') then { default: ValidationModal }}
-			<ValidationModal
-				request={modalState.request}
-				open={true}
-				onapprove={handleApproveValidation}
-				onreject={handleRejectValidation}
-				onclose={() => (modalState = { type: 'none' })}
 			/>
 		{/await}
 	{/if}

@@ -56,15 +56,35 @@
 		 * the Kanban card review chat.
 		 */
 		fullscreen?: boolean;
+		/**
+		 * Whether clicking the backdrop closes the modal (default true). Set
+		 * false for fail-safe modals that must not be dismissed without an
+		 * explicit decision (e.g. the human-in-the-loop ValidationModal).
+		 */
+		closeOnBackdrop?: boolean;
+		/** Whether pressing Escape closes the modal (default true). */
+		closeOnEscape?: boolean;
+		/** Whether the header shows the close (X) button (default true). */
+		showCloseButton?: boolean;
 	}
 
-	let { open, title, onclose, body, footer, fullscreen = false }: Props = $props();
+	let {
+		open,
+		title,
+		onclose,
+		body,
+		footer,
+		fullscreen = false,
+		closeOnBackdrop = true,
+		closeOnEscape = true,
+		showCloseButton = true
+	}: Props = $props();
 
 	/**
 	 * Handle keyboard events for accessibility
 	 */
 	function handleKeydown(event: KeyboardEvent): void {
-		if (event.key === 'Escape') {
+		if (closeOnEscape && event.key === 'Escape') {
 			onclose();
 		}
 	}
@@ -73,7 +93,7 @@
 	 * Handle backdrop click to close modal
 	 */
 	function handleBackdropClick(event: MouseEvent): void {
-		if (event.target === event.currentTarget) {
+		if (closeOnBackdrop && event.target === event.currentTarget) {
 			onclose();
 		}
 	}
@@ -98,14 +118,16 @@
 		>
 			<div class="modal-header">
 				<h3 id="modal-title" class="modal-title">{title}</h3>
-				<button
-					type="button"
-					class="btn btn-ghost btn-icon"
-					onclick={onclose}
-					aria-label={$i18n('ui_modal_close')}
-				>
-					<X size={20} />
-				</button>
+				{#if showCloseButton}
+					<button
+						type="button"
+						class="btn btn-ghost btn-icon"
+						onclick={onclose}
+						aria-label={$i18n('ui_modal_close')}
+					>
+						<X size={20} />
+					</button>
+				{/if}
 			</div>
 
 			{#if body}
