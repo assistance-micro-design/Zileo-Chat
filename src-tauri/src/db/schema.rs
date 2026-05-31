@@ -577,6 +577,15 @@ DEFINE FIELD OVERWRITE mcp_tool_allowlist[*].server_id ON agent TYPE string;
 DEFINE FIELD OVERWRITE mcp_tool_allowlist[*].tools ON agent TYPE array<string> DEFAULT [];
 DEFINE FIELD OVERWRITE mcp_tool_allowlist[*].allow_in_delegated_runs ON agent TYPE bool DEFAULT false;
 
+-- Backfill mcp_tool_allowlist on existing agents (DEFAULT only applies to new
+-- records — ERR_SURREAL_011). Without this, agents created before this column
+-- existed keep it NONE: the SCHEMAFULL SELECT then returns `null` and the
+-- startup load (main.rs) fails to deserialize AgentConfig and DROPS the agent,
+-- so the whole agent list vanishes from the UI. Idempotent: re-running the DDL
+-- matches nothing once the column is set. (No backfill needed on the [*].*
+-- sub-fields — they live on array entries, materialised by the parent.)
+UPDATE agent SET mcp_tool_allowlist = [] WHERE mcp_tool_allowlist IS NONE;
+
 -- =============================================
 -- Table: kanban_card
 -- Cards representing a task to delegate to an agent workflow.

@@ -606,3 +606,33 @@ async fn legacy_allowlist_entry_without_delegation_flag_reloads_as_strict() {
         "a legacy entry missing the field must reload as strict (false), not arm delegation"
     );
 }
+
+/// REGRESSION (startup agent load): a legacy agent row written BEFORE the
+/// `mcp_tool_allowlist` column existed returns the field as explicit `null` on
+/// a SCHEMAFULL SELECT (the `DEFAULT []` does not backfill — ERR_SURREAL_011).
+/// `#[serde(default)]` alone does NOT intercept an explicit null
+/// (ERR_SERDE_005/006), so `serde_json::from_value::<AgentConfig>` (main.rs:637)
+/// fails and the agent is DROPPED on startup → the entire agent list vanishes
+/// from the UI. The null-tolerant deserializer must map null → empty Vec.
+#[test]
+fn legacy_agent_row_with_null_allowlist_still_loads() {
+    let mut row = serde_json::to_value(test_agent_config("a1", "Legacy")).unwrap();
+    row["mcp_tool_allowlist"] = serde_json::Value::Null;
+    let config: AgentConfig = serde_json::from_value(row)
+        .expect("a legacy row with null mcp_tool_allowlist must load with an empty allowlist");
+    assert!(config.mcp_tool_allowlist.is_empty());
+}
+
+/// Same regression, ABSENT form: an even older row may omit the key entirely.
+/// `#[serde(default)]` covers this, but lock it so a future attribute change
+/// cannot silently reintroduce the drop.
+#[test]
+fn legacy_agent_row_with_absent_allowlist_still_loads() {
+    let mut row = serde_json::to_value(test_agent_config("a2", "LegacyAbsent")).unwrap();
+    row.as_object_mut()
+        .expect("row is an object")
+        .remove("mcp_tool_allowlist");
+    let config: AgentConfig = serde_json::from_value(row)
+        .expect("a legacy row without mcp_tool_allowlist must load with an empty allowlist");
+    assert!(config.mcp_tool_allowlist.is_empty());
+}

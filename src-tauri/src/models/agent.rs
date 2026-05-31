@@ -55,6 +55,24 @@ where
     Ok(Option::<bool>::deserialize(d)?.unwrap_or(false))
 }
 
+/// Treats JSON `null` (and absent) as an empty `Vec` rather than rejecting it.
+///
+/// Legacy agent rows written before a `Vec` column existed return that column
+/// as explicit `null` on a SCHEMAFULL SELECT (the `DEFINE FIELD ... DEFAULT []`
+/// does NOT backfill existing rows — ERR_SURREAL_011). `#[serde(default)]`
+/// covers an ABSENT key but does NOT intercept an explicit `null`
+/// (ERR_SERDE_005/006): without this helper `serde_json::from_value` fails with
+/// "invalid type: null, expected a sequence" and `main.rs` drops the agent on
+/// startup → the whole agent list vanishes from the UI. Mirrors
+/// [`deserialize_bool_default_false`] for the `Vec` case.
+pub(crate) fn deserialize_vec_default<'de, T, D>(d: D) -> Result<Vec<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(d)?.unwrap_or_default())
+}
+
 /// Reasoning effort level for thinking models.
 ///
 /// Controls how much reasoning/thinking the model performs.
@@ -217,7 +235,14 @@ pub struct AgentConfig {
     pub auto_analyze_reports: bool,
     /// MCP tools this agent may call in an unattended (detached) run (R-SEC-4).
     /// Empty = nothing armed = every MCP tool refused in detached (fail-closed).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Tolerates `null` from legacy DB rows (column added after they were
+    /// written) by falling back to an empty Vec — otherwise the agent would be
+    /// dropped on startup load (ERR_SURREAL_011 / ERR_SERDE_005-006).
+    #[serde(
+        default,
+        deserialize_with = "deserialize_vec_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub mcp_tool_allowlist: Vec<McpToolAllowlistEntry>,
 }
 
