@@ -158,10 +158,10 @@ DEFINE FIELD OVERWRITE id ON validation_audit TYPE string;
 DEFINE FIELD OVERWRITE validation_id ON validation_audit TYPE string;
 DEFINE FIELD OVERWRITE tool_name ON validation_audit TYPE string;
 DEFINE FIELD OVERWRITE decision ON validation_audit TYPE string
-    ASSERT $value IN ['approved', 'rejected', 'skipped', 'timeout'];
+    ASSERT $value IN ['approved', 'rejected', 'skipped', 'timeout', 'blocked'];
 DEFINE FIELD OVERWRITE decided_at ON validation_audit TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE decided_by ON validation_audit TYPE string
-    ASSERT $value IN ['user', 'auto', 'timeout'];
+    ASSERT $value IN ['user', 'auto', 'timeout', 'policy'];
 DEFINE FIELD OVERWRITE risk_level ON validation_audit TYPE string
     ASSERT $value IN ['low', 'medium', 'high', 'critical'];
 DEFINE FIELD OVERWRITE workflow_id ON validation_audit TYPE option<string>;

@@ -41,13 +41,15 @@
 		approved: 'audit_decision_approved',
 		rejected: 'audit_decision_rejected',
 		skipped: 'audit_decision_skipped',
-		timeout: 'audit_decision_timeout'
+		timeout: 'audit_decision_timeout',
+		blocked: 'audit_decision_blocked'
 	} as const;
 
 	const decidedByKeys = {
 		user: 'audit_decided_by_user',
 		auto: 'audit_decided_by_auto',
-		timeout: 'audit_decided_by_timeout'
+		timeout: 'audit_decided_by_timeout',
+		policy: 'audit_decided_by_policy'
 	} as const;
 
 	const riskKeys = {
@@ -138,6 +140,12 @@
 	.badge-skipped {
 		background: var(--color-bg-secondary);
 		color: var(--color-text-secondary);
+	}
+
+	.badge-blocked {
+		background: var(--color-danger-light);
+		color: var(--color-danger);
+		font-weight: var(--font-weight-bold, 700);
 	}
 
 	.risk-pill {

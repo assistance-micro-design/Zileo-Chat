@@ -39,7 +39,8 @@ use crate::models::{
 use crate::tools::constants::sub_agent::{VALIDATION_POLL_MS, VALIDATION_TIMEOUT_SECS};
 use crate::tools::ToolError;
 use serde_json::Value;
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tracing::{debug, error, info, warn};
@@ -230,6 +231,12 @@ pub struct ValidationHelper {
     pub(crate) db: Arc<DBClient>,
     /// Tauri app handle for event emission
     pub(crate) app_handle: Option<AppHandle>,
+    /// Run-scoped dedup set of `(server_id, tool_name)` already audited by
+    /// [`Self::record_security_refusal`]. A ValidationHelper is built once per
+    /// run (never shared across runs nor cloned), so this caps detached MCP
+    /// refusal audit rows at one per distinct blocked tool per run (anti-flood)
+    /// while preserving the first signal for each distinct tool.
+    refused_audit_keys: Mutex<HashSet<(String, String)>>,
 }
 
 impl ValidationHelper {
@@ -239,7 +246,11 @@ impl ValidationHelper {
     /// * `db` - Database client for persistence
     /// * `app_handle` - Optional Tauri app handle for event emission
     pub fn new(db: Arc<DBClient>, app_handle: Option<AppHandle>) -> Self {
-        Self { db, app_handle }
+        Self {
+            db,
+            app_handle,
+            refused_audit_keys: Mutex::new(HashSet::new()),
+        }
     }
 
     /// Loads validation settings from database.
@@ -584,6 +595,74 @@ impl ValidationHelper {
             })),
         };
         write_audit_entry(&self.db, settings, draft).await;
+    }
+
+    /// Records a security-policy refusal of an MCP tool in a DETACHED run into
+    /// the audit log (R-SEC-11 / R2), so refusals surface in the
+    /// `Settings > Audit Log` page. Best-effort: never propagates errors.
+    ///
+    /// Written UNCONDITIONALLY (bypasses `audit.enable_logging`): a refusal with
+    /// no human in the loop must stay traceable even when audit logging is off,
+    /// otherwise an attacker-relevant refusal could be silently hidden. A FRESH
+    /// uuid is used as `validation_id` because the audit index is UNIQUE — a
+    /// constant would collide on the second refusal and the row would be lost.
+    ///
+    /// # Arguments
+    /// * `tool_name` - Full tool name (`mcp__server__tool` form), as indexed.
+    /// * `server_id` - Immutable MCP server id, or `None` if unresolved.
+    /// * `reason` - Short, secret-free explanation of the refusal.
+    /// * `is_delegated` - Whether the refused run was a delegated sub-agent;
+    ///   distinguishes the R1 confused-deputy refusal (armed for the agent but
+    ///   not flagged `allow_in_delegated_runs`) from a plain unarmed refusal.
+    /// * `workflow_id` - Workflow context; empty is recorded as no workflow.
+    pub(crate) async fn record_security_refusal(
+        &self,
+        tool_name: &str,
+        server_id: Option<&str>,
+        reason: &str,
+        is_delegated: bool,
+        workflow_id: &str,
+    ) {
+        use crate::commands::validation_audit::{write_audit_entry_unconditional, AuditEntryDraft};
+        use crate::models::{AuditDecision, DecidedBy};
+
+        let server_key = server_id.unwrap_or("<unknown>").to_string();
+
+        // Anti-flood (run-scoped dedup): record at most one row per
+        // (server_id, tool_name) per run. A detached run that hammers the same
+        // blocked tool across many iterations must not inflate the audit table;
+        // the first refusal of a distinct (server, tool) is kept, identical
+        // ones are skipped. The lock is released before the async write (never
+        // held across an `.await`); poison-tolerant to stay best-effort.
+        {
+            let mut seen = self
+                .refused_audit_keys
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if !seen.insert((server_key.clone(), tool_name.to_string())) {
+                return;
+            }
+        }
+
+        let draft = AuditEntryDraft {
+            validation_id: uuid::Uuid::new_v4().to_string(),
+            tool_name: tool_name.to_string(),
+            decision: AuditDecision::Blocked,
+            decided_by: DecidedBy::Policy,
+            risk_level: RiskLevel::High,
+            workflow_id: (!workflow_id.is_empty()).then(|| workflow_id.to_string()),
+            // FunctionCallContext carries no agent_id at the gate; workflow_id
+            // is enough for traceability (mirrors write_timeout_audit).
+            agent_id: None,
+            prompt_preview: None,
+            metadata: Some(serde_json::json!({
+                "source": "mcp_detached_gate",
+                "reason": reason,
+                "server_id": server_key,
+                "delegated": is_delegated,
+            })),
+        };
+        write_audit_entry_unconditional(&self.db, draft).await;
     }
 }
 

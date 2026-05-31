@@ -402,6 +402,21 @@ pub(crate) async fn execute_function_call(
                         delegated = ctx.is_delegated,
                         "MCP tool refused: not armed for this agent in a detached run"
                     );
+                    // R2: persist the refusal into the EXISTING audit log
+                    // (Settings > Audit Log) so a no-human-in-the-loop block is
+                    // visible, not only traced. Unconditional + best-effort
+                    // (never blocks or fails the refusal itself).
+                    if let Some(helper) = ctx.validation_helper {
+                        helper
+                            .record_security_refusal(
+                                &call.name,
+                                server_id.as_deref(),
+                                "not armed for this agent in a detached run",
+                                ctx.is_delegated,
+                                ctx.workflow_id,
+                            )
+                            .await;
+                    }
                     let scope = if ctx.is_delegated {
                         "unattended (detached) delegated runs"
                     } else {

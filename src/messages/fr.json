@@ -380,10 +380,12 @@
 	"audit_decision_rejected": "Rejetee",
 	"audit_decision_skipped": "Ignoree",
 	"audit_decision_timeout": "Timeout",
+	"audit_decision_blocked": "Bloquée",
 
 	"audit_decided_by_user": "Utilisateur",
 	"audit_decided_by_auto": "Auto",
 	"audit_decided_by_timeout": "Timeout",
+	"audit_decided_by_policy": "Politique",
 
 	"audit_risk_low": "faible",
 	"audit_risk_medium": "moyen",

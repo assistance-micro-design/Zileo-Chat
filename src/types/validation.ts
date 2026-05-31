@@ -267,10 +267,10 @@ export const DEFAULT_VALIDATION_SETTINGS: ValidationSettingsConfig = {
 // =====================================================
 
 /** Final decision recorded in the audit log. */
-export type AuditDecision = 'approved' | 'rejected' | 'skipped' | 'timeout';
+export type AuditDecision = 'approved' | 'rejected' | 'skipped' | 'timeout' | 'blocked';
 
 /** Source of the decision. */
-export type DecidedBy = 'user' | 'auto' | 'timeout';
+export type DecidedBy = 'user' | 'auto' | 'timeout' | 'policy';
 
 /**
  * One row of the audit log, returned by `list_validation_audit`.

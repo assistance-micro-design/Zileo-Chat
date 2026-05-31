@@ -64,7 +64,6 @@ pub struct AuditEntryDraft {
 /// Failure modes are logged and swallowed: validation flow continues even if
 /// the audit table write fails. This is intentional — auditing must not be
 /// load-bearing for user-facing operations.
-#[instrument(skip(db, settings, draft), fields(validation_id = %draft.validation_id))]
 pub async fn write_audit_entry(
     db: &DBClient,
     settings: &ValidationSettings,
@@ -74,7 +73,18 @@ pub async fn write_audit_entry(
         debug!("Audit logging disabled, skipping write");
         return;
     }
+    write_audit_entry_unconditional(db, draft).await;
+}
 
+/// Persists an audit entry UNCONDITIONALLY, bypassing `audit.enable_logging`.
+///
+/// Used for security-policy refusals (R-SEC-11 / R2): a refusal to run a tool
+/// with no human in the loop must stay traceable even when the user turned
+/// audit logging off — otherwise an attacker-relevant refusal could be silently
+/// hidden. Like [`write_audit_entry`], failures are logged and swallowed:
+/// auditing must never be load-bearing for the validation flow.
+#[instrument(skip(db, draft), fields(validation_id = %draft.validation_id))]
+pub async fn write_audit_entry_unconditional(db: &DBClient, draft: AuditEntryDraft) {
     let id = Uuid::new_v4().to_string();
     let metadata_json = match &draft.metadata {
         Some(v) => serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()),

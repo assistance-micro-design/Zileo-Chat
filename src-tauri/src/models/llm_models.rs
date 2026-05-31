@@ -60,14 +60,28 @@ pub struct LLMModel {
     /// Whether this model supports multimodal vision input (manual toggle).
     /// When true, the ChatInput UI exposes the attachment controls and the
     /// outbound request body is allowed to carry image content parts.
-    #[serde(default)]
+    ///
+    /// `deserialize_with` makes an explicit `null` (legacy SCHEMAFULL rows
+    /// written before this column existed) coalesce to the default instead of
+    /// failing the whole `LLMModel` (ERR_SERDE_005/006).
+    #[serde(
+        default,
+        deserialize_with = "crate::models::agent::deserialize_bool_default_false"
+    )]
     pub supports_vision: bool,
     /// Whether this model accepts a forced `tool_choice` (`required` / by-name).
     /// Defaults to true (most upstreams accept it). Set false for models whose
     /// upstream rejects a forced tool call (e.g. deepseek-v4 via RouterLab
     /// returns HTTP 400). When false, flows that force a tool on the opening
     /// turn (Kanban analyze / compose) fall back to Auto.
-    #[serde(default = "default_true")]
+    ///
+    /// `deserialize_with` makes an explicit `null` (legacy SCHEMAFULL rows
+    /// written before this column existed) coalesce to the default instead of
+    /// failing the whole `LLMModel` (ERR_SERDE_005/006).
+    #[serde(
+        default = "default_true",
+        deserialize_with = "crate::models::agent::deserialize_bool_default_true"
+    )]
     pub supports_forced_tool_choice: bool,
     /// Price per million input tokens (USD) - user configurable
     #[serde(default)]
@@ -656,6 +670,35 @@ mod tests {
         assert!(
             !model.supports_vision,
             "legacy rows should default supports_vision to false"
+        );
+    }
+
+    #[test]
+    fn test_llm_model_deserializes_explicit_null_bool_columns_to_defaults() {
+        // Defense in depth (sibling of the `mcp_tool_allowlist` migration): a
+        // legacy row written before these columns existed returns them as
+        // explicit `null` on a SCHEMAFULL SELECT. `#[serde(default)]` /
+        // `#[serde(default = "...")]` cover an ABSENT key but do NOT intercept
+        // an explicit `null` (ERR_SERDE_005/006); without a null-tolerant
+        // `deserialize_with` the WHOLE LLMModel fails to deserialize ("invalid
+        // type: null, expected a boolean"). The SELECTs coalesce today, so no
+        // model vanishes in practice, but the struct must be immune by itself.
+        let json = r#"{
+            "id":"m1","provider":"mistral","name":"X","api_name":"x",
+            "context_window":32000,"max_output_tokens":4096,
+            "temperature_default":0.7,"is_builtin":false,
+            "supports_vision":null,"supports_forced_tool_choice":null,
+            "created_at":"2026-05-01T00:00:00Z","updated_at":"2026-05-01T00:00:00Z"
+        }"#;
+        let model: LLMModel =
+            serde_json::from_str(json).expect("explicit null booleans parse to defaults");
+        assert!(
+            !model.supports_vision,
+            "null supports_vision must default to false"
+        );
+        assert!(
+            model.supports_forced_tool_choice,
+            "null supports_forced_tool_choice must default to true"
         );
     }
 

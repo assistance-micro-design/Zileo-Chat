@@ -36,7 +36,8 @@
 			approved: 'audit_decision_approved',
 			rejected: 'audit_decision_rejected',
 			skipped: 'audit_decision_skipped',
-			timeout: 'audit_decision_timeout'
+			timeout: 'audit_decision_timeout',
+			blocked: 'audit_decision_blocked'
 		};
 		const key = known[label as AuditDecision];
 		return key ? $i18n(key) : label;

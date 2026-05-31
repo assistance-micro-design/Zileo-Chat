@@ -334,7 +334,10 @@ pub struct PartialAuditConfig {
 /// Final decision recorded in `validation_audit`.
 ///
 /// `Skipped` is used when `TimeoutBehavior::Skip` is configured and the
-/// validation timed out without an explicit user decision.
+/// validation timed out without an explicit user decision. `Blocked` is a
+/// policy refusal with no human in the loop: the R-SEC-4 detached MCP gate
+/// refused a tool that was not armed in the agent's allowlist (paired with
+/// `DecidedBy::Policy`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuditDecision {
@@ -342,6 +345,7 @@ pub enum AuditDecision {
     Rejected,
     Skipped,
     Timeout,
+    Blocked,
 }
 
 impl std::fmt::Display for AuditDecision {
@@ -351,6 +355,7 @@ impl std::fmt::Display for AuditDecision {
             Self::Rejected => write!(f, "rejected"),
             Self::Skipped => write!(f, "skipped"),
             Self::Timeout => write!(f, "timeout"),
+            Self::Blocked => write!(f, "blocked"),
         }
     }
 }
@@ -365,6 +370,9 @@ pub enum DecidedBy {
     Auto,
     /// Decision came from a timeout (per timeout_behavior).
     Timeout,
+    /// Enforced by a security policy with no human in the loop (e.g. the
+    /// R-SEC-4 detached MCP allowlist gate refusing an unarmed tool).
+    Policy,
 }
 
 impl std::fmt::Display for DecidedBy {
@@ -373,6 +381,7 @@ impl std::fmt::Display for DecidedBy {
             Self::User => write!(f, "user"),
             Self::Auto => write!(f, "auto"),
             Self::Timeout => write!(f, "timeout"),
+            Self::Policy => write!(f, "policy"),
         }
     }
 }

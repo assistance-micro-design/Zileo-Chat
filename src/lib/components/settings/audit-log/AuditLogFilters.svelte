@@ -62,14 +62,16 @@
 		{ value: 'approved', label: $i18n('audit_decision_approved') },
 		{ value: 'rejected', label: $i18n('audit_decision_rejected') },
 		{ value: 'skipped', label: $i18n('audit_decision_skipped') },
-		{ value: 'timeout', label: $i18n('audit_decision_timeout') }
+		{ value: 'timeout', label: $i18n('audit_decision_timeout') },
+		{ value: 'blocked', label: $i18n('audit_decision_blocked') }
 	];
 
 	const decidedByOptions: SelectOption[] = [
 		{ value: '', label: $i18n('audit_filter_decided_by_any') },
 		{ value: 'user', label: $i18n('audit_decided_by_user') },
 		{ value: 'auto', label: $i18n('audit_decided_by_auto') },
-		{ value: 'timeout', label: $i18n('audit_decided_by_timeout') }
+		{ value: 'timeout', label: $i18n('audit_decided_by_timeout') },
+		{ value: 'policy', label: $i18n('audit_decided_by_policy') }
 	];
 
 	/** Parses a `datetime-local` value into an ISO string, or `undefined` if blank/invalid. */

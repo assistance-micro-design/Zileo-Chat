@@ -577,3 +577,171 @@ fn test_file_op_details() {
     assert_eq!(details["path"], "/home/user/file.txt");
     assert_eq!(details["details"]["destination"], "/tmp/backup");
 }
+
+// =====================================================
+// R2 / R-SEC-11: security-policy refusal audit
+// =====================================================
+
+/// Reads the raw audit rows (selected fields) for assertions.
+async fn read_audit_rows(db: &crate::db::DBClient) -> Vec<serde_json::Value> {
+    db.query_json(
+        "SELECT decision, decided_by, risk_level, tool_name, workflow_id, metadata \
+         FROM validation_audit",
+    )
+    .await
+    .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn record_security_refusal_persists_blocked_policy_entry() {
+    let (helper, _tmp) = make_test_helper().await;
+    helper
+        .record_security_refusal(
+            "mcp__files__delete",
+            Some("files-srv"),
+            "not armed for this agent in a detached run",
+            false,
+            "wf-detached-1",
+        )
+        .await;
+
+    let rows = read_audit_rows(&helper.db).await;
+    assert_eq!(rows.len(), 1, "one refusal must persist one audit row");
+    let r = &rows[0];
+    assert_eq!(r["decision"], "blocked");
+    assert_eq!(r["decided_by"], "policy");
+    assert_eq!(r["risk_level"], "high");
+    assert_eq!(r["tool_name"], "mcp__files__delete");
+    assert_eq!(r["workflow_id"], "wf-detached-1");
+}
+
+#[tokio::test]
+async fn record_security_refusal_writes_even_when_audit_logging_disabled() {
+    let (helper, _tmp) = make_test_helper().await;
+    // Seed validation settings with audit logging OFF. A security refusal must
+    // be traceable UNCONDITIONALLY: if record_security_refusal honored
+    // enable_logging, an attacker-relevant refusal would be silently dropped.
+    let disabled = crate::models::ValidationSettings {
+        audit: crate::models::AuditConfig {
+            enable_logging: false,
+            retention_days: 30,
+        },
+        ..Default::default()
+    };
+    let config = serde_json::to_string(&disabled).expect("serialize settings");
+    let seed = format!(
+        "UPSERT settings:`settings:validation` CONTENT {{ id: 'settings:validation', config: {} }}",
+        config
+    );
+    helper
+        .db
+        .execute(&seed)
+        .await
+        .expect("seed disabled settings");
+    // Sanity: the helper would indeed read logging as disabled.
+    assert!(!helper.load_validation_settings().await.audit.enable_logging);
+
+    helper
+        .record_security_refusal("mcp__x__y", Some("x"), "unarmed", true, "wf-2")
+        .await;
+
+    let rows = read_audit_rows(&helper.db).await;
+    assert_eq!(
+        rows.len(),
+        1,
+        "refusal must be logged even when audit logging is disabled (unconditional)"
+    );
+}
+
+#[tokio::test]
+async fn record_security_refusal_dedups_identical_refusals_within_a_run() {
+    let (helper, _tmp) = make_test_helper().await;
+    // Anti-flood (critique): at most ONE audit row per (server_id, tool_name)
+    // per run. A detached run that hammers the same blocked tool across many
+    // iterations must not inflate the audit table — the first refusal of a
+    // distinct (server, tool) is recorded, identical ones are skipped.
+    for _ in 0..5 {
+        helper
+            .record_security_refusal("mcp__a__b", Some("a"), "unarmed", false, "wf-3")
+            .await;
+    }
+
+    let rows = read_audit_rows(&helper.db).await;
+    assert_eq!(
+        rows.len(),
+        1,
+        "identical (server, tool) refusals in the same run collapse to one row"
+    );
+}
+
+#[tokio::test]
+async fn record_security_refusal_audits_distinct_tools_separately() {
+    let (helper, _tmp) = make_test_helper().await;
+    // Distinct (server, tool) pairs each keep their own security signal. Writing
+    // two rows also proves the fresh per-refusal uuid avoids the UNIQUE
+    // collision on validation_id (a constant id would fail the second CREATE).
+    helper
+        .record_security_refusal("mcp__a__b", Some("a"), "unarmed", false, "wf-3")
+        .await;
+    helper
+        .record_security_refusal("mcp__a__c", Some("a"), "unarmed", false, "wf-3")
+        .await;
+    helper
+        .record_security_refusal("mcp__z__b", Some("z"), "unarmed", false, "wf-3")
+        .await;
+
+    let rows = read_audit_rows(&helper.db).await;
+    assert_eq!(
+        rows.len(),
+        3,
+        "distinct (server, tool) pairs each produce one row"
+    );
+}
+
+#[tokio::test]
+async fn record_security_refusal_dedup_is_run_scoped_a_new_run_reaudits() {
+    // The dedup set lives on the per-run ValidationHelper. A SECOND run (new
+    // helper, same DB) re-records the same (server, tool): the signal is not
+    // suppressed across runs, only within one run.
+    let (helper1, _tmp) = make_test_helper().await;
+    let helper2 = ValidationHelper::new(helper1.db.clone(), None);
+
+    helper1
+        .record_security_refusal("mcp__a__b", Some("a"), "unarmed", false, "wf-3")
+        .await;
+    helper2
+        .record_security_refusal("mcp__a__b", Some("a"), "unarmed", false, "wf-3")
+        .await;
+
+    let rows = read_audit_rows(&helper1.db).await;
+    assert_eq!(
+        rows.len(),
+        2,
+        "each run re-audits the same blocked tool once"
+    );
+}
+
+#[tokio::test]
+async fn record_security_refusal_metadata_carries_reason_server_and_delegated() {
+    let (helper, _tmp) = make_test_helper().await;
+    helper
+        .record_security_refusal(
+            "mcp__srv__tool",
+            Some("srv-id"),
+            "not armed for this agent in a detached run",
+            true,
+            "wf-4",
+        )
+        .await;
+
+    let rows = read_audit_rows(&helper.db).await;
+    assert_eq!(rows.len(), 1);
+    // metadata is stored as a JSON string (ERR_SURREAL_001).
+    let meta_str = rows[0]["metadata"]
+        .as_str()
+        .expect("metadata is a JSON string");
+    let meta: serde_json::Value = serde_json::from_str(meta_str).expect("metadata parses");
+    assert_eq!(meta["reason"], "not armed for this agent in a detached run");
+    assert_eq!(meta["server_id"], "srv-id");
+    assert_eq!(meta["delegated"], true);
+}
