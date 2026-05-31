@@ -4,7 +4,9 @@ import type { MCPServerStatus } from '$types/mcp';
 import {
 	buildMcpToolAllowlist,
 	filterEditableMcpServers,
+	mergeServerTools,
 	preservedMcpAllowlistEntries,
+	removePreservedEntry,
 	seedMcpArmingState,
 	type McpArmingState
 } from '../mcp-allowlist.helpers';
@@ -135,5 +137,38 @@ describe('filterEditableMcpServers', () => {
 	it('returns [] when none of the assigned servers are running', () => {
 		const servers = [srv('alpha', 'stopped'), srv('beta', 'error')];
 		expect(filterEditableMcpServers(servers, ['alpha', 'beta'])).toEqual([]);
+	});
+});
+
+describe('removePreservedEntry (explicit revocation)', () => {
+	it('removes ONLY the entry for the given server_id, keeping all others intact', () => {
+		const value = [entry('a', ['x']), entry('b', ['y'], true), entry('c', ['z'])];
+		expect(removePreservedEntry(value, 'b')).toEqual([entry('a', ['x']), entry('c', ['z'])]);
+	});
+
+	it('returns an equivalent list when the server_id is absent (no silent change)', () => {
+		const value = [entry('a', ['x']), entry('c', ['z'])];
+		expect(removePreservedEntry(value, 'zzz')).toEqual(value);
+	});
+});
+
+describe('mergeServerTools (orphan transparency)', () => {
+	it('lists exposed tools first (orphan:false), then armed-but-not-exposed (orphan:true)', () => {
+		expect(mergeServerTools(['read', 'list'], ['read', 'gone'])).toEqual([
+			{ name: 'read', orphan: false },
+			{ name: 'list', orphan: false },
+			{ name: 'gone', orphan: true }
+		]);
+	});
+
+	it('marks no orphan when every armed tool is still exposed', () => {
+		expect(mergeServerTools(['a', 'b'], ['a'])).toEqual([
+			{ name: 'a', orphan: false },
+			{ name: 'b', orphan: false }
+		]);
+	});
+
+	it('returns only exposed tools when nothing is armed', () => {
+		expect(mergeServerTools(['a'], [])).toEqual([{ name: 'a', orphan: false }]);
 	});
 });

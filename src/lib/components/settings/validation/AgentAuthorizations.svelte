@@ -47,6 +47,8 @@ MCP servers are preserved verbatim by the allowlist helpers.
 	let selectedAgentId = $state('');
 	let loadedConfig = $state<AgentConfig | null>(null);
 	let runningServers = $state.raw<MCPServer[]>([]);
+	/** ALL known servers (running + stopped) — only to resolve preserved names. */
+	let allKnownServers = $state.raw<MCPServer[]>([]);
 	/** Buffered allowlist being edited (seeded from the loaded config). */
 	let allowlistDraft = $state.raw<McpToolAllowlistEntry[]>([]);
 	/** Buffered confirmation flag being edited. */
@@ -106,6 +108,7 @@ MCP servers are preserved verbatim by the allowlist helpers.
 			// latest selection may write the buffers (anti seed-race / cross-write).
 			if (reqId !== seq) return;
 			loadedConfig = config;
+			allKnownServers = servers;
 			// Editable servers = RUNNING and ASSIGNED to this agent (by name).
 			// De-selected or stopped servers are not editable here; their armed
 			// tools fall through to preserved read-only (never disarmed — Piège 2).
@@ -209,7 +212,12 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		<div class="allowlist-section">
 			<h4 class="subsection-title">{$i18n('validation_mcp_allowlist_section')}</h4>
 			<p class="subsection-help">{$i18n('validation_mcp_allowlist_help')}</p>
-			<AgentMcpAllowlist {runningServers} value={allowlistDraft} onchange={onAllowlistChange} />
+			<AgentMcpAllowlist
+				{runningServers}
+				knownServers={allKnownServers}
+				value={allowlistDraft}
+				onchange={onAllowlistChange}
+			/>
 		</div>
 
 		<div class="auth-actions">

@@ -120,3 +120,39 @@ export function filterEditableMcpServers<T extends { name: string; status: MCPSe
 	const assigned = new Set(assignedNames);
 	return servers.filter((s) => s.status === 'running' && assigned.has(s.name));
 }
+
+/**
+ * Explicitly REVOKES a preserved (non-editable) server's entry: returns the
+ * allowlist without the entry for `serverId`, leaving every OTHER entry intact.
+ * This is the deliberate, user-initiated counterpart to the anti-silent-disarm
+ * guarantee — only the explicitly removed server disappears.
+ */
+export function removePreservedEntry(
+	value: McpToolAllowlistEntry[],
+	serverId: string
+): McpToolAllowlistEntry[] {
+	return value.filter((e) => e.server_id !== serverId);
+}
+
+/** A tool row shown for an editable server: exposed, or an armed orphan. */
+export interface DisplayedTool {
+	name: string;
+	/** True when the tool is armed but the server NO LONGER exposes it. */
+	orphan: boolean;
+}
+
+/**
+ * Merges a running server's currently-exposed tools with any ARMED tools the
+ * server no longer exposes (orphans), so nothing armed stays hidden. Exposed
+ * tools come first (orphan = false), then armed orphans (orphan = true). Both
+ * remain toggleable in the UI, closing the "armed-but-invisible" transparency
+ * gap.
+ */
+export function mergeServerTools(exposedNames: string[], armedNames: string[]): DisplayedTool[] {
+	const exposedSet = new Set(exposedNames);
+	const exposed: DisplayedTool[] = exposedNames.map((name) => ({ name, orphan: false }));
+	const orphans: DisplayedTool[] = armedNames
+		.filter((n) => !exposedSet.has(n))
+		.map((name) => ({ name, orphan: true }));
+	return [...exposed, ...orphans];
+}

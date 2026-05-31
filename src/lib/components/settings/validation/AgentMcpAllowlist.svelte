@@ -38,25 +38,33 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
-	import { ChevronRight } from '@lucide/svelte';
+	import { ChevronRight, Trash2 } from '@lucide/svelte';
 	import type { MCPServer } from '$types/mcp';
 	import type { McpToolAllowlistEntry } from '$types/agent';
 	import {
 		buildMcpToolAllowlist,
+		mergeServerTools,
 		preservedMcpAllowlistEntries,
+		removePreservedEntry,
 		seedMcpArmingState
 	} from './mcp-allowlist.helpers';
 
 	interface Props {
-		/** All MCP servers currently running (their tools are listable/armable). */
+		/** Editable servers: RUNNING and assigned to the agent (tools armable). */
 		runningServers: MCPServer[];
+		/**
+		 * ALL known MCP servers (running + stopped), used ONLY to resolve a
+		 * preserved entry's display name and status (de-selected vs stopped vs
+		 * not-found). Never used to decide what is editable.
+		 */
+		knownServers: MCPServer[];
 		/** Current allowlist (complete array, incl. preserved stopped entries). */
 		value: McpToolAllowlistEntry[];
 		/** Emitted with the rebuilt complete allowlist on every user change. */
 		onchange: (allowlist: McpToolAllowlistEntry[]) => void;
 	}
 
-	let { runningServers, value, onchange }: Props = $props();
+	let { runningServers, knownServers, value, onchange }: Props = $props();
 
 	/**
 	 * EPHEMERAL UI-only expansion state, keyed by immutable server id (default
@@ -82,9 +90,26 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		expanded[serverId] = !isExpanded(serverId);
 	}
 
-	/** Number of this server's listed tools that are currently armed. */
-	function countArmed(server: MCPServer): number {
-		return server.tools.filter((t) => isToolArmed(server.id, t.name)).length;
+	/** Tool names currently armed for `serverId` (incl. tools no longer exposed). */
+	function armedToolsFor(serverId: string): string[] {
+		return value.find((e) => e.server_id === serverId)?.tools ?? [];
+	}
+
+	/** Total armed tools for a server (exposed + orphans) — the "N" in "N/M". */
+	function countArmed(serverId: string): number {
+		return armedToolsFor(serverId).length;
+	}
+
+	/**
+	 * Tool rows for an editable server: its currently-exposed tools, plus any
+	 * armed tools it no longer exposes (orphans, marked). Nothing armed stays
+	 * hidden — every armed tool is visible and toggleable.
+	 */
+	function displayedTools(server: MCPServer) {
+		return mergeServerTools(
+			server.tools.map((t) => t.name),
+			armedToolsFor(server.id)
+		);
 	}
 
 	/** Whether `tool` is armed for `serverId` in the current value. */
@@ -120,6 +145,34 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		armed[serverId] = { tools: cur.tools, allowInDelegatedRuns: !cur.allowInDelegatedRuns };
 		onchange(buildMcpToolAllowlist(armed, enumerableIds, value));
 	}
+
+	/**
+	 * EXPLICIT revocation of a preserved (read-only) server's entry — the only UI
+	 * path to disarm a de-selected / stopped / removed server. Emits the allowlist
+	 * with ONLY that entry removed; every other entry stays intact.
+	 */
+	function removeServer(serverId: string): void {
+		onchange(removePreservedEntry(value, serverId));
+	}
+
+	/** Display name for a (possibly stopped/removed) server id; falls back to id. */
+	function resolveServerName(serverId: string): string {
+		return knownServers.find((s) => s.id === serverId)?.name ?? serverId;
+	}
+
+	/** Whether the server id can be resolved to a known server (for the name). */
+	function isResolvable(serverId: string): boolean {
+		return knownServers.some((s) => s.id === serverId);
+	}
+
+	/** i18n key describing WHY a preserved entry is read-only here. */
+	function preservedKindLabel(serverId: string): string {
+		const known = knownServers.find((s) => s.id === serverId);
+		if (!known) return 'validation_mcp_allowlist_preserved_missing';
+		return known.status === 'running'
+			? 'validation_mcp_allowlist_preserved_deselected'
+			: 'validation_mcp_allowlist_preserved_stopped';
+	}
 </script>
 
 <div class="agent-mcp-allowlist">
@@ -129,6 +182,8 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		<p class="allowlist-empty">{$i18n('validation_mcp_allowlist_none')}</p>
 	{:else}
 		{#each runningServers as server (server.id)}
+			{@const displayed = displayedTools(server)}
+			{@const armed = countArmed(server.id)}
 			<div class="server-block">
 				<button
 					type="button"
@@ -142,14 +197,11 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 					</span>
 					<span class="server-name">{server.name}</span>
 					<span class="armed-count">
-						{$i18n('validation_mcp_allowlist_armed_count', {
-							armed: countArmed(server),
-							total: server.tools.length
-						})}
+						{$i18n('validation_mcp_allowlist_armed_count', { armed, total: displayed.length })}
 					</span>
 				</button>
 
-				{#if server.tools.length === 0}
+				{#if displayed.length === 0}
 					<p id="mcp-srv-body-{server.id}" class="server-no-tools" hidden={!isExpanded(server.id)}>
 						{$i18n('validation_mcp_allowlist_no_tools')}
 					</p>
@@ -161,7 +213,7 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 						<input
 							type="checkbox"
 							checked={isDelegatedAllowed(server.id)}
-							disabled={countArmed(server) === 0}
+							disabled={armed === 0}
 							onchange={() => toggleDelegated(server.id)}
 						/>
 						<div class="delegated-content">
@@ -175,14 +227,17 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 					</label>
 
 					<div id="mcp-srv-body-{server.id}" class="tool-group" hidden={!isExpanded(server.id)}>
-						{#each server.tools as tool (tool.name)}
-							<label class="tool-item">
+						{#each displayed as tool (tool.name)}
+							<label class={['tool-item', tool.orphan && 'tool-orphan']}>
 								<input
 									type="checkbox"
 									checked={isToolArmed(server.id, tool.name)}
 									onchange={() => toggleTool(server.id, tool.name)}
 								/>
 								<span class="tool-name">{tool.name}</span>
+								{#if tool.orphan}
+									<span class="orphan-badge">{$i18n('validation_mcp_allowlist_orphan_badge')}</span>
+								{/if}
 							</label>
 						{/each}
 					</div>
@@ -197,12 +252,28 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 			<ul class="preserved-list" role="list">
 				{#each preserved as entry (entry.server_id)}
 					<li class="preserved-item">
-						<span class="preserved-id" title={entry.server_id}>{entry.server_id}</span>
+						<div class="preserved-info">
+							<span class="preserved-name">{resolveServerName(entry.server_id)}</span>
+							<span class="preserved-kind">{$i18n(preservedKindLabel(entry.server_id))}</span>
+							{#if !isResolvable(entry.server_id)}
+								<span class="preserved-raw-id" title={entry.server_id}>({entry.server_id})</span>
+							{/if}
+						</div>
 						<span class="preserved-tools">{entry.tools.join(', ')}</span>
 						{#if entry.allow_in_delegated_runs}
 							<span class="preserved-flag">{$i18n('validation_mcp_allowlist_delegated_badge')}</span
 							>
 						{/if}
+						<button
+							type="button"
+							class="preserved-remove"
+							aria-label={$i18n('validation_mcp_allowlist_remove', {
+								name: resolveServerName(entry.server_id)
+							})}
+							onclick={() => removeServer(entry.server_id)}
+						>
+							<Trash2 size={14} aria-hidden="true" />
+						</button>
 					</li>
 				{/each}
 			</ul>
@@ -310,6 +381,16 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		color: var(--color-text-primary);
 	}
 
+	.tool-orphan .tool-name {
+		color: var(--color-text-secondary);
+	}
+
+	.orphan-badge {
+		font-size: var(--font-size-xs);
+		font-style: italic;
+		color: var(--color-warning, var(--color-text-secondary));
+	}
+
 	.delegated-item {
 		margin-top: var(--spacing-xs);
 		padding-top: var(--spacing-xs);
@@ -365,7 +446,28 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		opacity: 0.8;
 	}
 
-	.preserved-id {
+	.preserved-info {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.preserved-name {
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+		color: var(--color-text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.preserved-kind {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+	}
+
+	.preserved-raw-id {
 		font-size: var(--font-size-xs);
 		font-family: var(--font-mono);
 		color: var(--color-text-secondary);
@@ -385,5 +487,22 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 	.preserved-flag {
 		font-size: var(--font-size-xs);
 		color: var(--color-warning, var(--color-text-secondary));
+	}
+
+	.preserved-remove {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		padding: var(--spacing-xs);
+		background: none;
+		border: none;
+		border-radius: var(--border-radius-sm);
+		color: var(--color-danger);
+		cursor: pointer;
+	}
+
+	.preserved-remove:hover {
+		background: var(--color-danger-light);
 	}
 </style>
