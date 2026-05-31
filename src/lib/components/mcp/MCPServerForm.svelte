@@ -586,7 +586,7 @@
 
 			{#if formData.extraHeaders.length > 0}
 				<div class="env-list">
-					{#each formData.extraHeaders as header, index (`${index}-${header.key}`)}
+					{#each formData.extraHeaders as header, index (index)}
 						<div class="env-row">
 							<input
 								type="text"
@@ -654,7 +654,7 @@
 			<p class="env-empty">{$i18n('mcp_form_env_empty')}</p>
 		{:else}
 			<div class="env-list">
-				{#each formData.env as envVar, index (`${index}-${envVar.key}`)}
+				{#each formData.env as envVar, index (index)}
 					<div class="env-row">
 						<input
 							type="text"

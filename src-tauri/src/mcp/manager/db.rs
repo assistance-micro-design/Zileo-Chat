@@ -20,7 +20,6 @@ use super::MCPManager;
 use crate::db::sanitize_for_surrealdb;
 use crate::mcp::{MCPError, MCPResult};
 use crate::models::mcp::{MCPCallLogCreate, MCPServerConfig, MCPServerCreate};
-use crate::security::Validator;
 use tracing::{debug, info, warn};
 
 impl MCPManager {
@@ -54,13 +53,27 @@ impl MCPManager {
 
     /// Updates a server configuration in the database
     pub async fn update_server_config(&self, config: &MCPServerConfig) -> MCPResult<()> {
-        // Validate the server id before interpolating it into the UPDATE query.
-        // Strict UUID v4 rejects backticks, null bytes and crafted ids.
-        let server_id =
-            Validator::validate_uuid(&config.id).map_err(|e| MCPError::InvalidConfig {
+        // Defense in depth (R-QUA-1): the id is interpolated into the UPDATE
+        // query below, so it must be restricted to a safe charset. Every
+        // command-level caller already gates on `validate_mcp_server_id`, but
+        // this method is `pub`; the inline check keeps the backtick-quoted
+        // record id injection-safe without coupling `mcp` to `commands`.
+        // The charset matches `validate_mcp_server_id`: it accepts the
+        // UI-generated `mcp-<ts>-<rand>` ids and legacy UUID v4 alike, while
+        // rejecting backticks, ':' and null bytes.
+        let server_id = config.id.trim();
+        if server_id.is_empty()
+            || !server_id
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
+            return Err(MCPError::InvalidConfig {
                 field: "id".to_string(),
-                reason: e.to_string(),
-            })?;
+                reason:
+                    "Server id can only contain alphanumeric characters, underscore, and hyphen"
+                        .to_string(),
+            });
+        }
 
         // Serialize each field to JSON for the query
         let name_json = serde_json::to_string(&config.name)?;
@@ -200,12 +213,18 @@ impl MCPManager {
             parse_extra_headers_json,
         };
 
-        let query = "SELECT meta::id(id) AS id, name, enabled, command, args, env, description, \
-                     auth_type, auth_metadata, extra_headers FROM mcp_server";
+        // R-QUA-5: bound the result set to avoid loading an unbounded number
+        // of rows into memory (the table is small in practice, but the limit
+        // is a safety net consistent with the other list queries).
+        let query = format!(
+            "SELECT meta::id(id) AS id, name, enabled, command, args, env, description, \
+             auth_type, auth_metadata, extra_headers FROM mcp_server LIMIT {}",
+            crate::constants::query_limits::DEFAULT_LIST_LIMIT
+        );
 
         let result: Vec<serde_json::Value> =
             self.db
-                .query_json(query)
+                .query_json(&query)
                 .await
                 .map_err(|e| MCPError::DatabaseError {
                     context: "get saved configs".to_string(),

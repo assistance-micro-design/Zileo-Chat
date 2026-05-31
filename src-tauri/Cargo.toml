@@ -53,6 +53,10 @@ tokio-util = { version = "0.7", features = ["rt"] }
 # HTTP client for provider connectivity tests and MCP HTTP transport
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "multipart"] }
 
+# URL parsing for the MCP HTTP SSRF guard (typed host extraction: Host::Ipv4/Ipv6).
+# Already in the tree transitively via reqwest; declared direct for `url::Host`.
+url = "2.5"
+
 # Async stream utilities for SSE (OPT-WF-4: Lock version)
 futures-util = "0.3.31"
 

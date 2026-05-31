@@ -51,6 +51,7 @@
 
 pub mod circuit_breaker;
 pub mod client;
+pub mod docker_guard;
 pub mod error;
 pub mod helpers;
 pub mod http_auth;
@@ -60,6 +61,7 @@ pub mod protocol;
 pub mod redact;
 pub mod secrets;
 pub mod server_handle;
+pub mod ssrf;
 
 // Re-export commonly used types
 pub use error::{MCPError, MCPResult};

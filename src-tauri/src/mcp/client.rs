@@ -55,6 +55,7 @@
 //! ```
 
 use crate::mcp::http_handle::MCPHttpHandle;
+use crate::mcp::protocol::MCPContent;
 use crate::mcp::server_handle::MCPServerHandle;
 use crate::mcp::{MCPError, MCPResult};
 use crate::models::mcp::{
@@ -316,9 +317,10 @@ impl MCPClient {
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
-        // Convert to result type
+        // Convert to result type. On error, surface the server-provided detail
+        // carried in `content` instead of a fixed string (R-QUA-9).
         let (success, error) = if response.is_error == Some(true) {
-            (false, Some("Tool returned an error".to_string()))
+            (false, Some(error_message_from_content(&response.content)))
         } else {
             (true, None)
         };
@@ -339,6 +341,44 @@ impl MCPClient {
     }
 }
 
+/// Builds a human-readable error message from the content blocks of a failed
+/// MCP tool call (`isError: true`).
+///
+/// The MCP spec reports tool errors *inside* the result object: the `content`
+/// array carries the textual error detail. Collapsing that to a fixed string
+/// throws away the only actionable information, so we surface the actual text
+/// blocks here.
+///
+/// # Arguments
+/// * `content` - The content blocks returned by the server for the failed call.
+///
+/// # Returns
+/// The concatenated text of all `Text` blocks (trimmed). When no text is
+/// available (only image/resource blocks, or an empty array), a generic
+/// fallback message is returned so the caller always has a non-empty error.
+fn error_message_from_content(content: &[MCPContent]) -> String {
+    let detail = content
+        .iter()
+        .filter_map(|c| match c {
+            MCPContent::Text { text } => {
+                let t = text.trim();
+                (!t.is_empty()).then_some(t)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if detail.is_empty() {
+        "Tool returned an error".to_string()
+    } else {
+        // Bound the surfaced detail so a pathological server response cannot
+        // produce a multi-megabyte error string (char-boundary safe).
+        let detail = crate::tools::utils::safe_truncate(&detail, 2000, true);
+        format!("Tool returned an error: {detail}")
+    }
+}
+
 impl Drop for MCPClient {
     fn drop(&mut self) {
         // Handle cleanup is automatic via MCPServerHandle's Drop impl
@@ -348,6 +388,7 @@ impl Drop for MCPClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mcp::protocol::MCPToolCallResponse;
     use crate::models::mcp::MCPDeploymentMethod;
     use std::collections::HashMap;
 
@@ -414,5 +455,91 @@ mod tests {
         assert!(!result.success);
         assert!(result.message.contains("Connection refused"));
         assert!(result.tools.is_empty());
+    }
+
+    // ---- R-QUA-9: enrich call_tool error with the actual content ----
+
+    #[test]
+    fn test_error_message_from_content_extracts_text() {
+        // An MCP tool error response carries the error detail in `content`
+        // (deserialized from the wire as Text blocks).
+        let response: MCPToolCallResponse = serde_json::from_value(serde_json::json!({
+            "isError": true,
+            "content": [{ "type": "text", "text": "Schema validation failed: missing 'path'" }]
+        }))
+        .expect("should deserialize an error tool response");
+
+        let msg = error_message_from_content(&response.content);
+        assert!(
+            msg.contains("Schema validation failed: missing 'path'"),
+            "error message should surface the server-provided detail, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_error_message_from_content_joins_multiple_text_blocks() {
+        let content = vec![
+            MCPContent::Text {
+                text: "first line".to_string(),
+            },
+            MCPContent::Text {
+                text: "second line".to_string(),
+            },
+        ];
+        let msg = error_message_from_content(&content);
+        assert!(msg.contains("first line"));
+        assert!(msg.contains("second line"));
+    }
+
+    // ---- R-SEC-6 (LOT 1a): boot path refuses a malicious docker config ----
+
+    #[tokio::test]
+    async fn test_connect_rejects_malicious_docker_mount_at_spawn() {
+        // This is the exact path taken at boot by `load_from_db`
+        // (-> MCPClient::connect). A persisted docker config that mounts the
+        // host root must be refused at the spawn choke-point, BEFORE any docker
+        // process is started (so the test needs no real docker).
+        let config = MCPServerConfig {
+            id: "evil-mcp".to_string(),
+            name: "Evil".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Docker,
+            args: vec![
+                "run".to_string(),
+                "-i".to_string(),
+                "-v".to_string(),
+                "/:/host".to_string(),
+                "img:tag".to_string(),
+            ],
+            env: HashMap::new(),
+            description: None,
+            auth_type: None,
+            auth_metadata: None,
+            extra_headers: None,
+        };
+
+        let res = MCPClient::connect(config).await;
+        assert!(
+            res.is_err(),
+            "a malicious docker config must be refused at connect (boot path)"
+        );
+        let msg = format!("{:?}", res.err().unwrap());
+        assert!(
+            msg.contains("forbidden"),
+            "error should reflect the security refusal, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_error_message_from_content_falls_back_when_no_text() {
+        // Only non-text blocks (or empty) -> caller still gets a usable message.
+        let empty: Vec<MCPContent> = vec![];
+        assert!(!error_message_from_content(&empty).is_empty());
+
+        let image_only = vec![MCPContent::Image {
+            data: "AAAA".to_string(),
+            mime_type: "image/png".to_string(),
+        }];
+        assert!(!error_message_from_content(&image_only).is_empty());
     }
 }

@@ -44,7 +44,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Default timeout for MCP operations (30 seconds)
 const DEFAULT_TIMEOUT_MS: u64 = 30000;
@@ -233,6 +233,27 @@ impl MCPServerHandle {
 
         let (cmd, args) = match config.command {
             MCPDeploymentMethod::Docker => {
+                // R-SEC-6 (LOT 1a): the spawn choke-point — refuse a docker
+                // invocation that would break container isolation. Covers
+                // boot/create/update/import and any legacy persisted config by
+                // construction (a refused config never starts; never
+                // grandfathered). Failures are logged structurally (no secret;
+                // `args` carries no secret — env is passed separately).
+                if let Err(reason) = crate::mcp::docker_guard::validate_docker_spawn_args(
+                    &config.command,
+                    &config.args,
+                ) {
+                    error!(
+                        server_id = %config.id,
+                        server_name = %config.name,
+                        reason = %reason,
+                        "Refusing to spawn MCP docker server: unsafe invocation"
+                    );
+                    return Err(MCPError::InvalidConfig {
+                        field: "args".to_string(),
+                        reason,
+                    });
+                }
                 // Docker: args should be ["run", "-i", "image:tag", ...]
                 ("docker".to_string(), config.args.clone())
             }
@@ -767,6 +788,74 @@ mod tests {
             }
             _ => panic!("Expected InvalidConfig error"),
         }
+    }
+
+    #[test]
+    fn test_build_command_docker_rejects_unsafe_mount() {
+        // R-SEC-6: the docker guard runs at this choke-point. A host-root bind
+        // mount must make build_command fail (so the server never spawns).
+        let mut config = create_test_config();
+        config.args = vec![
+            "run".to_string(),
+            "-i".to_string(),
+            "-v".to_string(),
+            "/:/host".to_string(),
+            "img:tag".to_string(),
+        ];
+        let result = MCPServerHandle::build_command(&config);
+        assert!(result.is_err(), "unsafe docker mount must be rejected");
+        match result {
+            Err(MCPError::InvalidConfig { field, reason }) => {
+                assert_eq!(field, "args");
+                assert!(reason.contains("forbidden"), "got reason: {reason}");
+            }
+            other => panic!("Expected InvalidConfig, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_build_command_no_shell_interposition() {
+        // R-QUA-3 test-lock: the env relaxation is only safe because spawn is a
+        // DIRECT exec (`Command::new(bin).args(user_args)`), never wrapped in a
+        // shell. This asserts the deployment binary is never a shell and the
+        // user args are passed through verbatim with no injected `-c`.
+        const SHELLS: &[&str] = &["sh", "bash", "zsh", "cmd", "cmd.exe", "powershell", "pwsh"];
+        for (method, raw) in [
+            (MCPDeploymentMethod::Npx, vec!["-y", "@scope/pkg"]),
+            (MCPDeploymentMethod::Uvx, vec!["pkg-name", "--flag"]),
+            (MCPDeploymentMethod::Docker, vec!["run", "-i", "image:tag"]),
+        ] {
+            let mut config = create_test_config();
+            config.command = method;
+            config.args = raw.iter().map(|s| s.to_string()).collect();
+            let (cmd, args) = MCPServerHandle::build_command(&config).expect("build");
+            assert!(!SHELLS.contains(&cmd.as_str()), "spawn used a shell: {cmd}");
+            assert_ne!(
+                args.first().map(String::as_str),
+                Some("-c"),
+                "shell -c form"
+            );
+            assert_eq!(
+                args, config.args,
+                "user args must be passed through verbatim"
+            );
+        }
+    }
+
+    #[test]
+    fn test_build_command_docker_allows_safe_mount() {
+        // A data sub-directory bind must still build the command unchanged.
+        let mut config = create_test_config();
+        config.args = vec![
+            "run".to_string(),
+            "-i".to_string(),
+            "-v".to_string(),
+            "/srv/mcp/data:/data".to_string(),
+            "img:tag".to_string(),
+        ];
+        let (cmd, args) = MCPServerHandle::build_command(&config).expect("safe mount should build");
+        assert_eq!(cmd, "docker");
+        assert_eq!(args, config.args);
     }
 
     #[test]

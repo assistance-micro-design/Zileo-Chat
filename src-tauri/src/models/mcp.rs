@@ -316,35 +316,6 @@ pub struct MCPToolCallResult {
     pub duration_ms: u64,
 }
 
-/// MCP tool call log entry
-///
-/// Stored in the database for auditing and debugging purposes.
-#[cfg(test)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MCPCallLog {
-    /// Unique log entry ID
-    pub id: String,
-    /// Associated workflow ID (if called from a workflow)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub workflow_id: Option<String>,
-    /// MCP server name
-    pub server_name: String,
-    /// Tool name that was called
-    pub tool_name: String,
-    /// Parameters passed to the tool (stored as JSON string in DB)
-    #[serde(deserialize_with = "crate::models::serde_utils::deserialize_json_string")]
-    pub params: serde_json::Value,
-    /// Result returned by the tool (stored as JSON string in DB)
-    #[serde(deserialize_with = "crate::models::serde_utils::deserialize_json_string")]
-    pub result: serde_json::Value,
-    /// Whether the call succeeded
-    pub success: bool,
-    /// Execution duration in milliseconds
-    pub duration_ms: u64,
-    /// Timestamp of the call
-    pub timestamp: DateTime<Utc>,
-}
-
 /// MCP tool call log entry for database creation
 ///
 /// This struct omits the `timestamp` field to let SurrealDB's

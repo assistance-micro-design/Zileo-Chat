@@ -334,8 +334,16 @@ pub async fn update_mcp_server(
     // If the server is running, restart it with new config
     if let Some(current_server) = state.mcp_manager.get_server(&validated_id).await {
         if current_server.status == crate::models::mcp::MCPServerStatus::Running {
-            // Restart to apply new configuration
-            let _ = state.mcp_manager.restart_server(&validated_id).await;
+            // Restart to apply new configuration. A restart failure must not be
+            // swallowed silently (R-QUA-4): the DB already holds the new config,
+            // so surface the stale-running state via a log entry.
+            if let Err(e) = state.mcp_manager.restart_server(&validated_id).await {
+                warn!(
+                    id = %validated_id,
+                    error = %e,
+                    "Failed to restart MCP server after config update; it keeps running with the previous configuration"
+                );
+            }
         }
     }
 

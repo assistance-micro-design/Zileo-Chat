@@ -188,19 +188,14 @@ pub fn validate_mcp_env(
                     name, cmd_const::MAX_MCP_ENV_VALUE_LEN
                 ));
             }
-            if value.contains('\0') {
+            // R-QUA-3: spawn is a DIRECT exec (no shell, see
+            // `server_handle::build_command` + its no-shell test-lock), so shell
+            // metacharacters (`$ ( ) & ; | …`) are NOT a vector and must NOT be
+            // rejected — that would break export->import round-trips of legitimate
+            // env values. Only genuine control characters stay forbidden.
+            if value.contains(['\0', '\r', '\n']) {
                 return Err(format!(
-                    "Environment variable '{}' value contains null character",
-                    name
-                ));
-            }
-
-            // Shell injection prevention: reject shell metacharacters
-            const FORBIDDEN_SHELL_CHARS: &[char] =
-                &['|', ';', '`', '$', '(', ')', '<', '>', '&', '\\', '"', '\''];
-            if value.chars().any(|c| FORBIDDEN_SHELL_CHARS.contains(&c)) {
-                return Err(format!(
-                    "Environment variable '{}' value contains forbidden shell characters",
+                    "Environment variable '{}' value contains a control character (NUL/CR/LF)",
                     name
                 ));
             }
@@ -219,6 +214,12 @@ pub fn validate_mcp_server_config(config: &MCPServerConfig) -> Result<MCPServerC
     let validated_description = validate_mcp_description(config.description.as_deref())?;
     let validated_args = validate_mcp_args(&config.args)?;
     let validated_env = validate_mcp_env(&config.env)?;
+
+    // R-SEC-6 (LOT 1a): pre-validate the docker invocation at create/update so
+    // the user gets a form error *before* persistence. The same pure guard is
+    // the hard gate at the spawn choke-point (`server_handle::build_command`),
+    // which also covers boot/import and legacy configs. No-op for npx/uvx/http.
+    crate::mcp::docker_guard::validate_docker_spawn_args(&config.command, &validated_args)?;
 
     Ok(MCPServerConfig {
         id: validated_id,

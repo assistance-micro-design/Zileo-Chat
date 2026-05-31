@@ -122,37 +122,44 @@ fn test_validate_mcp_env_null_in_value() {
     env.insert("KEY".to_string(), "value\0with\0null".to_string());
     let result = validate_mcp_env(&env);
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("null character"));
+    assert!(result.unwrap_err().contains("control character"));
 }
 
 #[test]
-fn test_validate_mcp_env_shell_injection() {
-    // Shell injection prevention tests
-    let test_cases = vec![
-        ("PIPE", "value|cmd", "pipe"),
-        ("SEMI", "value;cmd", "semicolon"),
-        ("BACKTICK", "value`cmd`", "backtick"),
-        ("DOLLAR", "$HOME", "dollar sign"),
-        ("PAREN_OPEN", "$(cmd)", "parenthesis"),
-        ("PAREN_CLOSE", "$(cmd)", "parenthesis"),
-        ("LT", "<file", "less than"),
-        ("GT", ">file", "greater than"),
-        ("AMP", "cmd&", "ampersand"),
-        ("BACKSLASH", "path\\file", "backslash"),
-        ("DOUBLE_QUOTE", "\"value\"", "double quote"),
-        ("SINGLE_QUOTE", "'value'", "single quote"),
+fn test_validate_mcp_env_allows_shell_metachars() {
+    // R-QUA-3: exec is direct (no shell), so shell metacharacters in env values
+    // are NOT a vector. They must round-trip through export->import unchanged.
+    let cases = [
+        ("DOLLAR", "$HOME"),
+        ("SUBSHELL", "$(cmd)"),
+        ("AMP", "a&b"),
+        ("PAREN", "(x)"),
+        ("PIPE", "a|b"),
+        ("QUOTES", "\"v\" 'v'"),
+        ("BACKTICK", "`x`"),
+        ("REDIR", "<in >out"),
+        ("BACKSLASH", "path\\file"),
     ];
-
-    for (key, value, _desc) in test_cases {
+    for (key, value) in cases {
         let mut env = HashMap::new();
         env.insert(key.to_string(), value.to_string());
-        let result = validate_mcp_env(&env);
         assert!(
-            result.is_err(),
-            "Should reject shell metacharacter in value for key {}",
-            key
+            validate_mcp_env(&env).is_ok(),
+            "shell metachar value must be allowed for {key}: {value:?}"
         );
-        assert!(result.unwrap_err().contains("forbidden shell characters"));
+    }
+}
+
+#[test]
+fn test_validate_mcp_env_rejects_control_chars() {
+    // R-QUA-3: only the genuinely unsafe control chars stay rejected.
+    for bad in ["a\0b", "a\nb", "a\rb"] {
+        let mut env = HashMap::new();
+        env.insert("KEY".to_string(), bad.to_string());
+        assert!(
+            validate_mcp_env(&env).is_err(),
+            "control char must be rejected: {bad:?}"
+        );
     }
 }
 
@@ -284,47 +291,6 @@ async fn test_mcp_call_log_write_read_cycle() {
         serde_json::from_str(result_str.as_str().unwrap()).expect("result should be valid JSON");
     assert_eq!(result[0]["name"], "MyClass");
     assert_eq!(result[0]["line"], 42);
-}
-
-#[test]
-fn test_deserialize_mcp_call_log_from_string_params() {
-    // New format: params and result stored as JSON strings
-    let json = serde_json::json!({
-        "id": "test-id",
-        "workflow_id": "wf-1",
-        "server_name": "test-server",
-        "tool_name": "find_symbol",
-        "params": "{\"symbol\": \"MyClass\"}",
-        "result": "[{\"name\": \"MyClass\"}]",
-        "success": true,
-        "duration_ms": 100,
-        "timestamp": "2026-01-01T00:00:00Z"
-    });
-
-    let log: crate::models::mcp::MCPCallLog =
-        serde_json::from_value(json).expect("Should deserialize MCPCallLog with string params");
-    assert_eq!(log.params["symbol"], "MyClass");
-    assert_eq!(log.result[0]["name"], "MyClass");
-}
-
-#[test]
-fn test_deserialize_mcp_call_log_from_legacy_object_params() {
-    // Legacy format: params and result stored as objects (backward compat)
-    let json = serde_json::json!({
-        "id": "test-id",
-        "server_name": "test-server",
-        "tool_name": "find_symbol",
-        "params": {"symbol": "MyClass"},
-        "result": [{"name": "MyClass"}],
-        "success": true,
-        "duration_ms": 100,
-        "timestamp": "2026-01-01T00:00:00Z"
-    });
-
-    let log: crate::models::mcp::MCPCallLog = serde_json::from_value(json)
-        .expect("Should deserialize MCPCallLog with legacy object params");
-    assert_eq!(log.params["symbol"], "MyClass");
-    assert_eq!(log.result[0]["name"], "MyClass");
 }
 
 #[test]
@@ -674,4 +640,125 @@ fn test_validate_mcp_auth_basic_requires_username_and_password() {
         true
     )
     .is_ok());
+}
+
+// ---- R-QUA-1: ID contract (UI ids are not UUID v4) ----
+
+/// Builds a minimal docker MCP server config for the persistence tests.
+fn mk_server_config(id: &str, name: &str) -> MCPServerConfig {
+    MCPServerConfig {
+        id: id.to_string(),
+        name: name.to_string(),
+        enabled: false,
+        command: MCPDeploymentMethod::Docker,
+        args: vec!["run".to_string(), "-i".to_string(), "img:tag".to_string()],
+        env: HashMap::new(),
+        description: None,
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
+    }
+}
+
+#[test]
+fn test_validate_mcp_server_id_accepts_ui_generated_id() {
+    // The UI generates `mcp-${Date.now()}-${rand}` (non-UUID). Every read path
+    // (get/delete/toggle/create) gates on validate_mcp_server_id, so it must
+    // accept this charset.
+    assert!(validate_mcp_server_id("mcp-1748000000000-a1b2c3").is_ok());
+}
+
+#[test]
+fn test_validate_mcp_server_id_rejects_injection_chars() {
+    // (b) backtick / colon / null byte are rejected at the command gate.
+    assert!(validate_mcp_server_id("evil`id").is_err());
+    assert!(validate_mcp_server_id("ns:id").is_err());
+    assert!(validate_mcp_server_id("id\0null").is_err());
+}
+
+#[tokio::test]
+async fn test_update_server_config_accepts_ui_generated_id() {
+    // (a) create with a UI-generated (non-UUID) id, then update -> must succeed.
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
+    let mut config = mk_server_config("mcp-1748000000000-a1b2c3", "UI Server");
+
+    state
+        .mcp_manager
+        .save_server_config(&config)
+        .await
+        .expect("save with UI id should succeed");
+
+    config.name = "UI Server Renamed".to_string();
+    let res = state.mcp_manager.update_server_config(&config).await;
+    assert!(
+        res.is_ok(),
+        "update with a UI-generated id must succeed, got: {res:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_update_server_config_accepts_uuid_legacy() {
+    // (c) legacy UUID v4 ids keep working after the redundant validator is removed.
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
+    let uuid = uuid::Uuid::new_v4().to_string();
+    let mut config = mk_server_config(&uuid, "Legacy Server");
+
+    state
+        .mcp_manager
+        .save_server_config(&config)
+        .await
+        .expect("save with UUID id should succeed");
+
+    config.enabled = false;
+    assert!(state
+        .mcp_manager
+        .update_server_config(&config)
+        .await
+        .is_ok());
+}
+
+#[tokio::test]
+async fn test_update_server_config_rejects_injection_id() {
+    // Defense in depth: the inline charset guard rejects an id that could break
+    // the interpolated UPDATE query, before any DB access.
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
+    let config = mk_server_config("evil`id", "Evil");
+    assert!(
+        state
+            .mcp_manager
+            .update_server_config(&config)
+            .await
+            .is_err(),
+        "an id with a backtick must be rejected"
+    );
+}
+
+// ---- R-QUA-5: get_saved_configs LIMIT non-regression ----
+
+#[tokio::test]
+async fn test_get_saved_configs_returns_saved() {
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
+    state
+        .mcp_manager
+        .save_server_config(&mk_server_config("mcp-aaa-1", "Alpha"))
+        .await
+        .expect("save alpha");
+    state
+        .mcp_manager
+        .save_server_config(&mk_server_config("mcp-bbb-2", "Beta"))
+        .await
+        .expect("save beta");
+
+    let configs = state
+        .mcp_manager
+        .get_saved_configs()
+        .await
+        .expect("get_saved_configs should succeed with LIMIT");
+
+    let ids: Vec<&str> = configs.iter().map(|c| c.id.as_str()).collect();
+    assert!(
+        ids.contains(&"mcp-aaa-1"),
+        "alpha config should be returned"
+    );
+    assert!(ids.contains(&"mcp-bbb-2"), "beta config should be returned");
 }

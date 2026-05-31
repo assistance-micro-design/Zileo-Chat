@@ -15,9 +15,6 @@
 -->
 
 <!--
-Copyright 2025 Zileo-Chat-3 Contributors
-SPDX-License-Identifier: Apache-2.0
-
 MCPServerCard Component
 Displays an MCP server with status, command info, and action buttons.
 

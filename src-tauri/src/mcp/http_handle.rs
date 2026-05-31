@@ -36,11 +36,11 @@ use crate::mcp::http_auth::build_auth_headers;
 use crate::mcp::protocol::MCPServerCapabilities;
 use crate::mcp::redact::redact_headers;
 use crate::mcp::secrets::load_mcp_secret;
+use crate::mcp::ssrf::{mcp_redirect_policy, screen_http_auth, screen_request_url, SsrfResolver};
 use crate::mcp::{
     JsonRpcRequest, JsonRpcResponse, MCPError, MCPInitializeParams, MCPInitializeResult,
     MCPResourcesListResult, MCPResult, MCPToolCallParams, MCPToolCallResponse, MCPToolsListResult,
 };
-use crate::models::custom_provider::check_http_warning;
 use crate::models::mcp::{MCPAuthType, MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
 use crate::security::KeyStore;
 use reqwest::Client;
@@ -207,13 +207,23 @@ async fn get_host_throttle(host: &str) -> Option<Arc<Mutex<Instant>>> {
 /// - 90 second idle timeout
 /// - 30 second request timeout
 static SHARED_HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
+    // R-SEC-1/R-SEC-3: dedicated MCP client (LLM providers use their own in
+    // `llm/http.rs`). `.no_proxy()` guarantees the custom DNS resolver sees the
+    // real target IP (D1: proxy would hide it). `dns_resolver` classifies every
+    // resolved address; `redirect` caps hops at 3, blocks https->http downgrade,
+    // and re-resolves each hop through the same SSRF resolver.
     Client::builder()
         .pool_max_idle_per_host(5)
         .pool_idle_timeout(Duration::from_secs(90))
         .timeout(Duration::from_millis(DEFAULT_HTTP_TIMEOUT_MS))
+        .no_proxy()
+        .dns_resolver(Arc::new(SsrfResolver::new(true)))
+        .redirect(mcp_redirect_policy())
         .build()
         .unwrap_or_else(|e| {
-            warn!("Failed to create optimized HTTP client: {e}, falling back to default");
+            // Near-impossible (TLS backend init). The pre-connect literal check
+            // still guards literal-IP targets even on this fallback path.
+            warn!("Failed to create hardened MCP HTTP client: {e}, falling back to default");
             Client::new()
         })
 });
@@ -378,25 +388,35 @@ impl MCPHttpHandle {
                 reason: "HTTP deployment requires URL in args[0]".to_string(),
             })?;
 
-        // Validate URL format
-        if !base_url.starts_with("http://") && !base_url.starts_with("https://") {
-            return Err(MCPError::InvalidConfig {
-                field: "args[0]".to_string(),
-                reason: format!(
-                    "Invalid URL: must start with http:// or https://: {}",
-                    base_url
-                ),
-            });
-        }
+        // R-SEC-1/R-SEC-3: validate the scheme and screen a literal-IP host
+        // before connecting (hyper never invokes the DNS resolver for a literal
+        // IP). Runtime/manual policy allows loopback; imports block it upstream.
+        screen_request_url(&base_url, true).map_err(|reason| MCPError::InvalidConfig {
+            field: "args[0]".to_string(),
+            reason,
+        })?;
 
-        if let Some(warning_msg) = check_http_warning(&base_url) {
-            warn!(
+        // R-SEC-7: refuse to send credentials over plaintext HTTP to a
+        // non-loopback host; warn for the acceptable cases.
+        let has_auth = config
+            .auth_type
+            .map(|t| t != MCPAuthType::None)
+            .unwrap_or(false);
+        match screen_http_auth(&base_url, has_auth) {
+            Err(reason) => {
+                return Err(MCPError::InvalidConfig {
+                    field: "args[0]".to_string(),
+                    reason,
+                })
+            }
+            Ok(Some(warning_msg)) => warn!(
                 server_id = %config.id,
                 server_name = %config.name,
                 url = %base_url,
                 "{}",
                 warning_msg
-            );
+            ),
+            Ok(None) => {}
         }
 
         // Build the auth + extra headers from the v1.2 model. The legacy
@@ -872,6 +892,7 @@ impl Drop for MCPHttpHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::custom_provider::check_http_warning;
     use crate::models::mcp::MCPDeploymentMethod;
     use std::collections::HashMap;
 

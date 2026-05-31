@@ -82,6 +82,62 @@ pub async fn import_agents(
     }
 }
 
+/// Maps an exported MCP server to an [`MCPServerConfig`] and runs the full
+/// validation gate before persistence (R-SEC-2).
+///
+/// Covers: id/name/args/env validation + the Docker spawn guard (via
+/// `validate_mcp_server_config`), the SSRF screen in **import** mode
+/// (`allow_loopback = false`, so a loopback/private/metadata HTTP target is
+/// rejected up front), and the extra-headers invariants. Returns the validated
+/// config (merged env included) or a human-readable error.
+fn validate_imported_mcp_server(
+    server: &MCPServerExportData,
+    id: &str,
+    name: &str,
+    env: HashMap<String, String>,
+) -> Result<crate::models::mcp::MCPServerConfig, String> {
+    use crate::commands::mcp::validation::{validate_extra_headers, validate_mcp_server_config};
+    use crate::mcp::ssrf::screen_request_url;
+    use crate::models::mcp::{MCPAuthType, MCPDeploymentMethod, MCPServerConfig};
+
+    let command: MCPDeploymentMethod =
+        serde_json::from_value(serde_json::Value::String(server.command.clone()))
+            .map_err(|_| format!("unknown MCP deployment method '{}'", server.command))?;
+
+    let config = MCPServerConfig {
+        id: id.to_string(),
+        name: name.to_string(),
+        enabled: server.enabled,
+        command,
+        args: server.args.clone(),
+        env,
+        description: server.description.clone(),
+        auth_type: server.auth_type,
+        auth_metadata: server.auth_metadata.clone(),
+        extra_headers: server.extra_headers.clone(),
+    };
+
+    // id/name/args/env + Docker spawn guard.
+    let validated = validate_mcp_server_config(&config)?;
+
+    // SSRF screen for HTTP servers, IMPORT mode (loopback blocked).
+    if validated.command == MCPDeploymentMethod::Http {
+        let url = validated
+            .args
+            .first()
+            .ok_or_else(|| "HTTP MCP server requires a URL in args[0]".to_string())?;
+        screen_request_url(url, false)?;
+    }
+
+    // Extra-header invariants (charset + Authorization conflict).
+    let auth_active = validated.auth_type.unwrap_or(MCPAuthType::None) != MCPAuthType::None;
+    if let Some(headers) = validated.extra_headers.as_ref() {
+        validate_extra_headers(headers, auth_active)?;
+    }
+
+    Ok(validated)
+}
+
 /// Imports MCP server entities with conflict resolution and env additions.
 pub async fn import_mcp_servers(
     db: &DBClient,
@@ -111,34 +167,51 @@ pub async fn import_mcp_servers(
                         env.insert(key.clone(), value.clone());
                     }
                 }
-                let env_str = serde_json::to_string(&env).unwrap_or_else(|_| "{}".to_string());
+
+                // R-SEC-2: validate the (mapped) server before persisting; an
+                // invalid entry is reported and skipped, never persisted, and
+                // does not abort the rest of the batch.
+                let validated = match validate_imported_mcp_server(server, &id, &name, env) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        t.errors.push(ImportError {
+                            entity_type: "mcp".to_string(),
+                            entity_id: server.name.clone(),
+                            error: e,
+                        });
+                        continue;
+                    }
+                };
+
+                let env_str =
+                    serde_json::to_string(&validated.env).unwrap_or_else(|_| "{}".to_string());
 
                 // v1.2 — HTTP auth metadata (secrets are NOT in the export
                 // payload). `auth_type::None` is normalised to no row entry,
                 // matching `MCPServerCreate::from_config` semantics.
-                let auth_type = server.auth_type.and_then(|t| match t {
+                let auth_type = validated.auth_type.and_then(|t| match t {
                     crate::models::mcp::MCPAuthType::None => None,
                     other => serde_json::to_value(other)
                         .ok()
                         .and_then(|v| v.as_str().map(str::to_string)),
                 });
-                let auth_metadata = server
+                let auth_metadata = validated
                     .auth_metadata
                     .as_ref()
                     .and_then(|m| serde_json::to_string(m).ok());
-                let extra_headers = server
+                let extra_headers = validated
                     .extra_headers
                     .as_ref()
                     .filter(|h| !h.is_empty())
                     .and_then(|h| serde_json::to_string(h).ok());
 
                 let data = sanitize_for_surrealdb(serde_json::json!({
-                    "name": name,
-                    "enabled": server.enabled,
-                    "command": server.command,
-                    "args": server.args,
+                    "name": validated.name,
+                    "enabled": validated.enabled,
+                    "command": validated.command.to_string(),
+                    "args": validated.args,
                     "env": env_str,
-                    "description": server.description,
+                    "description": validated.description,
                     "auth_type": auth_type,
                     "auth_metadata": auth_metadata,
                     "extra_headers": extra_headers,
@@ -336,5 +409,111 @@ pub async fn import_custom_providers(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::mcp::MCPDeploymentMethod;
+
+    fn export(command: &str, args: &[&str]) -> MCPServerExportData {
+        MCPServerExportData {
+            name: "srv".to_string(),
+            enabled: true,
+            command: command.to_string(),
+            args: args.iter().map(|s| s.to_string()).collect(),
+            env: HashMap::new(),
+            description: None,
+            auth_type: None,
+            auth_metadata: None,
+            extra_headers: None,
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    fn validate(
+        server: &MCPServerExportData,
+    ) -> Result<crate::models::mcp::MCPServerConfig, String> {
+        validate_imported_mcp_server(server, "mcp-import-1", "Imported", server.env.clone())
+    }
+
+    // ---- R-SEC-2: SSRF screen in import mode (loopback blocked) ----
+
+    #[test]
+    fn import_http_localhost_rejected() {
+        assert!(validate(&export("http", &["http://localhost:8080/"])).is_err());
+    }
+
+    #[test]
+    fn import_http_private_rejected() {
+        assert!(validate(&export("http", &["http://10.0.0.1/"])).is_err());
+    }
+
+    #[test]
+    fn import_http_metadata_rejected() {
+        assert!(validate(&export("http", &["http://169.254.169.254/"])).is_err());
+    }
+
+    #[test]
+    fn import_http_public_ok() {
+        assert!(validate(&export("http", &["https://api.example.com/"])).is_ok());
+    }
+
+    // ---- R-SEC-2: Docker spawn guard applies early at import ----
+
+    #[test]
+    fn import_docker_malicious_mount_rejected() {
+        assert!(validate(&export("docker", &["run", "-i", "-v", "/:/host", "img"])).is_err());
+    }
+
+    #[test]
+    fn import_docker_safe_ok() {
+        assert!(validate(&export("docker", &["run", "-i", "image:tag"])).is_ok());
+    }
+
+    // ---- mapping + misc ----
+
+    #[test]
+    fn import_unknown_command_rejected() {
+        assert!(validate(&export("weird", &["x"])).is_err());
+    }
+
+    #[test]
+    fn import_mapping_uses_action_id_and_name() {
+        let cfg = validate(&export("docker", &["run", "-i", "image:tag"])).expect("ok");
+        assert_eq!(cfg.id, "mcp-import-1");
+        assert_eq!(cfg.name, "Imported");
+        assert_eq!(cfg.command, MCPDeploymentMethod::Docker);
+    }
+
+    #[test]
+    fn import_env_shell_chars_round_trip_ok() {
+        // R-QUA-3: shell metachars in env must survive import.
+        let mut server = export("docker", &["run", "-i", "image:tag"]);
+        server
+            .env
+            .insert("TOKEN".to_string(), "$(secret)&more".to_string());
+        let cfg =
+            validate_imported_mcp_server(&server, "mcp-import-2", "Imported", server.env.clone())
+                .expect("shell metachars in env must be accepted");
+        assert_eq!(
+            cfg.env.get("TOKEN").map(String::as_str),
+            Some("$(secret)&more")
+        );
+    }
+
+    #[test]
+    fn import_env_control_char_rejected() {
+        let mut server = export("docker", &["run", "-i", "image:tag"]);
+        server.env.insert("BAD".to_string(), "a\nb".to_string());
+        assert!(validate_imported_mcp_server(
+            &server,
+            "mcp-import-3",
+            "Imported",
+            server.env.clone()
+        )
+        .is_err());
     }
 }
