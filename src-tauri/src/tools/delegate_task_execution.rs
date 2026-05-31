@@ -256,6 +256,10 @@ impl DelegateTaskTool {
         if let Some(ref tasks) = assigned_tasks {
             context["assigned_tasks"] = serde_json::json!(tasks);
         }
+        // R-SEC-4: inherit the delegator's detached status so the delegated
+        // agent's MCP calls are gated by its own allowlist instead of an
+        // unanswerable validation modal when the parent runs unattended.
+        crate::agents::core::agent::stamp_detached(&mut context, self.is_detached);
 
         let task = Task {
             id: format!("delegate_{}", Uuid::new_v4()),

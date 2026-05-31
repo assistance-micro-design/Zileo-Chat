@@ -262,6 +262,15 @@ impl Tool for RerunWorkerTool {
                 provider_manager: &state.llm_manager,
                 tool_factory: Some(&state.tool_factory),
                 agent_context: Some(&agent_ctx),
+                // CRITICAL (R-SEC-4): the worker re-run is DETACHED even though
+                // it carries an agent_context — set the flag explicitly so the
+                // gate is not fooled into the attended (fail-open) path.
+                is_detached: true,
+                // The re-run IS the primary detached worker, not a delegate, so
+                // it uses the direct-run gate (R1 delegation flag N/A here). If
+                // this worker itself delegates, the delegate's own task carries
+                // is_delegated=true (set in LLMAgent::execute_with_mcp).
+                is_delegated: false,
             },
             task,
             Some(state.mcp_manager.clone()),

@@ -569,6 +569,14 @@ DEFINE FIELD OVERWRITE kind ON agent TYPE option<string>
     ASSERT $value IS NONE OR $value IN ['kanban'];
 DEFINE FIELD OVERWRITE auto_analyze_reports ON agent TYPE bool DEFAULT false;
 
+-- R-SEC-4: per-agent MCP tool allowlist for unattended (detached) runs.
+-- Nested object sub-keys are defined explicitly (ERR_SURREAL_001: SCHEMAFULL
+-- drops dynamic sub-keys otherwise), mirroring the multimodal attachments[*].* pattern.
+DEFINE FIELD OVERWRITE mcp_tool_allowlist ON agent TYPE array<object> DEFAULT [];
+DEFINE FIELD OVERWRITE mcp_tool_allowlist[*].server_id ON agent TYPE string;
+DEFINE FIELD OVERWRITE mcp_tool_allowlist[*].tools ON agent TYPE array<string> DEFAULT [];
+DEFINE FIELD OVERWRITE mcp_tool_allowlist[*].allow_in_delegated_runs ON agent TYPE bool DEFAULT false;
+
 -- =============================================
 -- Table: kanban_card
 -- Cards representing a task to delegate to an agent workflow.

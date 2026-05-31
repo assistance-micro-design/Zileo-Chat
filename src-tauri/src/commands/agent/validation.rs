@@ -197,6 +197,7 @@ pub fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCr
         reasoning_effort,
         kind: config.kind.clone(),
         auto_analyze_reports: config.auto_analyze_reports,
+        mcp_tool_allowlist: config.mcp_tool_allowlist.clone(),
     })
 }
 
@@ -260,6 +261,11 @@ pub fn merge_agent_config(
     let auto_analyze_reports = update
         .auto_analyze_reports
         .unwrap_or(existing.auto_analyze_reports);
+    // R-SEC-4: absent = keep existing allowlist, present = replace it.
+    let mcp_tool_allowlist = match &update.mcp_tool_allowlist {
+        Some(a) => a.clone(),
+        None => existing.mcp_tool_allowlist.clone(),
+    };
 
     Ok(AgentConfig {
         id: existing.id.clone(),
@@ -276,6 +282,7 @@ pub fn merge_agent_config(
         reasoning_effort,
         kind,
         auto_analyze_reports,
+        mcp_tool_allowlist,
     })
 }
 
@@ -319,6 +326,7 @@ mod tests {
             reasoning_effort: effort,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         }
     }
 
@@ -345,6 +353,7 @@ mod tests {
             reasoning_effort: effort,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         }
     }
 
@@ -394,6 +403,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: None,
+            mcp_tool_allowlist: None,
         };
         let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
         assert!(!merged.llm.is_reasoning);
@@ -426,6 +436,7 @@ mod tests {
             reasoning_effort: Some(Some(ReasoningEffort::Low)),
             kind: None,
             auto_analyze_reports: None,
+            mcp_tool_allowlist: None,
         };
         let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
         assert_eq!(merged.reasoning_effort, None);
@@ -451,6 +462,7 @@ mod tests {
             reasoning_effort: Some(None),
             kind: None,
             auto_analyze_reports: None,
+            mcp_tool_allowlist: None,
         };
         let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
         assert!(merged.llm.is_reasoning);
@@ -476,6 +488,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: None,
+            mcp_tool_allowlist: None,
         };
         let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
         assert_eq!(merged.reasoning_effort, Some(ReasoningEffort::Medium));
@@ -499,5 +512,105 @@ mod tests {
         let parsed: AgentConfigUpdate =
             serde_json::from_str(r#"{}"#).expect("serde should accept empty object");
         assert!(parsed.reasoning_effort.is_none());
+    }
+
+    #[test]
+    fn test_merge_keeps_existing_mcp_tool_allowlist_when_update_absent() {
+        // R-SEC-4 (test10 merge): an update that omits `mcp_tool_allowlist`
+        // (outer None) must PRESERVE the existing armed allowlist — otherwise a
+        // partial edit (e.g. renaming the agent) would silently disarm every
+        // detached MCP tool the user had approved.
+        use crate::models::agent::McpToolAllowlistEntry;
+        let mut existing = sample_existing(false, None);
+        existing.mcp_tool_allowlist = vec![McpToolAllowlistEntry {
+            server_id: "srv-keep".to_string(),
+            tools: vec!["read".to_string(), "list".to_string()],
+            allow_in_delegated_runs: false,
+        }];
+        let update = AgentConfigUpdate {
+            name: Some("Renamed".to_string()),
+            llm: None,
+            tools: None,
+            mcp_servers: None,
+            skills: None,
+            folders: None,
+            require_file_confirmation: None,
+            system_prompt: None,
+            max_tool_iterations: None,
+            reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: None,
+            mcp_tool_allowlist: None,
+        };
+        let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
+        assert_eq!(
+            merged.mcp_tool_allowlist.len(),
+            1,
+            "allowlist must survive a partial update"
+        );
+        assert_eq!(merged.mcp_tool_allowlist[0].server_id, "srv-keep");
+        assert_eq!(merged.mcp_tool_allowlist[0].tools, vec!["read", "list"]);
+    }
+
+    #[test]
+    fn test_merge_replaces_mcp_tool_allowlist_when_update_present() {
+        // R-SEC-4 (test10 merge): a present `mcp_tool_allowlist` REPLACES the
+        // existing one wholesale. `Some([])` is an explicit disarm (clear all),
+        // distinct from the absent case above.
+        use crate::models::agent::McpToolAllowlistEntry;
+        let mut existing = sample_existing(false, None);
+        existing.mcp_tool_allowlist = vec![McpToolAllowlistEntry {
+            server_id: "old".to_string(),
+            tools: vec!["read".to_string()],
+            allow_in_delegated_runs: false,
+        }];
+
+        let update_replace = AgentConfigUpdate {
+            name: None,
+            llm: None,
+            tools: None,
+            mcp_servers: None,
+            skills: None,
+            folders: None,
+            require_file_confirmation: None,
+            system_prompt: None,
+            max_tool_iterations: None,
+            reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: None,
+            mcp_tool_allowlist: Some(vec![McpToolAllowlistEntry {
+                server_id: "new".to_string(),
+                tools: vec!["exec".to_string(), "write".to_string()],
+                allow_in_delegated_runs: false,
+            }]),
+        };
+        let merged = merge_agent_config(&update_replace, &existing).expect("merge should succeed");
+        assert_eq!(merged.mcp_tool_allowlist.len(), 1);
+        assert_eq!(
+            merged.mcp_tool_allowlist[0].server_id, "new",
+            "present value replaces existing"
+        );
+        assert_eq!(merged.mcp_tool_allowlist[0].tools, vec!["exec", "write"]);
+
+        let update_disarm = AgentConfigUpdate {
+            name: None,
+            llm: None,
+            tools: None,
+            mcp_servers: None,
+            skills: None,
+            folders: None,
+            require_file_confirmation: None,
+            system_prompt: None,
+            max_tool_iterations: None,
+            reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: None,
+            mcp_tool_allowlist: Some(Vec::new()),
+        };
+        let disarmed = merge_agent_config(&update_disarm, &existing).expect("merge should succeed");
+        assert!(
+            disarmed.mcp_tool_allowlist.is_empty(),
+            "Some([]) must explicitly disarm the whole allowlist"
+        );
     }
 }

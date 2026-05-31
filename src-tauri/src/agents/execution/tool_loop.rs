@@ -213,6 +213,18 @@ pub(crate) struct ToolLoopContext<'a> {
     pub provider_manager: &'a ProviderManager,
     pub tool_factory: Option<&'a Arc<ToolFactory>>,
     pub agent_context: Option<&'a AgentToolContext>,
+    /// True for an UNATTENDED (detached) run with no human at the keyboard:
+    /// auto-analyze, compose-card, worker re-run (R-SEC-4). Carried explicitly
+    /// — NOT derived from `agent_context.is_none()`, which would misclassify
+    /// `rerun_worker` (it passes `Some(agent_context)`) as attended = fail-open.
+    pub is_detached: bool,
+    /// True when this detached run is a DELEGATED sub-agent (DelegateTask /
+    /// ParallelTasks). Set by `LLMAgent::execute_with_mcp` from
+    /// `task.is_delegated()`; the direct detached callers (rerun_worker,
+    /// analyze, compose) leave it `false`. Threaded into the MCP gate so a
+    /// delegated run additionally requires the entry's `allow_in_delegated_runs`
+    /// flag (R1). Spawned sub-agents leave it `false` (clone = same privilege).
+    pub is_delegated: bool,
 }
 
 /// Builds the initial message vector sent to the LLM at the start of a tool loop.
@@ -664,21 +676,30 @@ pub(crate) async fn execute_with_tools(
         .and_then(|v| v.as_str())
         .map(String::from);
 
+    // Stamp the tool loop's detached status onto the context handed to the
+    // sub-agent tools (Spawn / Delegate / Parallel). This is the single source
+    // of truth: every detached caller (rerun_worker, analyze, compose) already
+    // sets `ToolLoopContext::is_detached`, so the sub-agent tasks those tools
+    // build inherit it (R-SEC-4 transitive gate) without each caller having to
+    // remember a second flag on the AgentToolContext.
+    let loop_is_detached = ctx.is_detached;
     let effective_context = match (ctx.agent_context, &cancellation_token) {
         (Some(agent_ctx), Some(token)) => {
-            let mut ctx = agent_ctx.clone().with_cancellation_token(token.clone());
+            let mut ec = agent_ctx
+                .clone()
+                .with_cancellation_token(token.clone())
+                .with_detached(loop_is_detached);
             if let Some(ref msg_id) = current_message_id {
-                ctx = ctx.with_current_message_id(msg_id.clone());
+                ec = ec.with_current_message_id(msg_id.clone());
             }
-            Some(ctx)
+            Some(ec)
         }
         (Some(agent_ctx), None) => {
-            let ctx = if let Some(ref msg_id) = current_message_id {
-                agent_ctx.clone().with_current_message_id(msg_id.clone())
-            } else {
-                agent_ctx.clone()
-            };
-            Some(ctx)
+            let mut ec = agent_ctx.clone().with_detached(loop_is_detached);
+            if let Some(ref msg_id) = current_message_id {
+                ec = ec.with_current_message_id(msg_id.clone());
+            }
+            Some(ec)
         }
         _ => None,
     };
@@ -769,6 +790,9 @@ pub(crate) async fn execute_with_tools(
         workflow_id: &event_workflow_id,
         validation_helper: validation_helper.as_ref(),
         require_file_confirmation: ctx.config.require_file_confirmation,
+        is_detached: ctx.is_detached,
+        is_delegated: ctx.is_delegated,
+        mcp_tool_allowlist: &ctx.config.mcp_tool_allowlist,
     };
 
     // Load the model pricing once so each iteration_progress chunk can carry
@@ -1237,6 +1261,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         }
     }
 

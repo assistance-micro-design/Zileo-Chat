@@ -199,6 +199,10 @@ impl ParallelTasksTool {
                 .await?;
                 context["assigned_tasks"] = serde_json::json!(assigned);
             }
+            // R-SEC-4: inherit the parent's detached status so each parallel
+            // sub-agent's MCP calls are gated by its own allowlist instead of an
+            // unanswerable validation modal when the parent runs unattended.
+            crate::agents::core::agent::stamp_detached(&mut context, self.is_detached);
 
             // Create Task for orchestrator
             let task = Task {

@@ -101,6 +101,10 @@ pub async fn compose_card_from_description_core(
         provider_manager,
         tool_factory: Some(tool_factory),
         agent_context: None,
+        // Compose-card runs unattended: enforce the MCP tool allowlist (R-SEC-4).
+        is_detached: true,
+        // Direct detached run, not a delegate → R1 delegation flag N/A.
+        is_delegated: false,
     };
     let report = tool_loop::execute_with_tools(
         ctx,
@@ -158,7 +162,7 @@ async fn load_kanban_agent_config(db: &Arc<DBClient>, id: &str) -> Result<AgentC
     let q = format!(
         "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, \
          folders, require_file_confirmation, system_prompt, max_tool_iterations, \
-         reasoning_effort, kind, auto_analyze_reports \
+         reasoning_effort, kind, auto_analyze_reports, mcp_tool_allowlist \
          FROM agent:`{}`",
         id
     );

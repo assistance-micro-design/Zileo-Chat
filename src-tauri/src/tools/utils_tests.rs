@@ -111,6 +111,7 @@ impl TestAgent {
                 reasoning_effort: None,
                 kind: None,
                 auto_analyze_reports: false,
+                mcp_tool_allowlist: Vec::new(),
             },
         }
     }

@@ -49,6 +49,7 @@ async fn setup_test_state_for_orchestrator() -> (AppState, TempDir) {
         reasoning_effort: None,
         kind: None,
         auto_analyze_reports: false,
+        mcp_tool_allowlist: Vec::new(),
     };
     let agent = SimpleAgent::new(config);
     registry

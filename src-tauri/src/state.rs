@@ -424,6 +424,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         };
 
         let agent = SimpleAgent::new(config);

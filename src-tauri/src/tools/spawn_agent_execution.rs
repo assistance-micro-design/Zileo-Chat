@@ -269,6 +269,13 @@ impl SpawnAgentTool {
             reasoning_effort: parent_config.reasoning_effort.clone(),
             kind: None,
             auto_analyze_reports: false,
+            // R-SEC-4: a sub-agent inherits the parent's MCP allowlist, exactly
+            // as it inherits the parent's `mcp_servers`, tools and skills. When
+            // the parent runs DETACHED the sub-agent task is stamped detached
+            // (below), so the gate consults THIS armed set: the sub-agent can
+            // call only what the human explicitly armed for the parent — no
+            // escalation, fail-closed (empty set ⇒ every MCP call refused).
+            mcp_tool_allowlist: parent_config.mcp_tool_allowlist.clone(),
         };
 
         // Create execution record in database (status: running)
@@ -337,15 +344,20 @@ impl SpawnAgentTool {
         // assistant turn). If this sub-agent itself spawns sub-agents
         // (defensive — currently single-level enforced), its descendants
         // chain through this id (H2 audit 2026-05-02).
+        let mut context = serde_json::json!({
+            "workflow_id": self.workflow_id,
+            "parent_agent_id": self.parent_agent_id,
+            "is_sub_agent": true,
+            "message_id": Uuid::new_v4().to_string(),
+        });
+        // R-SEC-4: inherit the parent's detached status so the sub-agent's MCP
+        // calls are gated by the allowlist (above) instead of an unanswerable
+        // validation modal.
+        crate::agents::core::agent::stamp_detached(&mut context, self.is_detached);
         let task = Task {
             id: format!("task_{}", Uuid::new_v4()),
             description: prompt.to_string(),
-            context: serde_json::json!({
-                "workflow_id": self.workflow_id,
-                "parent_agent_id": self.parent_agent_id,
-                "is_sub_agent": true,
-                "message_id": Uuid::new_v4().to_string(),
-            }),
+            context,
         };
 
         // Execute sub-agent with retry and heartbeat monitoring

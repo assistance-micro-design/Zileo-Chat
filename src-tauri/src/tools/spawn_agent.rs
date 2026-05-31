@@ -257,6 +257,11 @@ pub struct SpawnAgentTool {
     /// `sub_agent_execution.parent_message_id` at CREATE time (H2 audit
     /// 2026-05-02). Pulled from `AgentToolContext::current_message_id`.
     pub(crate) parent_message_id: Option<String>,
+    /// Whether the spawning (parent) tool loop runs detached. Propagated to the
+    /// sub-agent task so a sub-agent of a detached run is itself detached and
+    /// its MCP calls hit the R-SEC-4 allowlist gate instead of the interactive
+    /// modal no human can answer. Pulled from `AgentToolContext::is_detached`.
+    pub(crate) is_detached: bool,
     /// Tracked spawned children for this workflow
     pub(crate) spawned_children: Arc<RwLock<Vec<SpawnedChild>>>,
 }
@@ -307,6 +312,7 @@ impl SpawnAgentTool {
             workflow_id,
             is_primary_agent,
             parent_message_id: context.current_message_id,
+            is_detached: context.is_detached,
             spawned_children: Arc::new(RwLock::new(Vec::new())),
         }
     }

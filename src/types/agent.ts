@@ -36,6 +36,29 @@ export type Lifecycle = 'permanent' | 'temporary';
 export type AgentKind = 'kanban';
 
 /**
+ * One entry of an agent's MCP tool allowlist (R-SEC-4).
+ *
+ * Lists, per immutable `server_id` (never the display name, so it survives a
+ * server rename), the exact MCP tool names the agent may call in an unattended
+ * (detached) run: auto-analyze, compose-card, worker re-run. An empty/absent
+ * allowlist means nothing is armed → every MCP tool is refused in detached.
+ */
+export interface McpToolAllowlistEntry {
+	/** Immutable MCP server id (not the display name). */
+	server_id: string;
+	/** Exact tool names auto-approved for this server in detached runs. */
+	tools: string[];
+	/**
+	 * R1: whether the armed tools are also authorized when this agent runs as a
+	 * delegated/parallel sub-agent of a detached parent (not just in a direct
+	 * detached run). Defaults to `false` (strict) — closes the delegation
+	 * confused-deputy. Does not apply to spawned sub-agents (they clone the
+	 * parent's allowlist). Matches Rust `#[serde(default)] bool`.
+	 */
+	allow_in_delegated_runs: boolean;
+}
+
+/**
  * Agent configuration
  */
 export interface AgentConfig {
@@ -67,6 +90,8 @@ export interface AgentConfig {
 	kind?: AgentKind;
 	/** When true and kind === 'kanban', the agent auto-analyzes workflow reports on completion. */
 	auto_analyze_reports?: boolean;
+	/** MCP tools auto-approved for this agent in unattended (detached) runs (R-SEC-4). */
+	mcp_tool_allowlist?: McpToolAllowlistEntry[];
 }
 
 /**
@@ -117,6 +142,8 @@ export interface AgentConfigCreate {
 	kind?: AgentKind;
 	/** When true and kind === 'kanban', the agent auto-analyzes workflow reports on completion. */
 	auto_analyze_reports?: boolean;
+	/** MCP tools auto-approved for this agent in unattended (detached) runs (R-SEC-4). */
+	mcp_tool_allowlist?: McpToolAllowlistEntry[];
 }
 
 /**
@@ -147,6 +174,8 @@ export interface AgentConfigUpdate {
 	kind?: AgentKind | null;
 	/** Auto-analyze workflow reports flag (absent = keep, value = set). */
 	auto_analyze_reports?: boolean;
+	/** MCP tool allowlist (R-SEC-4; absent = keep existing, value = replace). */
+	mcp_tool_allowlist?: McpToolAllowlistEntry[];
 }
 
 /**

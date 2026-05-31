@@ -308,6 +308,7 @@ pub async fn create_agent(
         reasoning_effort,
         kind,
         auto_analyze_reports,
+        mcp_tool_allowlist,
     } = validated;
 
     let lifecycle_str = match lifecycle {
@@ -330,6 +331,7 @@ pub async fn create_agent(
         reasoning_effort,
         kind,
         auto_analyze_reports,
+        mcp_tool_allowlist,
     };
 
     let reasoning_sql = format_reasoning_effort(&agent_config);
@@ -354,6 +356,7 @@ pub async fn create_agent(
             reasoning_effort: {reasoning_sql},
             kind: {kind_sql},
             auto_analyze_reports: $auto_analyze_reports,
+            mcp_tool_allowlist: $mcp_tool_allowlist,
             created_at: time::now(),
             updated_at: time::now()
         }}"
@@ -389,6 +392,10 @@ pub async fn create_agent(
                 (
                     "auto_analyze_reports".to_string(),
                     json!(agent_config.auto_analyze_reports),
+                ),
+                (
+                    "mcp_tool_allowlist".to_string(),
+                    json!(agent_config.mcp_tool_allowlist),
                 ),
             ],
         )
@@ -467,6 +474,7 @@ pub async fn update_agent(
             reasoning_effort = {reasoning_sql},
             kind = {kind_sql},
             auto_analyze_reports = $auto_analyze_reports,
+            mcp_tool_allowlist = $mcp_tool_allowlist,
             updated_at = time::now()"
     );
 
@@ -499,6 +507,10 @@ pub async fn update_agent(
                 (
                     "auto_analyze_reports".to_string(),
                     json!(updated_config.auto_analyze_reports),
+                ),
+                (
+                    "mcp_tool_allowlist".to_string(),
+                    json!(updated_config.mcp_tool_allowlist),
                 ),
             ],
         )

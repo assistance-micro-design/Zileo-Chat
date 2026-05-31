@@ -121,6 +121,37 @@ pub enum AgentKind {
     Kanban,
 }
 
+/// One entry of an agent's MCP tool allowlist (R-SEC-4).
+///
+/// Lists, per **immutable** `server_id`, the exact MCP tool names this agent is
+/// pre-authorized to call in an **unattended (detached) run** (auto-analyze,
+/// compose, worker re-run). Keying on `server_id` (never the display name)
+/// makes the allowlist survive a server rename. An empty allowlist means
+/// nothing is armed, so every MCP tool is refused in a detached run
+/// (fail-closed).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct McpToolAllowlistEntry {
+    /// Immutable MCP server id (not the display name).
+    pub server_id: String,
+    /// Exact tool names auto-approved for this server in detached runs.
+    #[serde(default)]
+    pub tools: Vec<String>,
+    /// R1: whether the armed tools are ALSO authorized when this agent runs as
+    /// a **delegated/parallel** sub-agent of a detached parent — not just in a
+    /// **direct** detached run (rerun-primary / analyze / compose).
+    ///
+    /// DEFAULT `false` (strict). Closes the UNION confused-deputy: a standard
+    /// agent delegated-to by a detached worker re-run can only trigger MCP
+    /// tools the human explicitly marked safe for delegation. Does NOT apply to
+    /// **spawned** sub-agents — they clone the parent's allowlist (same
+    /// privilege, no confused-deputy), so the direct-run path gates them.
+    /// `#[serde(default)]`: legacy entries without the field deserialize to
+    /// `false` (strict) — same treatment as `tools` (ERR_SURREAL_011: DEFAULT
+    /// does not backfill existing rows; the serde default is the safety net).
+    #[serde(default)]
+    pub allow_in_delegated_runs: bool,
+}
+
 /// Agent configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -184,6 +215,10 @@ pub struct AgentConfig {
         skip_serializing_if = "is_false"
     )]
     pub auto_analyze_reports: bool,
+    /// MCP tools this agent may call in an unattended (detached) run (R-SEC-4).
+    /// Empty = nothing armed = every MCP tool refused in detached (fail-closed).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp_tool_allowlist: Vec<McpToolAllowlistEntry>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -297,6 +332,9 @@ pub struct AgentConfigCreate {
     /// Auto-analyze workflow reports on completion (only meaningful for Kanban agents).
     #[serde(default)]
     pub auto_analyze_reports: bool,
+    /// MCP tools auto-approved for this agent in unattended (detached) runs (R-SEC-4).
+    #[serde(default)]
+    pub mcp_tool_allowlist: Vec<McpToolAllowlistEntry>,
 }
 
 /// Agent configuration for updates (all fields optional except lifecycle which cannot change)
@@ -354,6 +392,9 @@ pub struct AgentConfigUpdate {
     /// Auto-analyze workflow reports flag (absent = keep, value = set).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_analyze_reports: Option<bool>,
+    /// MCP tool allowlist (R-SEC-4; absent = keep existing, value = replace).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_tool_allowlist: Option<Vec<McpToolAllowlistEntry>>,
 }
 
 /// Agent summary for listing (lightweight representation)
@@ -498,6 +539,7 @@ mod tests {
             reasoning_effort: Some(ReasoningEffort::Medium),
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -531,6 +573,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -584,6 +627,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -640,6 +684,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         };
 
         assert!(config.has_valid_tools());
@@ -674,6 +719,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         };
 
         assert!(!config.has_valid_tools());
@@ -715,6 +761,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         };
 
         assert!(config.has_valid_tools());

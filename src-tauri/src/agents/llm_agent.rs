@@ -127,12 +127,26 @@ impl Agent for LLMAgent {
         mcp_manager: Option<Arc<MCPManager>>,
         cancellation_token: Option<CancellationToken>,
     ) -> anyhow::Result<Report> {
+        // The standard `/agent` path is attended → `task.is_detached()` is
+        // false. But the SAME registered agent can run as the sub-agent of a
+        // DETACHED parent (a delegate/parallel target, or a freshly-spawned
+        // sub-agent of a detached worker re-run): such tasks carry
+        // `is_detached: true` in their context (stamped by the spawning tool),
+        // so the R-SEC-4 MCP allowlist gate applies transitively instead of
+        // falling through to the interactive modal that no human can answer.
+        let is_detached = task.is_detached();
+        // R1: a delegated/parallel sub-agent of a detached parent is additionally
+        // gated on the per-entry `allow_in_delegated_runs` flag (spawned
+        // sub-agents are not — `is_delegated()` excludes `is_sub_agent`).
+        let is_delegated = task.is_delegated();
         tool_loop::execute_with_tools(
             ToolLoopContext {
                 config: &self.config,
                 provider_manager: &self.provider_manager,
                 tool_factory: self.tool_factory.as_ref(),
                 agent_context: self.agent_context.as_ref(),
+                is_detached,
+                is_delegated,
             },
             task,
             mcp_manager,
@@ -199,6 +213,7 @@ mod tests {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         };
         let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         LLMAgent {

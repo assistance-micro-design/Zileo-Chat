@@ -94,6 +94,13 @@ pub struct AgentToolContext {
     /// at CREATE time (replaces the legacy bulk UPDATE in
     /// `persistence_step.rs` — H2 audit 2026-05-02).
     pub current_message_id: Option<String>,
+    /// Whether the tool loop that owns this context runs UNATTENDED (detached:
+    /// auto-analyze, compose-card, worker re-run — R-SEC-4). Stamped from
+    /// `ToolLoopContext::is_detached` in `execute_with_tools` so the sub-agent
+    /// tools (Spawn / Delegate / Parallel) created from this context know their
+    /// parent is detached and can mark the sub-agent tasks they build as
+    /// detached too (`stamp_detached`). Defaults to `false` (attended).
+    pub is_detached: bool,
 }
 
 impl AgentToolContext {
@@ -138,6 +145,7 @@ impl AgentToolContext {
             app_handle,
             cancellation_token,
             current_message_id: None,
+            is_detached: false,
         }
     }
 
@@ -170,6 +178,7 @@ impl AgentToolContext {
             app_handle,
             cancellation_token: None,
             current_message_id: None,
+            is_detached: false,
         }
     }
 
@@ -189,6 +198,19 @@ impl AgentToolContext {
     /// ```
     pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
         self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Returns a new context flagged with the owning tool loop's detached
+    /// status.
+    ///
+    /// Called by `tool_loop::execute_with_tools` from
+    /// `ToolLoopContext::is_detached` so the sub-agent tools created from this
+    /// context (Spawn / Delegate / Parallel) inherit the parent's detached
+    /// status and stamp it onto the sub-agent tasks they build (R-SEC-4
+    /// transitive gate — see [`crate::agents::core::agent::stamp_detached`]).
+    pub fn with_detached(mut self, is_detached: bool) -> Self {
+        self.is_detached = is_detached;
         self
     }
 

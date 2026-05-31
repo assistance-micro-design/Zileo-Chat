@@ -323,6 +323,42 @@ pub(crate) struct FunctionCallContext<'a> {
     pub workflow_id: &'a str,
     pub validation_helper: Option<&'a ValidationHelper>,
     pub require_file_confirmation: bool,
+    /// True for an unattended (detached) run — enables the R-SEC-4 MCP gate.
+    pub is_detached: bool,
+    /// True when this detached run is a DELEGATED sub-agent (DelegateTask /
+    /// ParallelTasks), as opposed to a direct detached run or a spawned
+    /// sub-agent. In a delegated run the allowlist gate additionally requires
+    /// the matching entry's `allow_in_delegated_runs` flag (R1).
+    pub is_delegated: bool,
+    /// Per-(server_id, tool) allowlist consulted by the detached MCP gate.
+    pub mcp_tool_allowlist: &'a [crate::models::agent::McpToolAllowlistEntry],
+}
+
+/// Pure R-SEC-4 decision: is `(server_id, tool)` armed in the agent's detached
+/// allowlist? Keyed by the immutable `server_id` (never the display name).
+/// `server_id == None` (the server name could not be resolved to an id) is
+/// fail-closed → `false`. An empty allowlist arms nothing.
+///
+/// R1 — `is_delegated`: when this detached run is a DELEGATED sub-agent
+/// (DelegateTask / ParallelTasks), the matching entry must ALSO set
+/// `allow_in_delegated_runs`. A DIRECT detached run (rerun-primary / analyze /
+/// compose) or a SPAWNED sub-agent (`is_delegated == false`) ignores the flag,
+/// preserving the pre-R1 behavior. This closes the UNION confused-deputy where
+/// a detached worker delegates to a standard agent whose own allowlist arms
+/// tools the worker should not be able to trigger.
+fn is_mcp_tool_armed(
+    allowlist: &[crate::models::agent::McpToolAllowlistEntry],
+    server_id: Option<&str>,
+    tool: &str,
+    is_delegated: bool,
+) -> bool {
+    server_id.is_some_and(|sid| {
+        allowlist.iter().any(|e| {
+            e.server_id == sid
+                && e.tools.iter().any(|t| t == tool)
+                && (!is_delegated || e.allow_in_delegated_runs)
+        })
+    })
 }
 
 /// Executes a single function call (local or MCP tool).
@@ -340,8 +376,49 @@ pub(crate) async fn execute_function_call(
         if let Some(mcp) = ctx.mcp_manager {
             mcp_calls_made.push(call.name.clone());
 
-            // Request validation for MCP tool call
-            if let Some(helper) = ctx.validation_helper {
+            // R-SEC-4: in a DETACHED run there is no human to answer the
+            // validation modal, so the gate is the per-agent allowlist —
+            // evaluated UNCONDITIONALLY (independent of ValidationMode, which
+            // would otherwise let `Auto` short-circuit to fail-open). Keyed by
+            // the immutable `server_id` (resolved from the tool's server name),
+            // never the display name. Empty allowlist = nothing armed = refuse.
+            if ctx.is_detached {
+                let server_id = mcp.get_server_id_by_name(server).await;
+                let armed = is_mcp_tool_armed(
+                    ctx.mcp_tool_allowlist,
+                    server_id.as_deref(),
+                    tool,
+                    ctx.is_delegated,
+                );
+                if !armed {
+                    // R-SEC-11: structured refusal audit (no secret). `delegated`
+                    // distinguishes the R1 confused-deputy refusal (armed for the
+                    // agent but not flagged `allow_in_delegated_runs`) from a
+                    // plain unarmed refusal.
+                    warn!(
+                        server = %server,
+                        server_id = server_id.as_deref().unwrap_or("<unknown>"),
+                        tool = %tool,
+                        delegated = ctx.is_delegated,
+                        "MCP tool refused: not armed for this agent in a detached run"
+                    );
+                    let scope = if ctx.is_delegated {
+                        "unattended (detached) delegated runs"
+                    } else {
+                        "unattended (detached) runs"
+                    };
+                    return FunctionCallResult::failure(
+                        &call.id,
+                        &call.name,
+                        format!(
+                            "MCP tool '{}' is not enabled for this agent in {}",
+                            call.name, scope
+                        ),
+                    );
+                }
+                // Armed: proceed without the interactive modal (no human present).
+            } else if let Some(helper) = ctx.validation_helper {
+                // Attended run: existing interactive validation modal.
                 if let Err(e) = helper
                     .request_mcp_validation(ctx.workflow_id, server, tool, call.arguments.clone())
                     .await
@@ -797,6 +874,420 @@ mod tests {
         assert!(
             ids.contains(&"MemoryTool".to_string()),
             "Kanban agent must still receive its non-delegation tools, got {ids:?}"
+        );
+    }
+
+    // ----------------------------------------------------------------------
+    // R-SEC-4: detached MCP tool allowlist gate
+    // ----------------------------------------------------------------------
+
+    use crate::models::agent::McpToolAllowlistEntry;
+    use crate::models::function_calling::FunctionCall;
+
+    fn allow(server_id: &str, tools: &[&str]) -> McpToolAllowlistEntry {
+        McpToolAllowlistEntry {
+            server_id: server_id.to_string(),
+            tools: tools.iter().map(|s| s.to_string()).collect(),
+            allow_in_delegated_runs: false,
+        }
+    }
+
+    /// Like [`allow`] but the entry is also armed for DELEGATED detached runs
+    /// (`allow_in_delegated_runs = true`, R1).
+    fn allow_delegated(server_id: &str, tools: &[&str]) -> McpToolAllowlistEntry {
+        McpToolAllowlistEntry {
+            server_id: server_id.to_string(),
+            tools: tools.iter().map(|s| s.to_string()).collect(),
+            allow_in_delegated_runs: true,
+        }
+    }
+
+    /// R1 matrix on the pure decision: the per-entry `allow_in_delegated_runs`
+    /// flag ONLY gates DELEGATED runs (Delegate/Parallel). A DIRECT detached run
+    /// (rerun-primary / analyze / compose / Spawn-clone, `is_delegated = false`)
+    /// ignores the flag — its behavior is exactly the pre-R1 armed check.
+    #[test]
+    fn armed_decision_respects_delegated_flag() {
+        let strict = vec![allow("srv-id-1", &["read"])]; // flag = false (default/strict)
+        let delegable = vec![allow_delegated("srv-id-1", &["read"])]; // flag = true
+
+        // DIRECT detached (is_delegated = false): flag irrelevant, armed by match.
+        assert!(is_mcp_tool_armed(&strict, Some("srv-id-1"), "read", false));
+        assert!(is_mcp_tool_armed(
+            &delegable,
+            Some("srv-id-1"),
+            "read",
+            false
+        ));
+
+        // DELEGATED detached (is_delegated = true): armed ONLY if flagged.
+        assert!(
+            !is_mcp_tool_armed(&strict, Some("srv-id-1"), "read", true),
+            "a strict entry must be refused in a delegated run (confused-deputy)"
+        );
+        assert!(
+            is_mcp_tool_armed(&delegable, Some("srv-id-1"), "read", true),
+            "an explicitly delegation-armed entry must pass in a delegated run"
+        );
+
+        // The flag never resurrects an unarmed tool nor a wrong server.
+        assert!(!is_mcp_tool_armed(
+            &delegable,
+            Some("srv-id-1"),
+            "write",
+            true
+        ));
+        assert!(!is_mcp_tool_armed(&delegable, Some("other"), "read", true));
+        assert!(!is_mcp_tool_armed(&delegable, None, "read", true));
+    }
+
+    #[test]
+    fn armed_decision_matches_server_id_and_tool() {
+        let allowlist = vec![allow("srv-id-1", &["read", "list"])];
+        // Armed pair (direct detached run: is_delegated = false).
+        assert!(is_mcp_tool_armed(
+            &allowlist,
+            Some("srv-id-1"),
+            "read",
+            false
+        ));
+        // Tool not in the armed set.
+        assert!(!is_mcp_tool_armed(
+            &allowlist,
+            Some("srv-id-1"),
+            "write",
+            false
+        ));
+        // Right tool, wrong server id.
+        assert!(!is_mcp_tool_armed(
+            &allowlist,
+            Some("other-id"),
+            "read",
+            false
+        ));
+    }
+
+    #[test]
+    fn armed_decision_is_fail_closed_on_unresolved_server() {
+        let allowlist = vec![allow("srv-id-1", &["read"])];
+        // Server name could not be resolved to an id -> refused.
+        assert!(!is_mcp_tool_armed(&allowlist, None, "read", false));
+        // Empty allowlist -> nothing armed.
+        assert!(!is_mcp_tool_armed(&[], Some("srv-id-1"), "read", false));
+    }
+
+    #[test]
+    fn armed_decision_is_keyed_by_id_so_it_survives_rename() {
+        // The allowlist stores the immutable id; the lookup takes the id
+        // resolved from the (possibly renamed) display name. As long as the id
+        // is stable, the rename is transparent.
+        let allowlist = vec![allow("immutable-id", &["read"])];
+        assert!(is_mcp_tool_armed(
+            &allowlist,
+            Some("immutable-id"),
+            "read",
+            false
+        ));
+    }
+
+    /// Builds a `FunctionCallContext` for the gate tests.
+    fn call_ctx<'a>(
+        mcp: &'a Arc<MCPManager>,
+        is_detached: bool,
+        is_delegated: bool,
+        allowlist: &'a [McpToolAllowlistEntry],
+    ) -> FunctionCallContext<'a> {
+        FunctionCallContext {
+            local_tools: &[],
+            mcp_manager: Some(mcp),
+            workflow_id: "wf-test",
+            validation_helper: None, // helper ABSENT on purpose
+            require_file_confirmation: false,
+            is_detached,
+            is_delegated,
+            mcp_tool_allowlist: allowlist,
+        }
+    }
+
+    #[tokio::test]
+    async fn detached_unarmed_mcp_call_refused_even_without_helper() {
+        // Detached + empty allowlist + no helper -> immediate refusal (fail-closed).
+        let (state, _g) = setup_test_state().await;
+        let call = FunctionCall {
+            id: "c1".to_string(),
+            name: "mcp__some-server__dangerous_tool".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        let ctx = call_ctx(&state.mcp_manager, true, false, &[]);
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        assert!(!res.success, "detached unarmed MCP call must fail");
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("not enabled for this agent"),
+            "refusal must come from the allowlist gate, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn attended_mcp_call_is_not_blocked_by_allowlist() {
+        // Interactive (is_detached=false) + empty allowlist: the allowlist gate
+        // must NOT fire. The call still fails (no real server) but for a
+        // different reason — proving the attended path is not allowlist-gated.
+        let (state, _g) = setup_test_state().await;
+        let call = FunctionCall {
+            id: "c2".to_string(),
+            name: "mcp__some-server__some_tool".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        let ctx = call_ctx(&state.mcp_manager, false, false, &[]);
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        assert!(
+            !res.error
+                .as_deref()
+                .unwrap_or("")
+                .contains("not enabled for this agent"),
+            "attended path must not be refused by the detached allowlist"
+        );
+    }
+
+    #[test]
+    fn agent_config_allowlist_round_trips_through_serde() {
+        // R-SEC-4 persistence (Rust side): the nested array<object> survives a
+        // serialize -> deserialize round-trip without dropping sub-keys.
+        let config = agent_config_from(serde_json::json!({
+            "id": "a1",
+            "name": "A",
+            "mcp_tool_allowlist": [
+                { "server_id": "srv-1", "tools": ["read", "list"] }
+            ],
+        }));
+        let json = serde_json::to_string(&config).unwrap();
+        let back: AgentConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.mcp_tool_allowlist.len(), 1);
+        assert_eq!(back.mcp_tool_allowlist[0].server_id, "srv-1");
+        assert_eq!(back.mcp_tool_allowlist[0].tools, vec!["read", "list"]);
+    }
+
+    #[test]
+    fn armed_decision_isolates_each_server_in_a_multi_entry_allowlist() {
+        // Edge: two distinct servers in the allowlist, a tool armed on only one.
+        // The decision must not bleed across entries — the armed tool of `srv-a`
+        // must NOT become armed for `srv-b`, and vice-versa.
+        let allowlist = vec![allow("srv-a", &["read"]), allow("srv-b", &["exec"])];
+        assert!(is_mcp_tool_armed(&allowlist, Some("srv-a"), "read", false));
+        assert!(is_mcp_tool_armed(&allowlist, Some("srv-b"), "exec", false));
+        // Cross-server leakage must not happen.
+        assert!(
+            !is_mcp_tool_armed(&allowlist, Some("srv-b"), "read", false),
+            "srv-a's tool must not be armed for srv-b"
+        );
+        assert!(
+            !is_mcp_tool_armed(&allowlist, Some("srv-a"), "exec", false),
+            "srv-b's tool must not be armed for srv-a"
+        );
+    }
+
+    #[tokio::test]
+    async fn detached_refusal_is_audit_grade_and_still_counts_the_call() {
+        // R-SEC-11: a detached refusal must (1) name the unattended/detached
+        // context in the returned failure so the audit trail is unambiguous,
+        // and (2) the refused call must still be recorded in `mcp_calls_made`
+        // (the counter is bumped before the gate — relevant for the per-run MCP
+        // budget/audit, R-SEC-10). The allowlist here references a SERVER ID
+        // that no live server resolves to (e.g. a deleted server): the call's
+        // server name cannot be resolved -> fail-closed, no panic.
+        let (state, _g) = setup_test_state().await;
+        let allowlist = vec![allow("ghost-server-id", &["read"])];
+        let call = FunctionCall {
+            id: "c3".to_string(),
+            name: "mcp__some-unresolvable-server__read".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        let ctx = call_ctx(&state.mcp_manager, true, false, &allowlist);
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+
+        assert!(
+            !res.success,
+            "unresolved server in a detached run must be refused"
+        );
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("unattended") && err.contains("detached"),
+            "refusal must name the unattended/detached context for the audit trail, got: {err:?}"
+        );
+        assert!(
+            mc.contains(&call.name),
+            "the refused MCP call must still be recorded in mcp_calls_made for the per-run audit/budget, got: {mc:?}"
+        );
+    }
+
+    /// R-SEC-4 TRANSITIVE gate — the hole the direct gate tests above do NOT
+    /// catch. A sub-agent task built by a DETACHED parent (spawn / delegate /
+    /// parallel call `stamp_detached(.., true)` on the task they hand the
+    /// orchestrator) must resolve detached, so an MCP call to an UNARMED tool
+    /// is refused IMMEDIATELY by the allowlist — never routed to the
+    /// interactive modal (no human present in a detached run) and never
+    /// executed. Before the fix the sub-agent path hard-coded
+    /// `is_detached: false`, so this refusal never fired and the call either
+    /// stalled on the modal or fell through fail-open.
+    #[tokio::test]
+    async fn detached_parent_subagent_unarmed_mcp_call_refused_immediately() {
+        use crate::agents::core::agent::{stamp_detached, Task};
+
+        let (state, _g) = setup_test_state().await;
+
+        // The exact task shape a detached spawn/delegate produces.
+        let mut context = serde_json::json!({
+            "workflow_id": "wf-detached",
+            "is_sub_agent": true,
+        });
+        stamp_detached(&mut context, true);
+        let sub_task = Task {
+            id: "sub".to_string(),
+            description: "do work".to_string(),
+            context,
+        };
+        assert!(
+            sub_task.is_detached(),
+            "a sub-agent task stamped by a detached parent must resolve detached"
+        );
+
+        // The sub-agent's tool loop derives is_detached from its task exactly as
+        // LLMAgent::execute_with_mcp now does, then feeds the gate.
+        let ctx = call_ctx(
+            &state.mcp_manager,
+            sub_task.is_detached(),
+            sub_task.is_delegated(),
+            &[],
+        );
+        let call = FunctionCall {
+            id: "sc1".to_string(),
+            name: "mcp__some-server__dangerous_tool".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+
+        assert!(
+            !res.success,
+            "a detached sub-agent's unarmed MCP call must be refused"
+        );
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("not enabled for this agent") && err.contains("detached"),
+            "refusal must come from the allowlist gate (not the modal, not execution), got: {err:?}"
+        );
+    }
+
+    /// Converse: a sub-agent of an ATTENDED parent leaves `is_detached` unset,
+    /// so the allowlist gate does NOT fire (its MCP calls follow the normal
+    /// interactive path). Guards against over-refusing legitimate attended
+    /// sub-agent MCP usage.
+    #[tokio::test]
+    async fn attended_parent_subagent_mcp_not_allowlist_gated() {
+        use crate::agents::core::agent::{stamp_detached, Task};
+
+        let (state, _g) = setup_test_state().await;
+        let mut context = serde_json::json!({ "is_sub_agent": true });
+        stamp_detached(&mut context, false);
+        let sub_task = Task {
+            id: "sub2".to_string(),
+            description: "do work".to_string(),
+            context,
+        };
+        assert!(!sub_task.is_detached());
+
+        let ctx = call_ctx(
+            &state.mcp_manager,
+            sub_task.is_detached(),
+            sub_task.is_delegated(),
+            &[],
+        );
+        let call = FunctionCall {
+            id: "sc2".to_string(),
+            name: "mcp__some-server__some_tool".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        assert!(
+            !res.error
+                .as_deref()
+                .unwrap_or("")
+                .contains("not enabled for this agent"),
+            "an attended sub-agent must not be refused by the detached allowlist gate"
+        );
+    }
+
+    /// R1 + 3.2 end-to-end at the gate, with a RESOLVABLE server (so the
+    /// decision exercises the flag, not the fail-closed-on-unresolved path).
+    /// `validation_helper` is None → proves the gate is UNCONDITIONAL (above
+    /// ValidationMode): a delegated detached run cannot open MCP by letting the
+    /// sub-agent validation skip/timeout. The armed-but-unflagged tool is
+    /// refused for a DELEGATE, allowed for a DIRECT run, and allowed for the
+    /// DELEGATE once the entry is flagged `allow_in_delegated_runs`.
+    #[tokio::test]
+    async fn delegated_run_requires_allow_in_delegated_runs_flag() {
+        let (state, _g) = setup_test_state().await;
+        // Make `srv-x` resolvable to an immutable id so the gate evaluates the
+        // allowlist entry instead of fail-closing on an unresolved server.
+        state
+            .mcp_manager
+            .id_to_name
+            .write()
+            .await
+            .insert("srv-x-id".to_string(), "srv-x".to_string());
+
+        let call = FunctionCall {
+            id: "d1".to_string(),
+            name: "mcp__srv-x__danger".to_string(),
+            arguments: serde_json::json!({}),
+        };
+
+        // Armed for the agent, but NOT flagged for delegation (strict default).
+        let strict = vec![allow("srv-x-id", &["danger"])];
+
+        // DELEGATED + detached + strict entry → REFUSED (confused-deputy),
+        // even though validation_helper is None (gate is unconditional → 3.2).
+        let ctx = call_ctx(&state.mcp_manager, true, true, &strict);
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc).await;
+        assert!(!res.success, "delegated + strict entry must be refused");
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("not enabled for this agent") && err.contains("delegated"),
+            "refusal must name the delegated detached scope for the audit trail, got: {err:?}"
+        );
+
+        // DIRECT detached run (is_delegated = false) with the SAME strict entry
+        // → NOT refused by the allowlist (flag is irrelevant for direct runs).
+        let ctx_direct = call_ctx(&state.mcp_manager, true, false, &strict);
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res = execute_function_call(&call, &ctx_direct, &mut tu, &mut mc).await;
+        assert!(
+            !res.error
+                .as_deref()
+                .unwrap_or("")
+                .contains("not enabled for this agent"),
+            "a direct detached run must NOT be allowlist-refused for an armed tool (flag is delegation-only)"
+        );
+
+        // DELEGATED with the entry explicitly flagged → NOT refused by the gate
+        // (it then proceeds to call_tool, which fails for an unrelated reason
+        // since no live client backs the seeded name — but NOT the gate).
+        let delegable = vec![allow_delegated("srv-x-id", &["danger"])];
+        let ctx_ok = call_ctx(&state.mcp_manager, true, true, &delegable);
+        let (mut tu, mut mc) = (Vec::new(), Vec::new());
+        let res = execute_function_call(&call, &ctx_ok, &mut tu, &mut mc).await;
+        assert!(
+            !res.error
+                .as_deref()
+                .unwrap_or("")
+                .contains("not enabled for this agent"),
+            "an explicitly delegation-armed tool must pass the gate in a delegated run"
         );
     }
 }

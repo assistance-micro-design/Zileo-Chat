@@ -24,7 +24,7 @@
 //!   improvement modal with the suggested edit
 //! - `skipped` -> agent had the flag disabled (handled before LLM call)
 
-use crate::agents::core::agent::Task;
+use crate::agents::core::agent::{Report, Task};
 use crate::agents::execution::tool_loop::{self, PricingCache, ToolLoopContext};
 use crate::commands::agent::hydrate_llm_from_model;
 use crate::commands::kanban_card::get_kanban_card_core;
@@ -34,7 +34,7 @@ use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
 use crate::models::function_calling::ToolChoiceMode;
 use crate::models::kanban_card_interaction::InteractionKind;
-use crate::models::AgentConfig;
+use crate::models::{AgentConfig, LLMConfig};
 use crate::security::validate_uuid_field;
 use crate::tools::list_agents::ListAgentsTool;
 use crate::tools::submit_analysis::SubmitAnalysisTool;
@@ -147,8 +147,13 @@ pub async fn analyze_card_report_core(
         provider_manager: llm_manager,
         tool_factory: Some(tool_factory),
         agent_context: None,
+        // Auto-analyze runs unattended: enforce the MCP tool allowlist (R-SEC-4).
+        is_detached: true,
+        // Direct detached run (the Kanban agent itself), not a delegate → the
+        // R1 per-entry delegation flag does not apply here.
+        is_delegated: false,
     };
-    let exec_report = tool_loop::execute_with_tools(
+    let exec_report = match tool_loop::execute_with_tools(
         ctx,
         task,
         Some(mcp_manager.clone()),
@@ -161,12 +166,58 @@ pub async fn analyze_card_report_core(
         ToolChoiceMode::Required,
     )
     .await
-    .map_err(|e| format!("Analyze tool_loop failed: {}", e))?;
+    {
+        Ok(report) => report,
+        Err(e) => {
+            // R-SEC-4 anti stall-loop: the tool loop ERRORED (provider error,
+            // SSE timeout, cancellation, max-iterations) BEFORE any verdict
+            // could be captured. Record a TERMINAL `kind='analyze'` interaction
+            // so this card leaves the boot catch-up victim set
+            // (`select_unanalyzed_review_card_ids`), THEN propagate the error.
+            // Without it the catch-up re-analyzes this card on every startup.
+            let err_msg = format!("Analyze tool_loop failed: {}", e);
+            let failed_report =
+                Report::failed(&card.kanban_agent_id, &user_prompt, err_msg.clone(), 0);
+            persist_terminal_analyze_interaction(
+                db,
+                &validated_card_id,
+                &card.kanban_agent_id,
+                &config.llm,
+                &user_prompt,
+                &failed_report,
+                &format!("error: {}", e),
+                &pricing_cache,
+            )
+            .await;
+            return Err(err_msg);
+        }
+    };
 
-    let analysis = capture.lock().await.take().ok_or_else(|| {
-        "Agent did not call SubmitAnalysisTool. Review your system prompt or model choice."
-            .to_string()
-    })?;
+    let analysis = match capture.lock().await.take() {
+        Some(a) => a,
+        None => {
+            // R-SEC-4 anti stall-loop: a detached analyze that produced no
+            // verdict (e.g. an MCP tool was refused by the allowlist gate) MUST
+            // still record a TERMINAL `kind='analyze'` interaction. Otherwise
+            // the boot catch-up query (`meta::id(id) NOT IN (… kind='analyze')`)
+            // re-analyzes this card on every startup → infinite stall loop.
+            persist_terminal_analyze_interaction(
+                db,
+                &validated_card_id,
+                &card.kanban_agent_id,
+                &config.llm,
+                &user_prompt,
+                &exec_report,
+                "no verdict — agent did not call SubmitAnalysis (e.g. a detached MCP tool was refused)",
+                &pricing_cache,
+            )
+            .await;
+            return Err(
+                "Agent did not call SubmitAnalysisTool. Review your system prompt or model choice."
+                    .to_string(),
+            );
+        }
+    };
 
     let summary = format!("verdict: {:?}", analysis.verdict);
     if let Err(e) = persist_interaction(
@@ -193,6 +244,52 @@ pub async fn analyze_card_report_core(
         "Kanban auto-analyze finished"
     );
     Ok(analysis)
+}
+
+/// Persists a TERMINAL `kind='analyze'` interaction so the card leaves the
+/// boot catch-up victim set (`select_unanalyzed_review_card_ids`), whatever the
+/// reason the analyze produced no usable verdict.
+///
+/// Both terminal branches of `analyze_card_report_core` call this:
+///   * the tool loop ERRORED (provider error, SSE timeout, cancellation,
+///     max-iterations) before a verdict could be captured — persist then
+///     propagate the error;
+///   * the loop finished but the agent never called `SubmitAnalysis` (empty
+///     capture slot) — persist then return the empty-verdict error.
+///
+/// Without a terminal interaction the catch-up query re-analyzes the card on
+/// every startup (R-SEC-4 anti stall-loop). Best-effort: a DB failure is logged
+/// and swallowed — the caller still surfaces the original error, and a missing
+/// row only means the card is retried later (no data loss, no incorrect state).
+///
+/// Extracted so the stall-loop fix is unit-testable without a live LLM: a
+/// synthetic failed `Report` exercises the persist + catch-up exclusion.
+#[allow(clippy::too_many_arguments)]
+async fn persist_terminal_analyze_interaction(
+    db: &Arc<DBClient>,
+    card_id: &str,
+    kanban_agent_id: &str,
+    llm: &LLMConfig,
+    task_input: &str,
+    report: &Report,
+    summary: &str,
+    pricing_cache: &PricingCache,
+) {
+    if let Err(e) = persist_interaction(
+        db,
+        card_id,
+        InteractionKind::Analyze,
+        kanban_agent_id,
+        llm,
+        task_input,
+        report,
+        Some(summary),
+        pricing_cache,
+    )
+    .await
+    {
+        warn!(error = %e, "Failed to persist terminal analyze interaction (non-fatal)");
+    }
 }
 
 /// Boot-time catch-up: re-run the analyzer for every card that finished into
@@ -281,7 +378,7 @@ async fn load_kanban_agent_for_analysis(
     let q = format!(
         "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, \
          folders, require_file_confirmation, system_prompt, max_tool_iterations, \
-         reasoning_effort, kind, auto_analyze_reports \
+         reasoning_effort, kind, auto_analyze_reports, mcp_tool_allowlist \
          FROM agent:`{}`",
         agent_id
     );
@@ -697,6 +794,162 @@ mod tests {
             ids,
             vec![target.clone()],
             "only the un-analyzed review/done/with-workflow card must be selected, got {ids:?}"
+        );
+    }
+
+    /// R-SEC-4 anti stall-loop (test7): when a DETACHED analyze produces no
+    /// verdict (e.g. an MCP tool was refused by the allowlist gate), the
+    /// `capture == None` branch persists a TERMINAL `kind='analyze'`
+    /// interaction via the real `persist_interaction`. This test locks the
+    /// invariant that such a terminal interaction REMOVES the card from the
+    /// boot catch-up victim set — otherwise the catch-up query re-analyzes the
+    /// card on every startup (infinite stall loop).
+    ///
+    /// It exercises the real persistence + the real catch-up SELECT together,
+    /// building the interaction exactly as the terminal branch does
+    /// (`Report::failed` + the "no verdict" summary). The `capture == None`
+    /// branch itself cannot be driven end-to-end without a mock LLM provider
+    /// (it runs `execute_with_tools` against a live provider), so this is the
+    /// closest faithful level that still uses the production write + read code.
+    #[tokio::test]
+    async fn terminal_analyze_interaction_removes_card_from_catchup_victim_set() {
+        use crate::agents::core::agent::Report;
+        use crate::commands::kanban_interaction::load_card_interactions_core;
+        use crate::models::kanban_card_interaction::InteractionKind;
+        use crate::models::LLMConfig;
+
+        let (state, _g) = setup_test_state().await;
+        let wf = uuid::Uuid::new_v4().to_string();
+        let card_id = uuid::Uuid::new_v4().to_string();
+        seed_card(&state.db, &card_id, "review", "done", &format!("'{}'", wf)).await;
+
+        // Before any interaction the card is a catch-up victim (would be re-run).
+        let before = select_unanalyzed_review_card_ids(&state.db).await.unwrap();
+        assert!(
+            before.contains(&card_id),
+            "un-analyzed review/done card must initially be a catch-up victim, got {before:?}"
+        );
+
+        // Persist the SAME terminal interaction the `capture == None` branch
+        // writes: a failed Report + the "no verdict" summary.
+        let llm = LLMConfig {
+            provider: "mistral".to_string(),
+            model: "m".to_string(),
+            temperature: 0.0,
+            max_tokens: 0,
+            is_reasoning: false,
+            context_window: None,
+        };
+        let report = Report::failed("kanban-agent", "analyze", "no verdict".to_string(), 0);
+        // Empty pricing cache: with no iteration metrics on the failed Report,
+        // `compute_iteration_local_cost` is never consulted, so `None` is fine.
+        let pricing = PricingCache { pricing: None };
+        let summary =
+            "no verdict — agent did not call SubmitAnalysis (e.g. a detached MCP tool was refused)";
+        persist_interaction(
+            &state.db,
+            &card_id,
+            InteractionKind::Analyze,
+            "kanban-agent",
+            &llm,
+            "analyze task input",
+            &report,
+            Some(summary),
+            &pricing,
+        )
+        .await
+        .expect("terminal analyze interaction must persist");
+
+        // The terminal interaction must take the card OUT of the victim set,
+        // breaking the stall loop.
+        let after = select_unanalyzed_review_card_ids(&state.db).await.unwrap();
+        assert!(
+            !after.contains(&card_id),
+            "a terminal analyze interaction must exclude the card from the catch-up victim set (else infinite stall loop), got {after:?}"
+        );
+
+        // And the persisted row must be a well-formed terminal analyze record.
+        let interactions = load_card_interactions_core(&state.db, &card_id)
+            .await
+            .unwrap();
+        assert_eq!(interactions.len(), 1, "exactly one terminal interaction");
+        assert_eq!(interactions[0].kind, InteractionKind::Analyze);
+        assert_eq!(
+            interactions[0].final_payload_summary.as_deref(),
+            Some(summary),
+            "the no-verdict reason must survive persistence for diagnostics"
+        );
+    }
+
+    /// R-SEC-4 anti stall-loop (FIX (d), Err branch): when the analyze tool
+    /// loop ERRORS (provider error / SSE timeout / cancellation / max-iter),
+    /// the extracted `persist_terminal_analyze_interaction` helper — called on
+    /// the Err arm with a `Report::failed` and an `error:` summary — must record
+    /// a terminal `kind='analyze'` interaction so the card leaves the catch-up
+    /// victim set. Before the fix the `?` propagated the error WITHOUT
+    /// persisting, leaving the card re-analyzed on every startup. Exercises the
+    /// production helper directly (the Err arm cannot be driven end-to-end
+    /// without a mock provider).
+    #[tokio::test]
+    async fn err_branch_terminal_interaction_removes_card_from_catchup_victim_set() {
+        use crate::agents::core::agent::Report;
+        use crate::commands::kanban_interaction::load_card_interactions_core;
+        use crate::models::kanban_card_interaction::InteractionKind;
+        use crate::models::LLMConfig;
+
+        let (state, _g) = setup_test_state().await;
+        let wf = uuid::Uuid::new_v4().to_string();
+        let card_id = uuid::Uuid::new_v4().to_string();
+        seed_card(&state.db, &card_id, "review", "done", &format!("'{}'", wf)).await;
+
+        assert!(
+            select_unanalyzed_review_card_ids(&state.db)
+                .await
+                .unwrap()
+                .contains(&card_id),
+            "un-analyzed review/done card must initially be a catch-up victim"
+        );
+
+        let llm = LLMConfig {
+            provider: "mistral".to_string(),
+            model: "m".to_string(),
+            temperature: 0.0,
+            max_tokens: 0,
+            is_reasoning: false,
+            context_window: None,
+        };
+        // The Err arm builds a failed Report (no metrics) + an "error: …" summary.
+        let failed = Report::failed("kanban-agent", "analyze prompt", "boom".to_string(), 0);
+        let summary = "error: boom";
+        persist_terminal_analyze_interaction(
+            &state.db,
+            &card_id,
+            "kanban-agent",
+            &llm,
+            "analyze prompt",
+            &failed,
+            summary,
+            &PricingCache { pricing: None },
+        )
+        .await;
+
+        assert!(
+            !select_unanalyzed_review_card_ids(&state.db)
+                .await
+                .unwrap()
+                .contains(&card_id),
+            "the Err-arm terminal interaction must exclude the card from the catch-up victim set (else infinite stall loop)"
+        );
+
+        let interactions = load_card_interactions_core(&state.db, &card_id)
+            .await
+            .unwrap();
+        assert_eq!(interactions.len(), 1, "exactly one terminal interaction");
+        assert_eq!(interactions[0].kind, InteractionKind::Analyze);
+        assert_eq!(
+            interactions[0].final_payload_summary.as_deref(),
+            Some(summary),
+            "the tool-loop error reason must survive persistence for diagnostics"
         );
     }
 }

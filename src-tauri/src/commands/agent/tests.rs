@@ -45,6 +45,7 @@ fn test_agent_config(id: &str, name: &str) -> AgentConfig {
         reasoning_effort: None,
         kind: None,
         auto_analyze_reports: false,
+        mcp_tool_allowlist: Vec::new(),
     }
 }
 
@@ -97,6 +98,7 @@ async fn test_get_agent_config_success() {
         reasoning_effort: None,
         kind: None,
         auto_analyze_reports: false,
+        mcp_tool_allowlist: Vec::new(),
     };
 
     let agent = SimpleAgent::new(config);
@@ -433,4 +435,174 @@ async fn test_hydrate_llm_from_model_provider_match_is_case_insensitive() {
         "provider lookup must lowercase before matching"
     );
     assert_eq!(llm.context_window, Some(32_768));
+}
+
+/// Seeds an agent row whose `mcp_tool_allowlist` is bound as JSON exactly the
+/// way `create_agent` (commands/agent/mod.rs) binds `$mcp_tool_allowlist`. This
+/// exercises the real SCHEMAFULL persistence path so a dropped sub-key
+/// (ERR_SURREAL_001) would surface here.
+async fn seed_agent_with_allowlist(
+    db: &DBClient,
+    allowlist: &[crate::models::agent::McpToolAllowlistEntry],
+) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let query = format!(
+        "CREATE agent:`{id}` CONTENT {{ \
+            id: '{id}', name: $name, lifecycle: 'permanent', \
+            llm: {{ provider: 'mistral', model: 'large', temperature: 0.7, max_tokens: 1000 }}, \
+            tools: [], mcp_servers: [], skills: [], folders: [], \
+            require_file_confirmation: false, system_prompt: 'p', \
+            max_tool_iterations: 50, reasoning_effort: NONE, kind: NONE, \
+            auto_analyze_reports: false, mcp_tool_allowlist: $mcp_tool_allowlist, \
+            created_at: time::now(), updated_at: time::now() \
+        }}"
+    );
+    db.execute_with_params(
+        &query,
+        vec![
+            ("name".to_string(), serde_json::json!(format!("Agent {id}"))),
+            (
+                "mcp_tool_allowlist".to_string(),
+                serde_json::json!(allowlist),
+            ),
+        ],
+    )
+    .await
+    .expect("seed agent with allowlist");
+    id
+}
+
+/// Reads `mcp_tool_allowlist` back from the DB and deserializes the nested
+/// array<object> into the typed entries (the canonical reload shape).
+async fn load_allowlist(
+    db: &DBClient,
+    id: &str,
+) -> Vec<crate::models::agent::McpToolAllowlistEntry> {
+    let rows = db
+        .query_json(&format!("SELECT mcp_tool_allowlist FROM agent:`{id}`"))
+        .await
+        .expect("select allowlist");
+    let val = rows
+        .into_iter()
+        .next()
+        .expect("agent row exists")
+        .get("mcp_tool_allowlist")
+        .cloned()
+        .expect("mcp_tool_allowlist field present");
+    serde_json::from_value(val).expect("allowlist deserializes into typed entries")
+}
+
+/// R-SEC-4 (test10 persistence): the per-agent `mcp_tool_allowlist`
+/// (`array<object>` with `server_id` + `tools` sub-fields) must survive a live
+/// SCHEMAFULL write -> read round-trip WITHOUT dropping its sub-keys
+/// (ERR_SURREAL_001), and an update must replace it coherently.
+#[tokio::test]
+async fn mcp_tool_allowlist_survives_db_round_trip_and_update() {
+    use crate::models::agent::McpToolAllowlistEntry;
+    let (state, _db_guard) = setup_test_state().await;
+
+    let initial = vec![
+        McpToolAllowlistEntry {
+            server_id: "srv-a".to_string(),
+            tools: vec!["read".to_string(), "list".to_string()],
+            // R1: explicitly armed for delegated runs.
+            allow_in_delegated_runs: true,
+        },
+        McpToolAllowlistEntry {
+            server_id: "srv-b".to_string(),
+            tools: vec!["exec".to_string()],
+            allow_in_delegated_runs: false,
+        },
+    ];
+    let id = seed_agent_with_allowlist(&state.db, &initial).await;
+
+    let back = load_allowlist(&state.db, &id).await;
+    assert_eq!(
+        back.len(),
+        2,
+        "ERR_SURREAL_001: no allowlist entry may be dropped on a SCHEMAFULL round-trip"
+    );
+    assert_eq!(back[0].server_id, "srv-a");
+    assert_eq!(
+        back[0].tools,
+        vec!["read", "list"],
+        "the `tools` sub-field must not be dropped"
+    );
+    assert!(
+        back[0].allow_in_delegated_runs,
+        "R1: the `allow_in_delegated_runs` sub-field must survive the round-trip (ERR_SURREAL_001)"
+    );
+    assert_eq!(back[1].server_id, "srv-b");
+    assert_eq!(back[1].tools, vec!["exec"]);
+    assert!(
+        !back[1].allow_in_delegated_runs,
+        "the strict (false) flag must round-trip as false, not silently flip"
+    );
+
+    // Update the allowlist -> reload -> coherent (full replace).
+    let updated = vec![McpToolAllowlistEntry {
+        server_id: "srv-c".to_string(),
+        tools: vec!["write".to_string()],
+        allow_in_delegated_runs: false,
+    }];
+    state
+        .db
+        .execute_with_params(
+            &format!("UPDATE agent:`{id}` SET mcp_tool_allowlist = $a"),
+            vec![("a".to_string(), serde_json::json!(updated))],
+        )
+        .await
+        .expect("update allowlist");
+
+    let after = load_allowlist(&state.db, &id).await;
+    assert_eq!(
+        after.len(),
+        1,
+        "update must replace the allowlist wholesale"
+    );
+    assert_eq!(after[0].server_id, "srv-c");
+    assert_eq!(after[0].tools, vec!["write"]);
+}
+
+/// R1 backward-compat: an allowlist entry persisted BEFORE the
+/// `allow_in_delegated_runs` field existed (the sub-key is simply absent in the
+/// stored object) must reload as `false` (strict). The serde default is the
+/// safety net — `DEFINE FIELD ... DEFAULT false` does not backfill existing
+/// rows (ERR_SURREAL_011), so a legacy entry's object has no such key.
+#[tokio::test]
+async fn legacy_allowlist_entry_without_delegation_flag_reloads_as_strict() {
+    let (state, _db_guard) = setup_test_state().await;
+    let id = uuid::Uuid::new_v4().to_string();
+    // Seed an entry object that OMITS `allow_in_delegated_runs` entirely.
+    let query = format!(
+        "CREATE agent:`{id}` CONTENT {{ \
+            id: '{id}', name: 'Legacy', lifecycle: 'permanent', \
+            llm: {{ provider: 'mistral', model: 'large', temperature: 0.7, max_tokens: 1000 }}, \
+            tools: [], mcp_servers: [], skills: [], folders: [], \
+            require_file_confirmation: false, system_prompt: 'p', \
+            max_tool_iterations: 50, reasoning_effort: NONE, kind: NONE, \
+            auto_analyze_reports: false, mcp_tool_allowlist: $a, \
+            created_at: time::now(), updated_at: time::now() \
+        }}"
+    );
+    state
+        .db
+        .execute_with_params(
+            &query,
+            vec![(
+                "a".to_string(),
+                serde_json::json!([{ "server_id": "srv-legacy", "tools": ["read"] }]),
+            )],
+        )
+        .await
+        .expect("seed legacy agent");
+
+    let back = load_allowlist(&state.db, &id).await;
+    assert_eq!(back.len(), 1);
+    assert_eq!(back[0].server_id, "srv-legacy");
+    assert_eq!(back[0].tools, vec!["read"]);
+    assert!(
+        !back[0].allow_in_delegated_runs,
+        "a legacy entry missing the field must reload as strict (false), not arm delegation"
+    );
 }

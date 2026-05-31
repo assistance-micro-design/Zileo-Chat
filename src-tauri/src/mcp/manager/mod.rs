@@ -210,6 +210,20 @@ impl MCPManager {
     /// Gets a server by ID
     ///
     /// Checks both running servers (via O(1) lookup) and configured servers (in database).
+    /// Resolves an MCP server's immutable id from its (mutable) display name.
+    ///
+    /// The agent tool id is `mcp__<server_name>__<tool>`, but the detached
+    /// allowlist (R-SEC-4) is keyed by `server_id` (survives a rename). This
+    /// reverse lookup bridges the two. Returns `None` when no running server
+    /// carries that name.
+    pub async fn get_server_id_by_name(&self, name: &str) -> Option<String> {
+        let id_lookup = self.id_to_name.read().await;
+        id_lookup
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(id, _)| id.clone())
+    }
+
     pub async fn get_server(&self, id: &str) -> Option<MCPServer> {
         // O(1) lookup via id_to_name table
         let name = {

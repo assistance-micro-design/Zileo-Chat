@@ -623,7 +623,7 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 // Load agents from database
-                let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, folders, require_file_confirmation, system_prompt, max_tool_iterations, reasoning_effort, kind, auto_analyze_reports FROM agent";
+                let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, folders, require_file_confirmation, system_prompt, max_tool_iterations, reasoning_effort, kind, auto_analyze_reports, mcp_tool_allowlist FROM agent";
                 let results: Vec<serde_json::Value> = match db.db.query(query).await {
                     Ok(mut r) => r.take(0).unwrap_or_default(),
                     Err(e) => {

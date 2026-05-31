@@ -490,6 +490,7 @@ async fn test_inner_task_aborted_when_outer_future_dropped() {
             reasoning_effort: None,
             kind: None,
             auto_analyze_reports: false,
+            mcp_tool_allowlist: Vec::new(),
         },
         ticks: ticks.clone(),
     });
