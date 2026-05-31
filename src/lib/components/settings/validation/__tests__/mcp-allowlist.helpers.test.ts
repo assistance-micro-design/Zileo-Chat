@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { McpToolAllowlistEntry } from '$types/agent';
+import type { MCPServerStatus } from '$types/mcp';
 import {
 	buildMcpToolAllowlist,
+	filterEditableMcpServers,
 	preservedMcpAllowlistEntries,
 	seedMcpArmingState,
 	type McpArmingState
@@ -105,5 +107,33 @@ describe('seedMcpArmingState / preservedMcpAllowlistEntries', () => {
 		]);
 		// A legacy agent with no allowlist preserves nothing.
 		expect(preservedMcpAllowlistEntries([], ['srv-1'])).toEqual([]);
+	});
+});
+
+describe('filterEditableMcpServers', () => {
+	function srv(name: string, status: MCPServerStatus, id = `${name}-id`) {
+		return { id, name, status };
+	}
+
+	it('keeps only RUNNING servers ASSIGNED to the agent (intersection by name)', () => {
+		const servers = [
+			srv('alpha', 'running'),
+			srv('beta', 'running'),
+			srv('gamma', 'stopped'), // assigned but not running -> excluded (preserved instead)
+			srv('delta', 'running') // running but not assigned -> excluded (preserved instead)
+		];
+		const out = filterEditableMcpServers(servers, ['alpha', 'beta', 'gamma']);
+		expect(out.map((s) => s.name)).toEqual(['alpha', 'beta']);
+		// The immutable id is preserved on the returned objects (used for enumerableIds).
+		expect(out.map((s) => s.id)).toEqual(['alpha-id', 'beta-id']);
+	});
+
+	it('returns [] when the agent has no assigned MCP servers', () => {
+		expect(filterEditableMcpServers([srv('alpha', 'running')], [])).toEqual([]);
+	});
+
+	it('returns [] when none of the assigned servers are running', () => {
+		const servers = [srv('alpha', 'stopped'), srv('beta', 'error')];
+		expect(filterEditableMcpServers(servers, ['alpha', 'beta'])).toEqual([]);
 	});
 });

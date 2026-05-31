@@ -372,11 +372,12 @@
 	"validation_mcp_allowlist_section": "Auto-approbation MCP (exécutions autonomes)",
 	"validation_mcp_allowlist_help": "Armez les outils MCP que cet agent peut appeler SANS confirmation lors des exécutions autonomes (détachées) : auto-analyse, composition de carte et relances de worker. Rien n'est armé par défaut.",
 	"validation_mcp_allowlist_warning": "Les outils armés s'exécutent sans humain dans la boucle lors des exécutions détachées. Activer « autoriser en délégation » les expose aussi quand un autre agent autonome délègue à celui-ci.",
-	"validation_mcp_allowlist_none": "Aucun serveur MCP en cours d'exécution. Démarrez un serveur dans la section Paramètres MCP pour armer ses outils.",
+	"validation_mcp_allowlist_none": "Aucun serveur MCP assigné à cet agent n'est en cours d'exécution. Assignez des serveurs à l'agent (dans ses réglages) et démarrez-les pour armer leurs outils.",
 	"validation_mcp_allowlist_no_tools": "Ce serveur n'expose aucun outil.",
+	"validation_mcp_allowlist_armed_count": "{armed}/{total} armés",
 	"validation_mcp_allowlist_allow_delegated": "Autoriser ces outils armés en délégation",
 	"validation_mcp_allowlist_allow_delegated_help": "Quand un autre agent autonome délègue une tâche à celui-ci, ses outils armés sur ce serveur sont aussi auto-approuvés. Désactivé = armés uniquement quand cet agent s'exécute directement.",
-	"validation_mcp_allowlist_stopped_note": "Les outils armés sur des serveurs arrêtés ou supprimés sont préservés mais non modifiables ici. Démarrez le serveur pour changer ses outils armés.",
+	"validation_mcp_allowlist_stopped_note": "Les outils armés sur des serveurs non assignés à cet agent, ou arrêtés / supprimés, sont préservés mais non modifiables ici — ils ne sont jamais désarmés silencieusement. Assignez et démarrez un serveur pour modifier ses outils armés.",
 	"validation_mcp_allowlist_delegated_badge": "délégation autorisée",
 
 	"validation_authorizations_title": "Autorisations par agent",
@@ -388,6 +389,8 @@
 	"validation_authorizations_dirty": "Modifications non enregistrées",
 	"validation_authorizations_save": "Enregistrer les autorisations de {name}",
 	"validation_authorizations_saved": "Autorisations enregistrées",
+	"validation_authorizations_detached_scope": "L'allowlist MCP ci-dessous régit les exécutions AUTONOMES (détachées) : auto-analyse / composition de carte Kanban, le planificateur et les ré-exécutions de worker. Elle est TOUJOURS appliquée, indépendamment du mode de validation.",
+	"validation_authorizations_attended_scope": "Le mode de validation global ({mode}) régit les exécutions INTERACTIVES : il décide si un modal de confirmation s'affiche. Il NE s'applique PAS aux exécutions détachées.",
 	"validation_require_file_confirmation": "Confirmation pour les opérations fichier",
 	"validation_require_file_confirmation_desc": "Demander l'approbation de l'utilisateur avant les opérations destructives (suppression, écrasement, déplacement, renommage)",
 

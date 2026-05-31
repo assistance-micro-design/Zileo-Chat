@@ -34,10 +34,15 @@ MCP servers are preserved verbatim by the allowlist helpers.
 	import { Button, Select, type SelectOption } from '$lib/components/ui';
 	import { agents, agentStore } from '$lib/stores/agents';
 	import { loadServers } from '$lib/stores/mcp';
+	import {
+		validationSettingsStore,
+		settings as validationSettings
+	} from '$lib/stores/validation-settings';
 	import { getErrorMessage } from '$lib/utils/error';
 	import type { AgentConfig, McpToolAllowlistEntry } from '$types/agent';
 	import type { MCPServer } from '$types/mcp';
 	import AgentMcpAllowlist from './AgentMcpAllowlist.svelte';
+	import { filterEditableMcpServers } from './mcp-allowlist.helpers';
 
 	let selectedAgentId = $state('');
 	let loadedConfig = $state<AgentConfig | null>(null);
@@ -62,8 +67,20 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		$agents.map((a) => ({ value: a.id, label: a.name }))
 	);
 
+	/**
+	 * Localized label of the current GLOBAL validation mode — shown for context
+	 * only. The allowlist is NEVER coupled to it (detached vs attended runs are
+	 * governed independently).
+	 */
+	const currentModeLabel = $derived(
+		$validationSettings ? $i18n(`validation_mode_${$validationSettings.mode}`) : null
+	);
+
 	onMount(() => {
 		agentStore.loadAgents();
+		// Load the global validation mode for the read-only context block (a
+		// sibling section may already have loaded it; the store is idempotent).
+		void validationSettingsStore.loadSettings().catch(() => {});
 	});
 
 	/**
@@ -89,7 +106,10 @@ MCP servers are preserved verbatim by the allowlist helpers.
 			// latest selection may write the buffers (anti seed-race / cross-write).
 			if (reqId !== seq) return;
 			loadedConfig = config;
-			runningServers = servers.filter((s) => s.status === 'running');
+			// Editable servers = RUNNING and ASSIGNED to this agent (by name).
+			// De-selected or stopped servers are not editable here; their armed
+			// tools fall through to preserved read-only (never disarmed — Piège 2).
+			runningServers = filterEditableMcpServers(servers, config.mcp_servers);
 			allowlistDraft = [...(config.mcp_tool_allowlist ?? [])];
 			requireFileConfirmation = config.require_file_confirmation ?? true;
 		} catch (e) {
@@ -165,6 +185,13 @@ MCP servers are preserved verbatim by the allowlist helpers.
 	{#if loading}
 		<p class="auth-info">{$i18n('validation_authorizations_loading')}</p>
 	{:else if loadedConfig}
+		<div class="mode-context" role="note">
+			<p class="mode-context-line">{$i18n('validation_authorizations_detached_scope')}</p>
+			<p class="mode-context-line">
+				{$i18n('validation_authorizations_attended_scope', { mode: currentModeLabel ?? '—' })}
+			</p>
+		</div>
+
 		<label class="checkbox-item">
 			<input
 				type="checkbox"
@@ -221,6 +248,23 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
 		font-style: italic;
+	}
+
+	.mode-context {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		padding: var(--spacing-sm) var(--spacing-md);
+		background: var(--color-bg-secondary);
+		border-left: 3px solid var(--color-accent, var(--color-border));
+		border-radius: var(--border-radius-sm);
+	}
+
+	.mode-context-line {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		line-height: 1.5;
 	}
 
 	.checkbox-item {

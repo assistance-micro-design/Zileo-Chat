@@ -372,11 +372,12 @@
 	"validation_mcp_allowlist_section": "MCP auto-approval (unattended runs)",
 	"validation_mcp_allowlist_help": "Arm the MCP tools this agent may call WITHOUT a confirmation prompt during unattended (detached) runs: auto-analyze, compose-card and worker re-runs. Nothing is armed by default.",
 	"validation_mcp_allowlist_warning": "Armed tools run with no human in the loop during detached runs. Enabling \"allow in delegation\" also exposes them when another autonomous agent delegates to this one.",
-	"validation_mcp_allowlist_none": "No running MCP servers. Start a server in the MCP Settings section to arm its tools.",
+	"validation_mcp_allowlist_none": "No MCP server assigned to this agent is currently running. Assign servers to the agent (in its settings) and start them to arm their tools.",
 	"validation_mcp_allowlist_no_tools": "This server exposes no tools.",
+	"validation_mcp_allowlist_armed_count": "{armed}/{total} armed",
 	"validation_mcp_allowlist_allow_delegated": "Allow these armed tools in delegated runs",
 	"validation_mcp_allowlist_allow_delegated_help": "When another autonomous agent delegates a task to this one, its armed tools on this server are also auto-approved. Off = armed only when this agent runs directly.",
-	"validation_mcp_allowlist_stopped_note": "Armed tools on stopped or removed servers are preserved but cannot be edited here. Start the server to change its armed tools.",
+	"validation_mcp_allowlist_stopped_note": "Armed tools on servers that are not assigned to this agent, or are stopped / removed, are preserved but not editable here — they are never silently disarmed. Assign and start a server to edit its armed tools.",
 	"validation_mcp_allowlist_delegated_badge": "delegation-allowed",
 
 	"validation_authorizations_title": "Per-agent authorizations",
@@ -388,6 +389,8 @@
 	"validation_authorizations_dirty": "Unsaved changes",
 	"validation_authorizations_save": "Save {name}'s authorizations",
 	"validation_authorizations_saved": "Authorizations saved",
+	"validation_authorizations_detached_scope": "The MCP allowlist below governs UNATTENDED (detached) runs — Kanban auto-analyze / compose-card, the scheduler, and worker re-runs. It is ALWAYS enforced, independently of the validation mode.",
+	"validation_authorizations_attended_scope": "The global validation mode ({mode}) governs INTERACTIVE runs: it decides whether a confirmation modal is shown. It does NOT apply to detached runs.",
 	"validation_require_file_confirmation": "Require confirmation for file operations",
 	"validation_require_file_confirmation_desc": "Ask for user approval before destructive file operations (delete, overwrite, move, rename)",
 

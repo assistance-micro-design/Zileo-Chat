@@ -38,6 +38,7 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
+	import { ChevronRight } from '@lucide/svelte';
 	import type { MCPServer } from '$types/mcp';
 	import type { McpToolAllowlistEntry } from '$types/agent';
 	import {
@@ -57,11 +58,34 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 
 	let { runningServers, value, onchange }: Props = $props();
 
+	/**
+	 * EPHEMERAL UI-only expansion state, keyed by immutable server id (default
+	 * collapsed). It is NEVER part of `value` and NEVER triggers `onchange`:
+	 * expanding/collapsing changes nothing in the allowlist (the component stays
+	 * fully controlled — it derives from `value`).
+	 */
+	let expanded = $state<Record<string, boolean>>({});
+
 	/** Immutable ids of the servers the user can edit (running = enumerable). */
 	const enumerableIds = $derived(runningServers.map((s) => s.id));
 
 	/** Existing entries for non-enumerable (stopped/absent) servers — read-only. */
 	const preserved = $derived(preservedMcpAllowlistEntries(value, enumerableIds));
+
+	/** Whether the server's tool list is expanded (default false = collapsed). */
+	function isExpanded(serverId: string): boolean {
+		return expanded[serverId] ?? false;
+	}
+
+	/** Toggles the server's expansion — pure UI state, never touches `value`. */
+	function toggleExpanded(serverId: string): void {
+		expanded[serverId] = !isExpanded(serverId);
+	}
+
+	/** Number of this server's listed tools that are currently armed. */
+	function countArmed(server: MCPServer): number {
+		return server.tools.filter((t) => isToolArmed(server.id, t.name)).length;
+	}
 
 	/** Whether `tool` is armed for `serverId` in the current value. */
 	function isToolArmed(serverId: string, tool: string): boolean {
@@ -106,30 +130,38 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 	{:else}
 		{#each runningServers as server (server.id)}
 			<div class="server-block">
-				<div class="server-header">
+				<button
+					type="button"
+					class="server-summary"
+					aria-expanded={isExpanded(server.id)}
+					aria-controls="mcp-srv-body-{server.id}"
+					onclick={() => toggleExpanded(server.id)}
+				>
+					<span class={['chevron', isExpanded(server.id) && 'chevron-open']} aria-hidden="true">
+						<ChevronRight size={16} />
+					</span>
 					<span class="server-name">{server.name}</span>
-				</div>
+					<span class="armed-count">
+						{$i18n('validation_mcp_allowlist_armed_count', {
+							armed: countArmed(server),
+							total: server.tools.length
+						})}
+					</span>
+				</button>
 
 				{#if server.tools.length === 0}
-					<p class="server-no-tools">{$i18n('validation_mcp_allowlist_no_tools')}</p>
+					<p id="mcp-srv-body-{server.id}" class="server-no-tools" hidden={!isExpanded(server.id)}>
+						{$i18n('validation_mcp_allowlist_no_tools')}
+					</p>
 				{:else}
-					<div class="tool-group">
-						{#each server.tools as tool (tool.name)}
-							<label class="tool-item">
-								<input
-									type="checkbox"
-									checked={isToolArmed(server.id, tool.name)}
-									onchange={() => toggleTool(server.id, tool.name)}
-								/>
-								<span class="tool-name">{tool.name}</span>
-							</label>
-						{/each}
-					</div>
-
+					<!-- Delegation toggle stays visible without expanding (it governs the
+					     whole server). Disabled when nothing is armed: it only takes effect
+					     once at least one tool is armed (otherwise the entry is pruned). -->
 					<label class="delegated-item">
 						<input
 							type="checkbox"
 							checked={isDelegatedAllowed(server.id)}
+							disabled={countArmed(server) === 0}
 							onchange={() => toggleDelegated(server.id)}
 						/>
 						<div class="delegated-content">
@@ -141,6 +173,19 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 							>
 						</div>
 					</label>
+
+					<div id="mcp-srv-body-{server.id}" class="tool-group" hidden={!isExpanded(server.id)}>
+						{#each server.tools as tool (tool.name)}
+							<label class="tool-item">
+								<input
+									type="checkbox"
+									checked={isToolArmed(server.id, tool.name)}
+									onchange={() => toggleTool(server.id, tool.name)}
+								/>
+								<span class="tool-name">{tool.name}</span>
+							</label>
+						{/each}
+					</div>
 				{/if}
 			</div>
 		{/each}
@@ -199,16 +244,42 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		border-radius: var(--border-radius-md);
 	}
 
-	.server-header {
+	.server-summary {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
+		gap: var(--spacing-sm);
+		width: 100%;
+		padding: 0;
+		background: none;
+		border: none;
+		cursor: pointer;
+		text-align: left;
+		color: inherit;
+		font: inherit;
+	}
+
+	.chevron {
+		display: inline-flex;
+		flex-shrink: 0;
+		color: var(--color-text-secondary);
+		transition: transform 0.15s ease;
+	}
+
+	.chevron-open {
+		transform: rotate(90deg);
 	}
 
 	.server-name {
 		font-weight: 600;
 		font-size: var(--font-size-sm);
 		color: var(--color-text-primary);
+	}
+
+	.armed-count {
+		margin-left: auto;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+		white-space: nowrap;
 	}
 
 	.server-no-tools {

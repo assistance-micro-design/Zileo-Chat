@@ -1,4 +1,5 @@
 import type { McpToolAllowlistEntry } from '$types/agent';
+import type { MCPServerStatus } from '$types/mcp';
 
 /**
  * Pure, framework-agnostic helpers that turn an editable per-server arming
@@ -98,4 +99,24 @@ export function buildMcpToolAllowlist(
 		.filter((e) => e.tools.length > 0);
 
 	return [...edited, ...preservedMcpAllowlistEntries(existing, enumerableServerIds)];
+}
+
+/**
+ * The MCP servers that are EDITABLE for an agent in the allowlist UI: those that
+ * are currently RUNNING (tools listable) AND assigned to the agent
+ * (`agent.mcp_servers`, which stores server NAMES — matched against
+ * `MCPServer.name`). Everything else (stopped/removed servers, or running
+ * servers de-selected from the agent) falls outside this set and is therefore
+ * handled read-only by {@link preservedMcpAllowlistEntries} — its armed tools
+ * are preserved verbatim, never silently disarmed (Piège 2).
+ *
+ * Generic over the server shape so callers keep their concrete `MCPServer` type
+ * on the result (used by the component to derive `enumerableIds`).
+ */
+export function filterEditableMcpServers<T extends { name: string; status: MCPServerStatus }>(
+	servers: T[],
+	assignedNames: string[]
+): T[] {
+	const assigned = new Set(assignedNames);
+	return servers.filter((s) => s.status === 'running' && assigned.has(s.name));
 }
