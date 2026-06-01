@@ -101,11 +101,29 @@ pub mod mcp {
     /// Maximum cumulative size, in bytes, of serialized MCP results a single
     /// agent run may accumulate (50 MiB).
     ///
-    /// Measured on the post-strip serialized tool result (the same string fed
-    /// to the LLM, persisted, and streamed); image sidecar bytes are accounted
-    /// for separately by the attachment path. Bounds prompt-context inflation
-    /// and memory growth from a server returning very large payloads.
+    /// Measured on each MCP result's post-strip sink byte size (serialized
+    /// result + error — the bytes that actually reach the LLM, the DB, and the
+    /// stream); image sidecar bytes are accounted for separately by the
+    /// attachment path. Bounds prompt-context inflation and memory growth from a
+    /// server returning very large payloads, whether as a success result or an
+    /// error.
     pub const MCP_MAX_RESULT_BYTES_PER_RUN: usize = 50 * 1024 * 1024;
+
+    /// Maximum sink byte size (serialized result + error) of a SINGLE MCP tool
+    /// result (10 MiB).
+    ///
+    /// R-SEC-10.1 — closes the [`MCP_MAX_RESULT_BYTES_PER_RUN`] soft-ceiling: the
+    /// cumulative budget is a PRE-call gate, so the FIRST oversized result would
+    /// otherwise pass through whole (e.g. a compromised server's one-shot giant
+    /// payload injected into the prompt once). Any MCP result larger than this is
+    /// REPLACED by an error instead of being injected into the run context — never
+    /// truncated (truncation corrupts the JSON and hides info). SUCCESS-AGNOSTIC:
+    /// a giant ERROR payload (carried in `result.error`) is capped identically to
+    /// a giant success payload, since a compromised server controls both. Sized
+    /// generously for a large legitimate text result yet well under the 50 MiB
+    /// cumulative budget; past a few MiB a single result already overflows any
+    /// useful LLM context anyway. MCP-only (local tools are user-trusted).
+    pub const MCP_MAX_SINGLE_RESULT_BYTES: usize = 10 * 1024 * 1024;
 }
 
 /// Centralized validation constants for Tauri commands.

@@ -18,7 +18,9 @@
 //! for both local tools and MCP tools.
 
 use crate::agents::prompt::MCPServerSummary;
-use crate::constants::mcp::{MCP_MAX_CALLS_PER_RUN, MCP_MAX_RESULT_BYTES_PER_RUN};
+use crate::constants::mcp::{
+    MCP_MAX_CALLS_PER_RUN, MCP_MAX_RESULT_BYTES_PER_RUN, MCP_MAX_SINGLE_RESULT_BYTES,
+};
 use crate::mcp::MCPManager;
 use crate::models::agent::AgentKind;
 use crate::models::function_calling::{FunctionCall, FunctionCallResult};
@@ -366,8 +368,8 @@ fn is_mcp_tool_armed(
 ///
 /// `calls_so_far` is the number of MCP calls already attempted in the run
 /// (EXCLUDING the one about to be made), and `bytes_so_far` is the cumulative
-/// serialized size of all prior successful MCP results. Returns `Err` with a
-/// human-readable refusal once either the per-run call cap
+/// sink byte size (serialized result + error) of all prior MCP results — success
+/// AND error. Returns `Err` with a human-readable refusal once either the call cap
 /// ([`MCP_MAX_CALLS_PER_RUN`]) or the cumulative byte budget
 /// ([`MCP_MAX_RESULT_BYTES_PER_RUN`]) is reached.
 ///
@@ -393,11 +395,79 @@ fn mcp_run_budget_check(calls_so_far: usize, bytes_so_far: usize) -> Result<(), 
     Ok(())
 }
 
+/// R-SEC-10.1: total bytes a tool result actually pushes to the run's sinks —
+/// the serialized `result.result` PLUS the `result.error` string.
+///
+/// BOTH fields reach the LLM tool message (`result_to_string` emits
+/// `{"error": ...}` for a failure), the persisted row (`output_result` +
+/// `error_message`), and the live stream chunk. Measuring only the serialized
+/// result misses a giant ERROR payload: `FunctionCallResult::failure` sets
+/// `result` to `Null` (serializes to `"null"`, ~4 bytes) and routes the
+/// server's (possibly giant) message into `error`. Summing both is the size the
+/// per-result cap and the cumulative budget must use. `serialized_result` is the
+/// caller's already-computed `to_string(result.result)` (no re-serialization).
+pub(crate) fn result_sink_byte_len(serialized_result: &str, error: Option<&str>) -> usize {
+    serialized_result.len() + error.map_or(0, str::len)
+}
+
+/// R-SEC-10.1 pure decision: must a just-returned MCP result be replaced for
+/// exceeding the per-result size cap?
+///
+/// Returns `Some(refusal_message)` when an MCP result's sink byte size
+/// (`result_byte_len` — serialized result + error, via [`result_sink_byte_len`],
+/// measured post image-strip) exceeds [`MCP_MAX_SINGLE_RESULT_BYTES`] — the
+/// caller then swaps the giant payload for that error before it reaches the LLM
+/// tool message, the persisted `tool_execution` row, or the live stream chunk.
+/// Returns `None` (pass through unchanged) for a local-tool result (user-trusted,
+/// out of scope) or a result within the cap.
+///
+/// SUCCESS-AGNOSTIC by design: under the R-SEC-10 threat model a compromised MCP
+/// server controls its JSON-RPC response size on BOTH paths, so a giant ERROR
+/// payload (`success == false`, carried in `result.error`) is just as dangerous
+/// as a giant success payload and is capped identically. Replacing a giant error
+/// with a small capped error is acceptable (the call already failed).
+///
+/// Complements the cumulative [`mcp_run_budget_check`]: this is a POST-call cap
+/// on the CURRENT result; the cumulative budget is the PRE-call gate for the
+/// NEXT call. The two coexist — neither truncates a payload.
+pub(crate) fn mcp_oversized_result_refusal(
+    is_mcp_tool: bool,
+    result_byte_len: usize,
+) -> Option<String> {
+    if is_mcp_tool && result_byte_len > MCP_MAX_SINGLE_RESULT_BYTES {
+        Some(format!(
+            "MCP result exceeded the per-result size limit of {MCP_MAX_SINGLE_RESULT_BYTES} bytes; \
+             refused to protect the run context."
+        ))
+    } else {
+        None
+    }
+}
+
+/// R-SEC-10 pure accounting: bytes a just-returned tool result contributes to the
+/// cumulative per-run MCP byte budget.
+///
+/// Counts EVERY MCP result — success AND error — because a compromised server
+/// controls error size too; gating on success would let a flood of medium-sized
+/// error payloads (each under the per-result cap) bypass the cumulative budget.
+/// Local-tool results contribute nothing (out of scope). Call with the POST
+/// per-result-cap sink byte length (`result_byte_len` from [`result_sink_byte_len`])
+/// so an oversized result charges only its (small) replacement, never the giant
+/// original — and so a giant error (carried in `result.error`) is charged in full.
+pub(crate) fn mcp_result_budget_charge(is_mcp_tool: bool, result_byte_len: usize) -> usize {
+    if is_mcp_tool {
+        result_byte_len
+    } else {
+        0
+    }
+}
+
 /// Executes a single function call (local or MCP tool).
 ///
-/// `mcp_result_bytes` is the cumulative serialized size of all prior successful
-/// MCP results in this run, consulted by the R-SEC-10 per-run budget gate
-/// (the caller accumulates it in `iteration.rs` after each successful MCP call).
+/// `mcp_result_bytes` is the cumulative sink byte size (serialized result +
+/// error) of all prior MCP results in this run — success AND error — consulted by
+/// the R-SEC-10 per-run budget gate (the caller accumulates it in `iteration.rs`
+/// after each MCP call via [`result_sink_byte_len`] + [`mcp_result_budget_charge`]).
 pub(crate) async fn execute_function_call(
     call: &FunctionCall,
     ctx: &FunctionCallContext<'_>,
@@ -1089,6 +1159,101 @@ mod tests {
             err.contains("call limit reached"),
             "the call cap must take precedence in the refusal message, got: {err:?}"
         );
+    }
+
+    #[test]
+    fn oversized_mcp_result_is_refused_success_or_error() {
+        // R-SEC-10.1: an MCP result past the per-result cap is replaced by an
+        // actionable error (closes the cumulative soft-ceiling). SUCCESS-AGNOSTIC:
+        // the wiring serializes the result the same way whether the call
+        // succeeded or errored, so a compromised server's giant ERROR payload is
+        // capped identically to a giant success payload.
+        let refusal = mcp_oversized_result_refusal(true, MCP_MAX_SINGLE_RESULT_BYTES + 1)
+            .expect("an oversized MCP result must be refused");
+        assert!(
+            refusal.contains("per-result size limit")
+                && refusal.contains(&MCP_MAX_SINGLE_RESULT_BYTES.to_string()),
+            "the refusal must name the per-result cap, got: {refusal:?}"
+        );
+    }
+
+    #[test]
+    fn mcp_result_at_or_under_cap_passes_whole() {
+        // Boundary: exactly the cap passes (strict `>`), as does anything smaller.
+        assert!(mcp_oversized_result_refusal(true, MCP_MAX_SINGLE_RESULT_BYTES).is_none());
+        assert!(mcp_oversized_result_refusal(true, 0).is_none());
+    }
+
+    #[test]
+    fn oversized_local_tool_result_is_out_of_scope() {
+        // Local tools are user-trusted; the per-result MCP cap must not touch them
+        // (the R-SEC-10 threat model is a compromised MCP server, not local tools).
+        assert!(mcp_oversized_result_refusal(false, MCP_MAX_SINGLE_RESULT_BYTES * 4).is_none());
+    }
+
+    #[test]
+    fn mcp_result_budget_charge_counts_every_mcp_result() {
+        // R-SEC-10 twin fix: the cumulative budget charges EVERY MCP result, not
+        // just successful ones — a compromised server can flood medium-sized ERROR
+        // payloads (each under the per-result cap) that would otherwise bypass the
+        // cumulative gate. Success-agnostic (no success parameter).
+        assert_eq!(mcp_result_budget_charge(true, 1234), 1234);
+        assert_eq!(mcp_result_budget_charge(true, 0), 0);
+    }
+
+    #[test]
+    fn local_tool_result_charges_nothing_to_mcp_budget() {
+        // A giant LOCAL result is out of scope: it charges nothing to the MCP
+        // cumulative budget (and is not per-result capped either).
+        assert_eq!(
+            mcp_result_budget_charge(false, MCP_MAX_SINGLE_RESULT_BYTES * 4),
+            0
+        );
+    }
+
+    #[test]
+    fn result_sink_byte_len_includes_the_error_payload_not_just_the_result() {
+        // The inert-twin bug: a giant MCP error routes its payload through
+        // `.error` while `.result` is Null, so measuring only the serialized
+        // result ("null", ~4 bytes) misses it. result_sink_byte_len must sum BOTH
+        // fields — this is the size that actually reaches all three sinks.
+        let giant = "x".repeat(MCP_MAX_SINGLE_RESULT_BYTES + 1);
+        let failure = FunctionCallResult::failure("id", "tool", giant);
+        let serialized_result =
+            serde_json::to_string(&failure.result).unwrap_or_else(|_| "{}".to_string());
+        // What the OLD (inert) measure saw — the serialized Null result is tiny.
+        assert!(
+            serialized_result.len() < 16,
+            "a failure's result serializes to ~`null`, got {}",
+            serialized_result.len()
+        );
+        // The real sink size includes the giant `.error` → over the cap, so the
+        // per-result refusal now fires for a giant error (it did not before).
+        let sink_len = result_sink_byte_len(&serialized_result, failure.error.as_deref());
+        assert!(
+            sink_len > MCP_MAX_SINGLE_RESULT_BYTES,
+            "the per-result measure must include the error payload, got {sink_len}"
+        );
+        assert!(
+            mcp_oversized_result_refusal(true, sink_len).is_some(),
+            "a giant MCP error must be refused once measured correctly"
+        );
+    }
+
+    #[test]
+    fn result_sink_byte_len_of_a_success_is_just_the_result() {
+        // A success carries no error; the sink size is the serialized result.
+        assert_eq!(result_sink_byte_len("hello", None), 5);
+    }
+
+    #[test]
+    fn small_mcp_error_passes_the_cap_but_is_still_charged() {
+        // A normal-size MCP error is within the per-result cap (passes) but its
+        // bytes still count toward the cumulative budget (success-agnostic).
+        let len = result_sink_byte_len("null", Some("boom")); // 4 + 4
+        assert_eq!(len, 8);
+        assert!(mcp_oversized_result_refusal(true, len).is_none());
+        assert_eq!(mcp_result_budget_charge(true, len), 8);
     }
 
     #[test]
