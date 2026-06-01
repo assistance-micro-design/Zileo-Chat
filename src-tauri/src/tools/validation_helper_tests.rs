@@ -745,3 +745,204 @@ async fn record_security_refusal_metadata_carries_reason_server_and_delegated() 
     assert_eq!(meta["server_id"], "srv-id");
     assert_eq!(meta["delegated"], true);
 }
+
+// =====================================================
+// GAP-1 — nominal path: the user decides BEFORE the timeout window.
+// Characterization tests locking the happy path (no test covered it before):
+// a user-set status must surface as a USER decision (via_timeout = false) and
+// the stored row must be left exactly as the user set it.
+// =====================================================
+
+#[tokio::test]
+async fn test_user_approves_before_timeout_returns_user_decision() {
+    let (helper, _tmp) = make_test_helper().await;
+    let id = "vh-user-approve-intime";
+    insert_pending_validation(&helper.db, id).await;
+    // User approves while the request is still pending.
+    helper
+        .db
+        .execute(&format!(
+            "UPDATE validation_request:`{}` SET status = 'approved'",
+            id
+        ))
+        .await
+        .expect("user approve");
+
+    // Generous timeout: the poll must see 'approved' immediately and return it
+    // as a USER decision, never reaching the timeout behavior.
+    let outcome = helper
+        .wait_for_validation(id, Duration::from_secs(30), TimeoutBehavior::Reject)
+        .await
+        .expect("wait returns Ok");
+
+    assert_eq!(outcome.decision, WaitDecision::Approved);
+    assert!(
+        !outcome.via_timeout,
+        "a user decision must not be flagged via_timeout"
+    );
+    assert_eq!(
+        read_validation_status(&helper.db, id).await.as_deref(),
+        Some("approved")
+    );
+}
+
+#[tokio::test]
+async fn test_user_rejects_before_timeout_returns_user_decision() {
+    let (helper, _tmp) = make_test_helper().await;
+    let id = "vh-user-reject-intime";
+    insert_pending_validation(&helper.db, id).await;
+    helper
+        .db
+        .execute(&format!(
+            "UPDATE validation_request:`{}` SET status = 'rejected'",
+            id
+        ))
+        .await
+        .expect("user reject");
+
+    let outcome = helper
+        .wait_for_validation(id, Duration::from_secs(30), TimeoutBehavior::Approve)
+        .await
+        .expect("wait returns Ok");
+
+    assert_eq!(outcome.decision, WaitDecision::Rejected);
+    assert!(
+        !outcome.via_timeout,
+        "a user decision must not be flagged via_timeout"
+    );
+    assert_eq!(
+        read_validation_status(&helper.db, id).await.as_deref(),
+        Some("rejected")
+    );
+}
+
+// =====================================================
+// GAP-2 — race / fail-open: the timeout behavior must NOT clobber a decision
+// the user already recorded in the final poll window. First-writer-wins.
+// These reproduce the clobber on the CURRENT code (unconditional UPDATE).
+// =====================================================
+
+#[tokio::test]
+async fn test_timeout_reject_does_not_clobber_user_approval() {
+    let (helper, _tmp) = make_test_helper().await;
+    let id = "vh-race-user-approved";
+    insert_pending_validation(&helper.db, id).await;
+    // The user approved in the last poll window (status already 'approved').
+    helper
+        .db
+        .execute(&format!(
+            "UPDATE validation_request:`{}` SET status = 'approved'",
+            id
+        ))
+        .await
+        .expect("user approve");
+
+    // Timeout fires with Reject behavior. It MUST observe the existing decision
+    // and leave it intact rather than overwriting 'approved' -> 'rejected'.
+    let outcome = helper
+        .apply_timeout_behavior(id, Duration::from_millis(1), &TimeoutBehavior::Reject)
+        .await;
+
+    assert_eq!(
+        read_validation_status(&helper.db, id).await.as_deref(),
+        Some("approved"),
+        "timeout Reject must not clobber the user's approval"
+    );
+    assert_eq!(
+        outcome.decision,
+        WaitDecision::Approved,
+        "outcome must reflect the surviving user decision"
+    );
+    assert!(
+        !outcome.via_timeout,
+        "a surviving user decision must not be audited as a timeout decision"
+    );
+}
+
+#[tokio::test]
+async fn test_timeout_approve_does_not_clobber_user_rejection() {
+    let (helper, _tmp) = make_test_helper().await;
+    let id = "vh-race-user-rejected";
+    insert_pending_validation(&helper.db, id).await;
+    // The user rejected in the last poll window (status already 'rejected').
+    helper
+        .db
+        .execute(&format!(
+            "UPDATE validation_request:`{}` SET status = 'rejected'",
+            id
+        ))
+        .await
+        .expect("user reject");
+
+    // Timeout fires with Approve behavior. It MUST NOT flip a security rejection
+    // into an approval.
+    let outcome = helper
+        .apply_timeout_behavior(id, Duration::from_millis(1), &TimeoutBehavior::Approve)
+        .await;
+
+    assert_eq!(
+        read_validation_status(&helper.db, id).await.as_deref(),
+        Some("rejected"),
+        "timeout Approve must not clobber the user's rejection"
+    );
+    assert_eq!(
+        outcome.decision,
+        WaitDecision::Rejected,
+        "outcome must reflect the surviving user decision"
+    );
+    assert!(
+        !outcome.via_timeout,
+        "a surviving user decision must not be audited as a timeout decision"
+    );
+}
+
+// =====================================================
+// GAP-2 — user-command side guard. `resolve_validation_if_pending` is the shared
+// first-writer-wins primitive used by both apply_timeout_behavior AND the user
+// approve/reject commands. This locks the inverse direction (a late user command
+// must not clobber a decision the timeout path already recorded).
+// =====================================================
+
+#[tokio::test]
+async fn test_resolve_if_pending_first_writer_wins() {
+    let (helper, _tmp) = make_test_helper().await;
+
+    // A still-pending row -> the resolver wins and the status is applied.
+    let id_win = "vh-resolve-pending";
+    insert_pending_validation(&helper.db, id_win).await;
+    let won = resolve_validation_if_pending(&helper.db, id_win, "approved", None, vec![])
+        .await
+        .expect("resolve ok");
+    assert!(won.won, "resolving a pending row must win");
+    assert_eq!(won.effective, "approved");
+    assert_eq!(
+        read_validation_status(&helper.db, id_win).await.as_deref(),
+        Some("approved")
+    );
+
+    // An already-resolved row -> a late competing resolve must NOT clobber it.
+    // Models a late user approve_validation arriving after a timeout auto-reject.
+    let id_late = "vh-resolve-already";
+    insert_pending_validation(&helper.db, id_late).await;
+    helper
+        .db
+        .execute(&format!(
+            "UPDATE validation_request:`{}` SET status = 'rejected'",
+            id_late
+        ))
+        .await
+        .expect("competing path wins first");
+    let late = resolve_validation_if_pending(&helper.db, id_late, "approved", None, vec![])
+        .await
+        .expect("resolve ok");
+    assert!(!late.won, "a late resolve on a decided row must not win");
+    assert_eq!(
+        late.effective, "rejected",
+        "effective status must reflect the first writer"
+    );
+    assert_eq!(
+        read_validation_status(&helper.db, id_late).await.as_deref(),
+        Some("rejected"),
+        "the first writer's decision must survive"
+    );
+}

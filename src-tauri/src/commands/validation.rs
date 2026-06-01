@@ -31,6 +31,7 @@ use crate::{
     },
     security::{serialize_for_query, validate_uuid_field, Validator},
     tools::registry::TOOL_REGISTRY,
+    tools::validation_helper::resolve_validation_if_pending,
     AppState,
 };
 use chrono::Utc;
@@ -196,21 +197,25 @@ pub async fn approve_validation(
 
     let validated_id = validate_uuid_field(&validation_id, "validation_id")?;
 
-    // Update status to approved using bind param for status value
-    state
-        .db
-        .execute_with_params(
-            &format!(
-                "UPDATE validation_request:`{}` SET status = $status",
-                validated_id
-            ),
-            vec![("status".to_string(), serde_json::json!("approved"))],
-        )
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to approve validation");
-            format!("Failed to approve validation: {}", e)
-        })?;
+    // First-writer-wins: only resolve while still pending so a timeout
+    // auto-decision already recorded for this request is never clobbered.
+    let resolved =
+        resolve_validation_if_pending(&state.db, &validated_id, "approved", None, vec![])
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to approve validation");
+                format!("Failed to approve validation: {}", e)
+            })?;
+
+    if !resolved.won {
+        // The request was already resolved by the competing path (timeout). Do
+        // not overwrite it and do not write a conflicting user audit entry.
+        info!(
+            effective = %resolved.effective,
+            "Approve ignored: validation already resolved"
+        );
+        return Ok(());
+    }
 
     // append to audit log (best-effort, never blocks user flow).
     if let Some(draft) = build_audit_draft(
@@ -254,24 +259,30 @@ pub async fn reject_validation(
         format!("Invalid rejection reason: {}", e)
     })?;
 
-    // Update status to rejected and store reason using bind params
-    state
-        .db
-        .execute_with_params(
-            &format!(
-                "UPDATE validation_request:`{}` SET status = $status, details.rejection_reason = $reason",
-                validated_id
-            ),
-            vec![
-                ("status".to_string(), serde_json::json!("rejected")),
-                ("reason".to_string(), serde_json::json!(validated_reason)),
-            ],
-        )
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to reject validation");
-            format!("Failed to reject validation: {}", e)
-        })?;
+    // First-writer-wins: only resolve while still pending so a timeout
+    // auto-decision already recorded for this request is never clobbered.
+    let resolved = resolve_validation_if_pending(
+        &state.db,
+        &validated_id,
+        "rejected",
+        Some("details.rejection_reason = $reason"),
+        vec![("reason".to_string(), serde_json::json!(validated_reason))],
+    )
+    .await
+    .map_err(|e| {
+        error!(error = %e, "Failed to reject validation");
+        format!("Failed to reject validation: {}", e)
+    })?;
+
+    if !resolved.won {
+        // The request was already resolved by the competing path (timeout). Do
+        // not overwrite it and do not write a conflicting user audit entry.
+        info!(
+            effective = %resolved.effective,
+            "Reject ignored: validation already resolved"
+        );
+        return Ok(());
+    }
 
     // append to audit log (best-effort).
     if let Some(draft) = build_audit_draft(

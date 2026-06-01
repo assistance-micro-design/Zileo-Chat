@@ -100,6 +100,84 @@ pub(crate) fn clamp_timeout_seconds(raw: i32) -> u64 {
     (raw as u64).clamp(VALIDATION_TIMEOUT_MIN_SECS, VALIDATION_TIMEOUT_MAX_SECS)
 }
 
+/// Effective result of an attempt to atomically resolve a `pending` validation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResolveOutcome {
+    /// `true` if THIS call performed the resolution (the row was still pending).
+    pub won: bool,
+    /// The status stored AFTER the attempt — the first writer's decision.
+    pub effective: String,
+}
+
+/// Atomically resolves a still-`pending` validation request to `new_status`.
+///
+/// First-writer-wins: the UPDATE is guarded by `WHERE status = 'pending'`, so a
+/// decision already recorded by the competing resolution path (the user's
+/// approve/reject command vs. the timeout behavior) is never clobbered. This is
+/// the security invariant for the human-in-the-loop gate — a security rejection
+/// must not be flipped to an approval by a late timeout, and vice-versa.
+///
+/// `extra_set` is an already-safe SurrealQL fragment appended to the `SET`
+/// clause (a literal or a `$param`); any `$param` it references must be supplied
+/// in `extra_params`. `validation_id` must be a validated UUID (it is
+/// interpolated into the record id).
+///
+/// # Returns
+/// Whether this call won the race and the effective stored status afterwards.
+///
+/// # Errors
+/// Returns an error string if the conditional UPDATE query fails.
+pub(crate) async fn resolve_validation_if_pending(
+    db: &DBClient,
+    validation_id: &str,
+    new_status: &str,
+    extra_set: Option<&str>,
+    extra_params: Vec<(String, Value)>,
+) -> Result<ResolveOutcome, String> {
+    // Short-circuit if already resolved. The atomic `WHERE status = 'pending'`
+    // guard below is what truly prevents clobbering; this read only avoids a
+    // pointless write and lets us report the surviving decision.
+    let before = current_validation_status(db, validation_id).await;
+    if before.as_deref() != Some("pending") {
+        return Ok(ResolveOutcome {
+            won: false,
+            effective: before.unwrap_or_else(|| "pending".to_string()),
+        });
+    }
+
+    // Conditional write. `execute_with_params` is used (not a returning query) to
+    // avoid SurrealDB record deserialization quirks on UPDATE (surrealdb.md /
+    // ERR_SURREAL_002). The `WHERE status = 'pending'` clause keeps it atomic: a
+    // decision the competing path records in the meantime is never overwritten.
+    let extra = extra_set.map(|s| format!(", {}", s)).unwrap_or_default();
+    let query = format!(
+        "UPDATE validation_request:`{}` SET status = $status{} WHERE status = 'pending'",
+        validation_id, extra
+    );
+    let mut params = vec![("status".to_string(), Value::String(new_status.to_string()))];
+    params.extend(extra_params);
+    db.execute_with_params(&query, params)
+        .await
+        .map_err(|e| format!("Conditional validation resolve failed: {}", e))?;
+
+    // Re-read the authoritative status: it reflects the first writer's decision.
+    let effective = current_validation_status(db, validation_id)
+        .await
+        .unwrap_or_else(|| "pending".to_string());
+    let won = effective == new_status;
+    Ok(ResolveOutcome { won, effective })
+}
+
+/// Reads the current `status` of a `validation_request` row (`None` if missing).
+async fn current_validation_status(db: &DBClient, validation_id: &str) -> Option<String> {
+    let query = format!("SELECT status FROM validation_request:`{}`", validation_id);
+    let rows: Vec<Value> = db.query_json(&query).await.ok()?;
+    rows.first()
+        .and_then(|r| r.get("status"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 /// Validates a trimmed name with configurable field name and max length.
 ///
 /// Centralized validation extracted from agent.rs and mcp.rs.
@@ -365,63 +443,121 @@ impl ValidationHelper {
         timeout: Duration,
         timeout_behavior: &TimeoutBehavior,
     ) -> WaitOutcome {
-        let outcome = match timeout_behavior {
+        match timeout_behavior {
             TimeoutBehavior::Reject => {
-                let query = format!(
-                    "UPDATE validation_request:`{}` SET status = 'rejected', \
-                     details.rejection_reason = $reason",
-                    validation_id
-                );
                 let reason = format!(
                     "Validation timed out after {} seconds (auto-reject)",
                     timeout.as_secs()
                 );
-                if let Err(e) = self
-                    .db
-                    .execute_with_params(
-                        &query,
-                        vec![("reason".to_string(), Value::String(reason))],
-                    )
-                    .await
-                {
-                    warn!(error = %e, validation_id, "Failed to mark validation rejected on timeout");
-                }
-                info!(
+                let resolved = resolve_validation_if_pending(
+                    &self.db,
                     validation_id,
-                    elapsed_secs = timeout.as_secs(),
-                    "Validation timed out -> auto-reject"
-                );
-                WaitOutcome::from_timeout(WaitDecision::Rejected)
+                    "rejected",
+                    Some("details.rejection_reason = $reason"),
+                    vec![("reason".to_string(), Value::String(reason))],
+                )
+                .await;
+                self.finalize_timeout_resolution(
+                    validation_id,
+                    resolved,
+                    WaitDecision::Rejected,
+                    timeout,
+                )
             }
             TimeoutBehavior::Approve => {
-                let query = format!(
-                    "UPDATE validation_request:`{}` SET status = 'approved', \
-                     details.timeout_decision = 'approved'",
-                    validation_id
-                );
-                if let Err(e) = self.db.execute(&query).await {
-                    warn!(error = %e, validation_id, "Failed to mark validation approved on timeout");
-                }
-                info!(
+                let resolved = resolve_validation_if_pending(
+                    &self.db,
                     validation_id,
-                    elapsed_secs = timeout.as_secs(),
-                    "Validation timed out -> auto-approve"
-                );
-                WaitOutcome::from_timeout(WaitDecision::Approved)
+                    "approved",
+                    Some("details.timeout_decision = 'approved'"),
+                    vec![],
+                )
+                .await;
+                self.finalize_timeout_resolution(
+                    validation_id,
+                    resolved,
+                    WaitDecision::Approved,
+                    timeout,
+                )
             }
             TimeoutBehavior::Skip => {
+                // Skip never mutates the row: the request stays pending and the
+                // agent proceeds without a recorded decision. No race to lose.
                 info!(
                     validation_id,
                     elapsed_secs = timeout.as_secs(),
                     "Validation timed out -> skip (agent proceeds without decision)"
                 );
+                self.emit_resolved_event(validation_id, WaitDecision::Skipped, "timeout");
                 WaitOutcome::from_timeout(WaitDecision::Skipped)
             }
-        };
+        }
+    }
 
-        self.emit_resolved_event(validation_id, outcome.decision, "timeout");
-
-        outcome
+    /// Maps the result of a conditional timeout resolution to a [`WaitOutcome`].
+    ///
+    /// If the timeout won (the row was still pending) the configured behavior
+    /// applies and the decision is flagged `via_timeout` so it is audited as a
+    /// timeout. If the user decided first in the final poll window, that decision
+    /// is preserved and surfaced as a USER decision (`via_timeout = false`), so it
+    /// is not double-audited and the security gate honors the human's choice.
+    fn finalize_timeout_resolution(
+        &self,
+        validation_id: &str,
+        resolved: Result<ResolveOutcome, String>,
+        intended: WaitDecision,
+        timeout: Duration,
+    ) -> WaitOutcome {
+        match resolved {
+            Ok(outcome) if outcome.won => {
+                info!(
+                    validation_id,
+                    elapsed_secs = timeout.as_secs(),
+                    decision = ?intended,
+                    "Validation timed out -> auto-decision applied"
+                );
+                self.emit_resolved_event(validation_id, intended, "timeout");
+                WaitOutcome::from_timeout(intended)
+            }
+            Ok(outcome) => match outcome.effective.as_str() {
+                "approved" => {
+                    info!(
+                        validation_id,
+                        "Timeout lost the race to a user approval; preserving it"
+                    );
+                    WaitOutcome::user_decision(WaitDecision::Approved)
+                }
+                "rejected" => {
+                    info!(
+                        validation_id,
+                        "Timeout lost the race to a user rejection; preserving it"
+                    );
+                    WaitOutcome::user_decision(WaitDecision::Rejected)
+                }
+                other => {
+                    // Degenerate (row missing / unexpected status): apply the
+                    // configured behavior so the agent is never left hanging.
+                    warn!(
+                        validation_id,
+                        status = %other,
+                        "Unexpected status after lost timeout race; applying behavior"
+                    );
+                    self.emit_resolved_event(validation_id, intended, "timeout");
+                    WaitOutcome::from_timeout(intended)
+                }
+            },
+            Err(e) => {
+                // Conditional resolve failed (DB error). Stay best-effort: fall
+                // back to the configured behavior so the agent is never stuck.
+                warn!(
+                    error = %e,
+                    validation_id,
+                    "Conditional timeout resolve failed; applying behavior best-effort"
+                );
+                self.emit_resolved_event(validation_id, intended, "timeout");
+                WaitOutcome::from_timeout(intended)
+            }
+        }
     }
 
     /// Emits a `validation_resolved` Tauri event so the frontend can close the
