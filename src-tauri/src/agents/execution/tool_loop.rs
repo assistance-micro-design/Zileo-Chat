@@ -562,6 +562,9 @@ pub(crate) async fn execute_with_tools(
     // R-SEC-10: cumulative serialized size of successful MCP results across the
     // whole run, gating the per-run byte budget alongside `mcp_calls_made`.
     let mut mcp_result_bytes: usize = 0;
+    // §4.3: run-scoped count of *Manager content/privilege writes, gating the
+    // per-run write cap in `manager_write_gate` (self-grants included, MF-3).
+    let mut manager_writes_made: usize = 0;
     let mut tokens = TokenTracker::new();
     let mut iteration_metrics_data: Vec<IterationMetrics> = Vec::new();
     let mut tool_executions_data: Vec<ToolExecutionData> = Vec::new();
@@ -796,6 +799,7 @@ pub(crate) async fn execute_with_tools(
         is_detached: ctx.is_detached,
         is_delegated: ctx.is_delegated,
         mcp_tool_allowlist: &ctx.config.mcp_tool_allowlist,
+        agent_skills: &ctx.config.skills,
     };
 
     // Load the model pricing once so each iteration_progress chunk can carry
@@ -920,6 +924,7 @@ pub(crate) async fn execute_with_tools(
             tools_used: &mut tools_used,
             mcp_calls_made: &mut mcp_calls_made,
             mcp_result_bytes: &mut mcp_result_bytes,
+            manager_writes_made: &mut manager_writes_made,
             iteration_metrics_data: &mut iteration_metrics_data,
             tool_executions_data: &mut tool_executions_data,
             reasoning_steps_data: &mut reasoning_steps_data,

@@ -41,7 +41,8 @@
 		pendingValidation,
 		hasPendingValidation,
 		isValidating,
-		validationError
+		validationError,
+		pendingValidationCount
 	} from '$lib/stores/validation';
 	import ValidationModal from './ValidationModal.svelte';
 	import type { ValidationRequest } from '$types/validation';
@@ -73,6 +74,7 @@
 	open={$hasPendingValidation}
 	processing={$isValidating}
 	error={$validationError}
+	queueCount={$pendingValidationCount}
 	onapprove={handleApprove}
 	onreject={handleReject}
 />

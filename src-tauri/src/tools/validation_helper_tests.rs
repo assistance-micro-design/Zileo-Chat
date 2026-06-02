@@ -403,6 +403,7 @@ async fn test_create_and_wait_applies_user_timeout_seconds() {
             "user-timeout test",
             serde_json::json!({}),
             RiskLevel::Low,
+            false, // attended run
         )
         .await;
     let elapsed = started.elapsed();
@@ -427,6 +428,44 @@ async fn test_falls_back_to_default_when_settings_unavailable() {
     assert_eq!(loaded.timeout_behavior, TimeoutBehavior::Reject);
     // Sanity: clamp(60) is identity.
     assert_eq!(clamp_timeout_seconds(loaded.timeout_seconds), 60);
+}
+
+/// B2: a validation-required operation in a DETACHED run must be refused
+/// IMMEDIATELY (no modal, no poll, no row), within milliseconds — the boot
+/// catch-up loop must never block. A `validation_request` row is NOT created.
+#[tokio::test]
+async fn test_create_and_wait_short_circuits_when_detached() {
+    let (helper, _tmp) = make_test_helper().await;
+
+    let id = "vh-detached-short-circuit";
+    let started = std::time::Instant::now();
+    let res = helper
+        .create_and_wait_validation(
+            id,
+            "wf-detached",
+            ValidationType::ManagerWrite,
+            "detached write that would need validation",
+            serde_json::json!({"tool_id": "PromptManagerTool", "operation": "update_prompt"}),
+            RiskLevel::High,
+            true, // detached: no human in the loop
+        )
+        .await;
+    let elapsed = started.elapsed();
+
+    assert!(
+        matches!(res, Err(ToolError::PermissionDenied(_))),
+        "a detached validation-required op must be refused, got {res:?}"
+    );
+    // Must NOT block on the poll/timeout — refusal is immediate.
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "detached refusal must be immediate (no poll), took {elapsed:?}"
+    );
+    // No validation_request row is created in the detached path.
+    assert!(
+        read_validation_status(&helper.db, id).await.is_none(),
+        "detached court-circuit must NOT create a validation_request row"
+    );
 }
 
 #[test]

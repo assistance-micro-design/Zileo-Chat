@@ -31,7 +31,9 @@
 //! All validation types share a single flow via `create_and_wait_validation()`.
 
 use crate::db::DBClient;
-use crate::models::streaming::{events, ValidationRequiredEvent, ValidationResolvedEvent};
+use crate::models::streaming::{
+    events, ManagerWriteNoticeEvent, ValidationRequiredEvent, ValidationResolvedEvent,
+};
 use crate::models::{
     RiskLevel, TimeoutBehavior, ValidationMode, ValidationRequestCreate, ValidationSettings,
     ValidationStatus, ValidationType,
@@ -232,6 +234,10 @@ fn type_requires_validation(
         ValidationType::Mcp => settings.selective_config.mcp,
         ValidationType::FileOp => settings.selective_config.file_ops,
         ValidationType::DbOp => settings.selective_config.db_ops,
+        // A *Manager write reuses the existing `tools` checkbox in Selective
+        // mode (no new tri-state — §2/§7). A dedicated "Manager writes" checkbox
+        // is an optional future refinement.
+        ValidationType::ManagerWrite => settings.selective_config.tools,
     }
 }
 
@@ -315,6 +321,12 @@ pub struct ValidationHelper {
     /// refusal audit rows at one per distinct blocked tool per run (anti-flood)
     /// while preserving the first signal for each distinct tool.
     refused_audit_keys: Mutex<HashSet<(String, String)>>,
+    /// Run-scoped dedup set of `(tool_name, operation)` already audited by
+    /// [`Self::record_preapproved`]. Same anti-flood rationale as
+    /// `refused_audit_keys`: a run that repeats the same pre-approved write/op
+    /// records one row + one toast for that pair (the per-run write cap bounds
+    /// total volume).
+    preapproved_audit_keys: Mutex<HashSet<(String, String)>>,
 }
 
 impl ValidationHelper {
@@ -328,6 +340,7 @@ impl ValidationHelper {
             db,
             app_handle,
             refused_audit_keys: Mutex::new(HashSet::new()),
+            preapproved_audit_keys: Mutex::new(HashSet::new()),
         }
     }
 
@@ -597,6 +610,7 @@ impl ValidationHelper {
     /// Loads the user's `ValidationSettings` to honor `timeout_seconds` (clamped
     /// to `[5, 600]`) and `timeout_behavior`. Falls back to the hardcoded
     /// `VALIDATION_TIMEOUT_SECS` (60s) and `Reject` if settings cannot be loaded.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn create_and_wait_validation(
         &self,
         validation_id: &str,
@@ -605,7 +619,34 @@ impl ValidationHelper {
         description: &str,
         details: Value,
         risk_level: RiskLevel,
+        is_detached: bool,
     ) -> Result<(), ToolError> {
+        // B2 court-circuit: an UNATTENDED (detached) run has no human to answer
+        // the modal, and the boot catch-up loop (`catchup_unanalyzed_review_cards`)
+        // is sequential — emitting a modal and polling would block each card for
+        // up to the full `timeout_seconds` (up to 600s × N cards = DoS-boot).
+        // Apply the detached policy DIRECTLY: refuse + audit (façon R-SEC-4),
+        // never create the request, never emit the event, never poll.
+        if is_detached {
+            warn!(
+                validation_id = %validation_id,
+                workflow_id = %workflow_id,
+                validation_type = %validation_type,
+                "Validation required in an unattended (detached) run — refusing without a modal (B2)"
+            );
+            self.record_detached_validation_refusal(
+                workflow_id,
+                &validation_type,
+                description,
+                &risk_level,
+            )
+            .await;
+            return Err(ToolError::PermissionDenied(format!(
+                "Operation requires validation but the run is unattended (detached): {}",
+                description
+            )));
+        }
+
         // Create validation request in database
         let validation_create = ValidationRequestCreate::new(
             workflow_id.to_string(),
@@ -799,6 +840,158 @@ impl ValidationHelper {
             })),
         };
         write_audit_entry_unconditional(&self.db, draft).await;
+    }
+
+    /// Records the B2 court-circuit refusal of a validation-required operation
+    /// in a DETACHED run into the audit log. Best-effort, unconditional (a
+    /// no-human refusal must stay traceable even when audit logging is off).
+    ///
+    /// `validation_type` becomes the audited `tool_name` so the row is
+    /// filterable; `description` is truncated into the preview. Mirrors
+    /// [`Self::record_security_refusal`] (decision `Blocked`, source `Policy`).
+    async fn record_detached_validation_refusal(
+        &self,
+        workflow_id: &str,
+        validation_type: &ValidationType,
+        description: &str,
+        risk_level: &RiskLevel,
+    ) {
+        use crate::commands::validation_audit::{write_audit_entry_unconditional, AuditEntryDraft};
+        use crate::models::{AuditDecision, DecidedBy};
+
+        let draft = AuditEntryDraft {
+            validation_id: uuid::Uuid::new_v4().to_string(),
+            tool_name: validation_type.to_string(),
+            decision: AuditDecision::Blocked,
+            decided_by: DecidedBy::Policy,
+            risk_level: risk_level.clone(),
+            workflow_id: (!workflow_id.is_empty()).then(|| workflow_id.to_string()),
+            agent_id: None,
+            prompt_preview: Some(crate::tools::utils::safe_truncate(description, 200, true)),
+            metadata: Some(serde_json::json!({
+                "source": "detached_validation_court_circuit",
+            })),
+        };
+        write_audit_entry_unconditional(&self.db, draft).await;
+    }
+
+    /// Records a refused *Manager write (scope / volume / detached-validation /
+    /// no-helper) into the audit log so a no-review block is visible, not just
+    /// traced. Best-effort, unconditional (decision `Blocked`, source `Policy`),
+    /// with run-scoped dedup on `(tool_name, operation)` via `refused_audit_keys`
+    /// (shared anti-flood set — MCP keys never collide with `(tool, op)` pairs).
+    pub(crate) async fn record_manager_refusal(
+        &self,
+        tool_name: &str,
+        operation: &str,
+        reason: &str,
+        risk_level: &RiskLevel,
+        workflow_id: &str,
+    ) {
+        use crate::commands::validation_audit::{write_audit_entry_unconditional, AuditEntryDraft};
+        use crate::models::{AuditDecision, DecidedBy};
+
+        {
+            let mut seen = self
+                .refused_audit_keys
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if !seen.insert((tool_name.to_string(), operation.to_string())) {
+                return;
+            }
+        }
+
+        let draft = AuditEntryDraft {
+            validation_id: uuid::Uuid::new_v4().to_string(),
+            tool_name: tool_name.to_string(),
+            decision: AuditDecision::Blocked,
+            decided_by: DecidedBy::Policy,
+            risk_level: risk_level.clone(),
+            workflow_id: (!workflow_id.is_empty()).then(|| workflow_id.to_string()),
+            agent_id: None,
+            prompt_preview: Some(operation.to_string()),
+            metadata: Some(serde_json::json!({
+                "source": "manager_write_gate",
+                "reason": reason,
+                "operation": operation,
+            })),
+        };
+        write_audit_entry_unconditional(&self.db, draft).await;
+    }
+
+    /// Records a *Manager / armed-MCP operation that EXECUTED without a human
+    /// review because the active validation mode is permissive for its risk
+    /// (Auto + `always_confirm_high` OFF, etc.). Audited as `Approved` /
+    /// `DecidedBy::PreApproved`.
+    ///
+    /// Written UNCONDITIONALLY (bypasses `audit.enable_logging`): the persisted
+    /// `PreApproved` row is the REAL safety net for self-improvement writes (the
+    /// toast is opportunistic and lost if the app is closed — §4.5/§13), so it
+    /// must survive even when audit logging is off. Run-scoped dedup on
+    /// `(tool_name, operation)` (anti-flood, mirrors `record_security_refusal`).
+    ///
+    /// For a High or Critical write it ALSO emits a non-blocking
+    /// `manager_write_notice` event so the frontend can toast it live. Best-effort
+    /// throughout: never propagates an error, never blocks the write.
+    ///
+    /// `target` is a per-RESOURCE discriminant (prompt/skill id or name, server
+    /// for MCP) folded into the dedup key so the audit stays accurate: rewriting
+    /// FIVE distinct prompts in one run leaves FIVE rows (one per resource), while
+    /// a true retry of the SAME op on the SAME resource is still deduped
+    /// (anti-flood). Empty `target` degrades to per-`(tool, op)` dedup.
+    pub(crate) async fn record_preapproved(
+        &self,
+        tool_name: &str,
+        operation: &str,
+        target: &str,
+        risk_level: &RiskLevel,
+        workflow_id: &str,
+    ) {
+        use crate::commands::validation_audit::{write_audit_entry_unconditional, AuditEntryDraft};
+        use crate::models::{AuditDecision, DecidedBy};
+
+        // Run-scoped dedup keyed by (tool, op|resource): one audit row + one
+        // toast per distinct resource-operation, true retries collapsed.
+        {
+            let mut seen = self
+                .preapproved_audit_keys
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if !seen.insert((tool_name.to_string(), format!("{}|{}", operation, target))) {
+                return;
+            }
+        }
+
+        let draft = AuditEntryDraft {
+            validation_id: uuid::Uuid::new_v4().to_string(),
+            tool_name: tool_name.to_string(),
+            decision: AuditDecision::Approved,
+            decided_by: DecidedBy::PreApproved,
+            risk_level: risk_level.clone(),
+            workflow_id: (!workflow_id.is_empty()).then(|| workflow_id.to_string()),
+            agent_id: None,
+            prompt_preview: Some(operation.to_string()),
+            metadata: Some(serde_json::json!({
+                "source": "manager_write_preapproved",
+                "operation": operation,
+            })),
+        };
+        write_audit_entry_unconditional(&self.db, draft).await;
+
+        // Opportunistic live toast for High/Critical writes only (§4.5/§13).
+        if matches!(risk_level, RiskLevel::High | RiskLevel::Critical) {
+            if let Some(ref app_handle) = self.app_handle {
+                let event = ManagerWriteNoticeEvent {
+                    workflow_id: workflow_id.to_string(),
+                    tool_name: tool_name.to_string(),
+                    operation: operation.to_string(),
+                    risk_level: risk_level.to_string(),
+                };
+                if let Err(e) = app_handle.emit(events::MANAGER_WRITE_NOTICE, &event) {
+                    warn!(error = %e, "Failed to emit manager_write_notice event");
+                }
+            }
+        }
     }
 }
 

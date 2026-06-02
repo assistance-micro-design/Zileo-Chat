@@ -71,7 +71,8 @@
 		{ value: 'user', label: $i18n('audit_decided_by_user') },
 		{ value: 'auto', label: $i18n('audit_decided_by_auto') },
 		{ value: 'timeout', label: $i18n('audit_decided_by_timeout') },
-		{ value: 'policy', label: $i18n('audit_decided_by_policy') }
+		{ value: 'policy', label: $i18n('audit_decided_by_policy') },
+		{ value: 'pre_approved', label: $i18n('audit_decided_by_pre_approved') }
 	];
 
 	/** Parses a `datetime-local` value into an ISO string, or `undefined` if blank/invalid. */

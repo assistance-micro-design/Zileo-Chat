@@ -114,6 +114,7 @@ impl ParallelTasksTool {
                 &format!("Execute {} tasks in parallel", tasks.len()),
                 details,
                 risk_level,
+                self.is_detached,
             )
             .await
     }

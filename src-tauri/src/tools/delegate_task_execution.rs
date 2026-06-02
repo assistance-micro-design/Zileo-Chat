@@ -161,6 +161,7 @@ impl DelegateTaskTool {
                 &format!("Delegate task to agent '{}'", agent_name),
                 details,
                 risk_level,
+                self.is_detached,
             )
             .await?;
 

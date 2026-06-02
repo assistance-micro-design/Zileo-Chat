@@ -10,6 +10,7 @@
 
 use crate::commands::prompt_version::snapshot_prompt_version_core;
 use crate::db::DBClient;
+use crate::models::agent::AgentKind;
 use crate::models::prompt::{
     Prompt, PromptCategory, MAX_PROMPT_CONTENT_LEN, MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
 };
@@ -103,15 +104,43 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
 pub struct PromptManagerTool {
     db: Arc<DBClient>,
     agent_id: String,
+    /// Whether the calling agent is a Kanban-kind agent. The prompt library is
+    /// only writable/readable through this tool by Kanban supervisors
+    /// (PAT_KANBAN_STRICT_SEPARATION) — a non-Kanban caller receives
+    /// `PermissionDenied` on every operation. This is the execution-level
+    /// self-gate that complements the defensive strip in `create_local_tools`.
+    is_kanban: bool,
 }
 
 impl PromptManagerTool {
-    pub fn new(db: Arc<DBClient>, agent_id: String) -> Self {
-        Self { db, agent_id }
+    pub fn new(db: Arc<DBClient>, agent_id: String, agent_kind: Option<AgentKind>) -> Self {
+        let is_kanban = matches!(agent_kind, Some(AgentKind::Kanban));
+        Self {
+            db,
+            agent_id,
+            is_kanban,
+        }
     }
 
     fn edited_by(&self) -> String {
         format!("agent:{}", self.agent_id)
+    }
+
+    /// Refuses every operation for a non-Kanban caller. Mirrors
+    /// `SkillManagerTool::ensure_kanban`: only Kanban supervisors curate the
+    /// shared prompt library.
+    fn ensure_kanban(&self) -> ToolResult<()> {
+        if self.is_kanban {
+            Ok(())
+        } else {
+            tracing::warn!(
+                agent_id = %self.agent_id,
+                "Non-Kanban agent attempted to use PromptManagerTool"
+            );
+            Err(ToolError::PermissionDenied(
+                "PromptManagerTool is reserved to Kanban-kind agents".to_string(),
+            ))
+        }
     }
 
     fn validate_name(n: &str) -> ToolResult<String> {
@@ -330,6 +359,13 @@ impl Tool for PromptManagerTool {
     }
 
     async fn execute(&self, input: Value) -> ToolResult<Value> {
+        self.ensure_kanban()?;
+        // NOTE: write GOVERNANCE (validation flow, scope, per-run cap, audit) is
+        // NOT here — it lives in `manager_write_gate` (agents/execution/tools.rs),
+        // the single enforcement point in `execute_function_call`. Any NEW code
+        // path that calls this tool's `execute` outside the agent tool loop MUST
+        // replicate that gate, or write governance is bypassed (kind gating above
+        // still holds). See B4 in docs/specs/2026-06-02_spec-validation-detached-modal.md.
         self.validate_input(&input)?;
         let op = input["operation"].as_str().unwrap_or("");
         debug!(operation = %op, "PromptManagerTool execute");
@@ -400,5 +436,49 @@ mod tests {
     fn test_name_validation() {
         assert!(PromptManagerTool::validate_name("").is_err());
         assert!(PromptManagerTool::validate_name("good").is_ok());
+    }
+
+    #[tokio::test]
+    async fn non_kanban_caller_is_denied_every_operation() {
+        // B(-1): the prompt library is curated only by Kanban supervisors. A
+        // standard (kind = None) caller must be refused at execution even for a
+        // read — the self-gate complements the defensive strip upstream.
+        let (state, _g) = crate::test_utils::setup_test_state().await;
+        let tool = PromptManagerTool::new(state.db.clone(), uuid::Uuid::new_v4().to_string(), None);
+        let res = tool
+            .execute(serde_json::json!({"operation": "list_prompts"}))
+            .await;
+        assert!(
+            matches!(res, Err(ToolError::PermissionDenied(_))),
+            "non-Kanban list_prompts must be denied, got {res:?}"
+        );
+        let res = tool
+            .execute(serde_json::json!({
+                "operation": "create_prompt", "name": "x", "content": "y", "category": "custom"
+            }))
+            .await;
+        assert!(
+            matches!(res, Err(ToolError::PermissionDenied(_))),
+            "non-Kanban create_prompt must be denied, got {res:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn kanban_caller_passes_the_gate() {
+        // A Kanban-kind caller is not blocked by the self-gate (it proceeds to
+        // the operation — here a list, which succeeds on an empty library).
+        let (state, _g) = crate::test_utils::setup_test_state().await;
+        let tool = PromptManagerTool::new(
+            state.db.clone(),
+            uuid::Uuid::new_v4().to_string(),
+            Some(AgentKind::Kanban),
+        );
+        let res = tool
+            .execute(serde_json::json!({"operation": "list_prompts"}))
+            .await;
+        assert!(
+            res.is_ok(),
+            "Kanban list_prompts must pass the gate, got {res:?}"
+        );
     }
 }

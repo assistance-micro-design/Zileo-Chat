@@ -55,6 +55,9 @@ pub(crate) struct IterationMutState<'a> {
     /// controls error size too). Read before each call to gate the per-run byte
     /// budget, then grown by each MCP result's post per-result-cap sink size.
     pub mcp_result_bytes: &'a mut usize,
+    /// §4.3: run-scoped count of *Manager content/privilege writes executed,
+    /// consulted + incremented by the *Manager write gate for the per-run cap.
+    pub manager_writes_made: &'a mut usize,
     pub iteration_metrics_data: &'a mut Vec<IterationMetrics>,
     pub tool_executions_data: &'a mut Vec<ToolExecutionData>,
     pub reasoning_steps_data: &'a mut Vec<ReasoningStepData>,
@@ -378,6 +381,7 @@ pub(crate) async fn run_single_iteration(
             mstate.tools_used,
             mstate.mcp_calls_made,
             mcp_bytes_so_far,
+            mstate.manager_writes_made,
         )
         .await;
 

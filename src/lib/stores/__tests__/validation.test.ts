@@ -28,7 +28,7 @@ vi.mock('$lib/tauri', () => ({
 	tauriInvoke: vi.fn()
 }));
 
-import { validationStore, pendingValidation } from '../validation';
+import { validationStore, pendingValidation, pendingValidationCount } from '../validation';
 import type { ValidationRequiredEvent } from '$types/sub-agent';
 
 function emitRequired(validationId: string): void {
@@ -93,5 +93,40 @@ describe('validationStore', () => {
 		const pending = get(pendingValidation);
 		expect(pending).not.toBeNull();
 		expect(pending?.id).toBe('val-3');
+	});
+
+	it('queues a second validation instead of overwriting the first (FIFO)', () => {
+		emitRequired('val-a');
+		emitRequired('val-b');
+
+		// The head stays the first one; the second waits behind it.
+		expect(get(pendingValidation)?.id).toBe('val-a');
+		expect(get(pendingValidationCount)).toBe(2);
+	});
+
+	it('advances to the next queued validation once the head resolves', () => {
+		emitRequired('val-a');
+		emitRequired('val-b');
+
+		emitResolved('val-a', 'approved');
+
+		expect(get(pendingValidation)?.id).toBe('val-b');
+		expect(get(pendingValidationCount)).toBe(1);
+	});
+
+	it('does not duplicate a re-emitted validation id', () => {
+		emitRequired('val-a');
+		emitRequired('val-a');
+		expect(get(pendingValidationCount)).toBe(1);
+	});
+
+	it('purgeWorkflow drops every queued validation for that workflow', () => {
+		emitRequired('val-a'); // workflow_id = wf-val-a
+		emitRequired('val-b'); // workflow_id = wf-val-b
+
+		validationStore.purgeWorkflow('wf-val-a');
+
+		expect(get(pendingValidationCount)).toBe(1);
+		expect(get(pendingValidation)?.id).toBe('val-b');
 	});
 });

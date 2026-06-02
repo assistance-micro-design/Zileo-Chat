@@ -257,6 +257,37 @@ async fn list_filter_by_decided_by_only_returns_matching() {
     assert!(entries.iter().all(|e| e.decided_by == DecidedBy::User));
 }
 
+/// F4: the new `PreApproved` source round-trips through the schema ASSERT
+/// (write succeeds) and the production filter (bound `$decided_by`) selects it.
+#[tokio::test]
+async fn list_filter_by_pre_approved_returns_only_preapproved() {
+    let (db, _t) = make_db().await;
+    let s = settings(true, 30);
+    write_audit_entry(
+        &db,
+        &s,
+        draft("v-pre", AuditDecision::Approved, DecidedBy::PreApproved),
+    )
+    .await;
+    write_audit_entry(
+        &db,
+        &s,
+        draft("v-user", AuditDecision::Approved, DecidedBy::User),
+    )
+    .await;
+
+    let params = ListAuditParams {
+        filter: AuditFilter {
+            decided_by: Some(DecidedBy::PreApproved),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let entries = list_audit_entries(&db, &params).await.expect("list");
+    assert_eq!(entries.len(), 1, "only the pre-approved row must match");
+    assert_eq!(entries[0].decided_by, DecidedBy::PreApproved);
+}
+
 #[tokio::test]
 async fn list_filter_by_since_until_window_excludes_outside_rows() {
     let (db, _t) = make_db().await;

@@ -42,6 +42,8 @@
 		processing?: boolean;
 		/** Last validation error to surface in the modal (null when none). */
 		error?: string | null;
+		/** Number of pending validations in the FIFO queue (this one + waiting). */
+		queueCount?: number;
 		/** Approve handler */
 		onapprove?: (request: ValidationRequest) => void;
 		/** Reject handler */
@@ -53,11 +55,24 @@
 		open = false,
 		processing = false,
 		error = null,
+		queueCount = 1,
 		onapprove,
 		onreject
 	}: Props = $props();
 
 	let rejectReason = $state('');
+
+	/**
+	 * A `manager_write` request carries a backend-authored authority pair
+	 * (`tool_id` + `operation`) that is shown dominantly, plus an untrusted,
+	 * agent-supplied `agent_preview` shown with a clear "not trustworthy" label.
+	 */
+	let isManagerWrite = $derived(request?.type === 'manager_write');
+
+	function detailString(key: string): string {
+		const v = request?.details?.[key];
+		return typeof v === 'string' ? v : '';
+	}
 
 	// Reset the reject reason whenever a NEW request arrives, so a fresh
 	// validation starts with an empty field (mirrors UserQuestionModal). Never
@@ -140,22 +155,51 @@
 					{/if}
 					<div class="validation-info">
 						<span class="validation-type">{request.type.replace('_', ' ')}</span>
-						<Badge variant={getRiskBadgeVariant(request.risk_level)}>
-							{$i18n('workflow_validation_risk').replace('{level}', request.risk_level)}
-						</Badge>
+						<div class="validation-badges">
+							<Badge variant={getRiskBadgeVariant(request.risk_level)}>
+								{$i18n('workflow_validation_risk').replace('{level}', request.risk_level)}
+							</Badge>
+							<Badge variant="primary">{$i18n('workflow_validation_badge_attached')}</Badge>
+							{#if queueCount > 1}
+								<Badge variant="warning">
+									{$i18n('workflow_validation_queue_count').replace('{count}', String(queueCount))}
+								</Badge>
+							{/if}
+						</div>
 					</div>
 				</div>
 
-				<div class="validation-operation">
-					<h4>{$i18n('workflow_validation_operation')}</h4>
-					<p>{request.operation}</p>
-				</div>
-
-				{#if Object.keys(request.details).length > 0}
-					<div class="validation-details">
-						<h4>{$i18n('workflow_validation_details')}</h4>
-						<pre>{formatDetails(request.details)}</pre>
+				{#if isManagerWrite}
+					<!--
+						manager_write: the authority pair (tool + operation) is the
+						BACKEND-decided truth and is shown dominantly; the agent-supplied
+						preview below it is explicitly labeled untrusted.
+					-->
+					<div class="validation-authority">
+						<h4>{$i18n('workflow_validation_authority')}</h4>
+						<p class="authority-line">
+							<span class="authority-tool">{detailString('tool_id')}</span>
+							<span class="authority-op">{detailString('operation')}</span>
+						</p>
 					</div>
+					{#if detailString('agent_preview')}
+						<div class="validation-untrusted">
+							<h4>{$i18n('workflow_validation_untrusted_preview')}</h4>
+							<pre class="untrusted">{detailString('agent_preview')}</pre>
+						</div>
+					{/if}
+				{:else}
+					<div class="validation-operation">
+						<h4>{$i18n('workflow_validation_operation')}</h4>
+						<p>{request.operation}</p>
+					</div>
+
+					{#if Object.keys(request.details).length > 0}
+						<div class="validation-details">
+							<h4>{$i18n('workflow_validation_details')}</h4>
+							<pre>{formatDetails(request.details)}</pre>
+						</div>
+					{/if}
 				{/if}
 
 				<div class="validation-warning">
@@ -242,6 +286,53 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-xs);
+	}
+
+	.validation-badges {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-xs);
+		align-items: center;
+	}
+
+	.validation-authority h4,
+	.validation-untrusted h4 {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-secondary);
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.authority-line {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-sm);
+		align-items: baseline;
+		margin: 0;
+	}
+
+	.authority-tool {
+		font-weight: var(--font-weight-bold, 700);
+		color: var(--color-text-primary);
+	}
+
+	.authority-op {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
+		color: var(--color-accent);
+	}
+
+	.validation-untrusted pre.untrusted {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		background: var(--color-bg-tertiary);
+		padding: var(--spacing-md);
+		border-radius: var(--border-radius-md);
+		border-left: 3px solid var(--color-warning);
+		overflow-x: auto;
+		white-space: pre-wrap;
+		word-break: break-word;
+		margin: 0;
 	}
 
 	.validation-type {

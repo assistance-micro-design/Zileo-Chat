@@ -72,12 +72,18 @@ export interface PendingValidation {
 }
 
 /**
- * Validation store state
+ * Validation store state.
+ *
+ * F1: a FIFO `queue` (not a single `pending` slot). A second
+ * `validation_required` (e.g. a Critical grant arriving while a content write
+ * modal is still open) must NOT overwrite the first — it queues behind it. The
+ * head (`queue[0]`) is the request currently shown; resolving it dequeues by id
+ * and the next one surfaces.
  */
 export interface ValidationState {
-	/** Currently pending validation (null if none) */
-	pending: PendingValidation | null;
-	/** Whether validation is currently being processed */
+	/** Pending validations, oldest first. The head is the one displayed. */
+	queue: PendingValidation[];
+	/** Whether the head validation is currently being processed */
 	isProcessing: boolean;
 	/** Last error message */
 	lastError: string | null;
@@ -90,7 +96,7 @@ export interface ValidationState {
 // ============================================================================
 
 const initialState: ValidationState = {
-	pending: null,
+	queue: [],
 	isProcessing: false,
 	lastError: null,
 	totalProcessed: 0
@@ -151,40 +157,43 @@ export const validationStore = {
 			await this.cleanup();
 		}
 
-		// Listen for validation_required events
+		// Listen for validation_required events. APPEND to the FIFO queue: a new
+		// request never overwrites one already awaiting a decision (F1).
+		// Defensive de-dup: ignore a repeat of an id already queued.
 		requiredUnlistener = await listen<ValidationRequiredEvent>(
 			EVENTS.VALIDATION_REQUIRED,
 			(event) => {
 				const validationEvent = event.payload;
 				const request = convertToValidationRequest(validationEvent);
 
-				store.update((s) => ({
-					...s,
-					pending: {
-						event: validationEvent,
-						request,
-						receivedAt: Date.now()
-					},
-					lastError: null
-				}));
+				store.update((s) => {
+					if (s.queue.some((p) => p.event.validation_id === validationEvent.validation_id)) {
+						return s;
+					}
+					return {
+						...s,
+						queue: [...s.queue, { event: validationEvent, request, receivedAt: Date.now() }],
+						lastError: null
+					};
+				});
 			}
 		);
 
 		// Listen for validation_resolved events: backend resolved the request
-		// itself (e.g. timeout). Drop the matching pending entry so the modal
-		// closes; ignore stale events for other validations.
+		// itself (e.g. timeout). Drop the matching queued entry by id (it may be
+		// the head or further back); ignore stale events for unknown ids.
 		resolvedUnlistener = await listen<ValidationResolvedEvent>(
 			EVENTS.VALIDATION_RESOLVED,
 			(event) => {
 				const { validation_id } = event.payload;
 				const state = get(store);
-				if (state.pending?.event.validation_id !== validation_id) {
+				if (!state.queue.some((p) => p.event.validation_id === validation_id)) {
 					return;
 				}
 
 				store.update((s) => ({
 					...s,
-					pending: null,
+					queue: s.queue.filter((p) => p.event.validation_id !== validation_id),
 					isProcessing: false,
 					totalProcessed: s.totalProcessed + 1
 				}));
@@ -198,21 +207,20 @@ export const validationStore = {
 	 * Approve the current pending validation.
 	 */
 	async approve(): Promise<void> {
-		const state = get(store);
-		if (!state.pending) {
+		const head = get(store).queue[0];
+		if (!head) {
 			return;
 		}
+		const validationId = head.event.validation_id;
 
 		store.update((s) => ({ ...s, isProcessing: true }));
 
 		try {
-			await invoke('approve_validation', {
-				validationId: state.pending.event.validation_id
-			});
+			await invoke('approve_validation', { validationId });
 
 			store.update((s) => ({
 				...s,
-				pending: null,
+				queue: s.queue.filter((p) => p.event.validation_id !== validationId),
 				isProcessing: false,
 				totalProcessed: s.totalProcessed + 1
 			}));
@@ -227,27 +235,28 @@ export const validationStore = {
 	},
 
 	/**
-	 * Reject the current pending validation.
+	 * Reject the current (head) pending validation.
 	 *
 	 * @param reason - Optional rejection reason
 	 */
 	async reject(reason?: string): Promise<void> {
-		const state = get(store);
-		if (!state.pending) {
+		const head = get(store).queue[0];
+		if (!head) {
 			return;
 		}
+		const validationId = head.event.validation_id;
 
 		store.update((s) => ({ ...s, isProcessing: true }));
 
 		try {
 			await invoke('reject_validation', {
-				validationId: state.pending.event.validation_id,
+				validationId,
 				reason: reason ?? 'Rejected by user'
 			});
 
 			store.update((s) => ({
 				...s,
-				pending: null,
+				queue: s.queue.filter((p) => p.event.validation_id !== validationId),
 				isProcessing: false,
 				totalProcessed: s.totalProcessed + 1
 			}));
@@ -262,13 +271,26 @@ export const validationStore = {
 	},
 
 	/**
-	 * Dismiss the pending validation without action (treats as timeout).
+	 * Dismiss the head pending validation without action (treats as timeout).
 	 */
 	dismiss(): void {
 		store.update((s) => ({
 			...s,
-			pending: null,
+			queue: s.queue.slice(1),
 			isProcessing: false
+		}));
+	},
+
+	/**
+	 * Purge every queued validation belonging to `workflowId` (M2). Called when a
+	 * workflow is cancelled so a stale modal for a torn-down run never lingers.
+	 *
+	 * @param workflowId - The workflow whose pending validations should be dropped
+	 */
+	purgeWorkflow(workflowId: string): void {
+		store.update((s) => ({
+			...s,
+			queue: s.queue.filter((p) => p.event.workflow_id !== workflowId)
 		}));
 	},
 
@@ -315,14 +337,14 @@ export const validationStore = {
 // ============================================================================
 
 /**
- * Derived store: whether there is a pending validation
+ * Derived store: whether there is at least one pending validation
  */
-export const hasPendingValidation = derived(store, (s) => s.pending !== null);
+export const hasPendingValidation = derived(store, (s) => s.queue.length > 0);
 
 /**
- * Derived store: the current pending validation request
+ * Derived store: the HEAD pending validation request (the one shown)
  */
-export const pendingValidation = derived(store, (s) => s.pending?.request ?? null);
+export const pendingValidation = derived(store, (s) => s.queue[0]?.request ?? null);
 
 /**
  * Derived store: whether validation is being processed
@@ -335,6 +357,11 @@ export const isValidating = derived(store, (s) => s.isProcessing);
 export const validationError = derived(store, (s) => s.lastError);
 
 /**
- * Derived store: the pending validation event details
+ * Derived store: the HEAD pending validation event details
  */
-export const pendingValidationDetails = derived(store, (s) => s.pending?.event ?? null);
+export const pendingValidationDetails = derived(store, (s) => s.queue[0]?.event ?? null);
+
+/**
+ * Derived store: number of pending validations awaiting a decision (F2 counter).
+ */
+export const pendingValidationCount = derived(store, (s) => s.queue.length);

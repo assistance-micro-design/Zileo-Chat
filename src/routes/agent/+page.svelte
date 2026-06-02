@@ -71,6 +71,7 @@ Uses extracted components, services, and stores for clean architecture.
 		executionWorkflowId as executionWorkflowId$
 	} from '$lib/stores/execution-blocks';
 	import { validationSettingsStore } from '$lib/stores/validation-settings';
+	import { validationStore } from '$lib/stores/validation';
 	import { userQuestionStore } from '$lib/stores/user-question';
 	import {
 		backgroundWorkflowsStore,
@@ -586,6 +587,9 @@ Uses extracted components, services, and stores for clean architecture.
 				executionBlocksStore.cancel();
 				tokenStore.stopStreaming();
 			}
+			// M2: drop any pending validation modal for the torn-down workflow so
+			// a cancelled run never leaves a stale, undismissable prompt queued.
+			validationStore.purgeWorkflow(workflowId);
 		}
 	}
 

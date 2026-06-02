@@ -167,6 +167,7 @@ impl SpawnAgentTool {
                 SubAgentOperationType::Spawn,
                 &format!("Spawn sub-agent '{}' to execute task", name),
                 details,
+                self.is_detached,
             )
             .await?;
 

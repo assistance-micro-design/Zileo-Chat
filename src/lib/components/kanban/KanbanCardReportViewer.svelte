@@ -40,6 +40,7 @@
 		executionWorkflowId,
 		executionBlocksStore
 	} from '$lib/stores/execution-blocks';
+	import { validationStore } from '$lib/stores/validation';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { getErrorMessage } from '$lib/utils/error';
 
@@ -365,6 +366,11 @@
 			chatError = getErrorMessage(e);
 		} finally {
 			if (chatLive) executionBlocksStore.cancel();
+			// M2: the card review chat is ATTENDED and can emit a Manager-write
+			// validation modal. Cancelling the turn tears down the workflow, so
+			// drop any pending validation for it — otherwise the modal would be
+			// orphaned and indismissable (mirrors /agent handleCancel).
+			validationStore.purgeWorkflow(wf);
 		}
 	}
 </script>

@@ -220,6 +220,11 @@ impl Tool for SkillManagerTool {
     }
 
     async fn execute(&self, input: Value) -> ToolResult<Value> {
+        // NOTE: write GOVERNANCE (validation flow, scope §4.2, per-run cap,
+        // audit) lives in `manager_write_gate` (agents/execution/tools.rs), the
+        // single enforcement point in `execute_function_call` — NOT here. Each
+        // op still self-gates `ensure_kanban`, but a NEW caller outside the agent
+        // tool loop MUST replicate the gate. See B4 in the spec.
         self.validate_input(&input)?;
         let op = input["operation"].as_str().unwrap_or("");
         debug!(operation = %op, "SkillManagerTool execute");

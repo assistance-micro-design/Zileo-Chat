@@ -9,13 +9,14 @@
 //! operations mirror what a user can do via the sidebar.
 
 use crate::db::DBClient;
+use crate::models::agent::AgentKind;
 use crate::security::{serialize_for_query, validate_uuid_field, Validator};
 use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::sync::{Arc, LazyLock};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
     ToolDefinition {
@@ -101,11 +102,31 @@ const MAX_MESSAGES_LIMIT: i64 = 50;
 
 pub struct WorkflowManagerTool {
     db: Arc<DBClient>,
+    /// Whether the calling agent is a Kanban-kind agent. Workflow curation
+    /// (rename/folders) is reserved to Kanban supervisors
+    /// (PAT_KANBAN_STRICT_SEPARATION) — a non-Kanban caller is refused on every
+    /// operation. Execution-level self-gate complementing the defensive strip
+    /// in `create_local_tools`.
+    is_kanban: bool,
 }
 
 impl WorkflowManagerTool {
-    pub fn new(db: Arc<DBClient>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<DBClient>, agent_kind: Option<AgentKind>) -> Self {
+        let is_kanban = matches!(agent_kind, Some(AgentKind::Kanban));
+        Self { db, is_kanban }
+    }
+
+    /// Refuses every operation for a non-Kanban caller. Mirrors
+    /// `SkillManagerTool::ensure_kanban`.
+    fn ensure_kanban(&self) -> ToolResult<()> {
+        if self.is_kanban {
+            Ok(())
+        } else {
+            warn!("Non-Kanban agent attempted to use WorkflowManagerTool");
+            Err(ToolError::PermissionDenied(
+                "WorkflowManagerTool is reserved to Kanban-kind agents".to_string(),
+            ))
+        }
     }
 
     async fn list_workflows(
@@ -451,6 +472,10 @@ impl Tool for WorkflowManagerTool {
     }
 
     async fn execute(&self, input: Value) -> ToolResult<Value> {
+        self.ensure_kanban()?;
+        // NOTE: write GOVERNANCE lives in `manager_write_gate`
+        // (agents/execution/tools.rs), not here — see PromptManagerTool::execute
+        // and B4 in the spec. This tool only enforces the kind gate.
         self.validate_input(&input)?;
         let op = input["operation"].as_str().unwrap_or("");
         debug!(operation = %op, "WorkflowManagerTool execute");
@@ -544,7 +569,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_folder_rejects_duplicate() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         tool.create_workflow_folder("Reports", Some("#10b981"))
             .await
             .unwrap();
@@ -560,7 +585,7 @@ mod tests {
         // The full read/error tests require seeding many SCHEMAFULL fields;
         // the smoke check below confirms the wrapper assembles a valid query.
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let res = tool.list_workflows(None, Some(10)).await.unwrap();
         assert_eq!(res["success"], true);
         assert!(res["workflows"].is_array());
@@ -569,7 +594,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_workflow_errors_empty_returns_ok() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let wid = uuid::Uuid::new_v4().to_string();
         let res = tool.list_workflow_errors(&wid).await.unwrap();
         assert_eq!(res["success"], true);
@@ -606,7 +631,7 @@ mod tests {
     #[tokio::test]
     async fn read_workflow_returns_metadata_and_extremities() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let wid = uuid::Uuid::new_v4().to_string();
         let aid = uuid::Uuid::new_v4().to_string();
         seed_workflow(&state.db, &wid, &aid).await;
@@ -631,7 +656,7 @@ mod tests {
     #[tokio::test]
     async fn read_workflow_resolves_folder() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         // Create a folder, then place a workflow in it.
         let folder = tool
             .create_workflow_folder("Reports", Some("#10b981"))
@@ -655,7 +680,7 @@ mod tests {
     #[tokio::test]
     async fn read_workflow_with_include_messages_returns_chronological_list() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let wid = uuid::Uuid::new_v4().to_string();
         let aid = uuid::Uuid::new_v4().to_string();
         seed_workflow(&state.db, &wid, &aid).await;
@@ -679,7 +704,7 @@ mod tests {
     #[tokio::test]
     async fn read_workflow_messages_limit_clamps_to_last_n() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let wid = uuid::Uuid::new_v4().to_string();
         let aid = uuid::Uuid::new_v4().to_string();
         seed_workflow(&state.db, &wid, &aid).await;
@@ -727,7 +752,7 @@ mod tests {
     #[tokio::test]
     async fn list_workflow_sub_agents_empty_returns_ok() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let wid = uuid::Uuid::new_v4().to_string();
         let res = tool.list_workflow_sub_agents(&wid).await.unwrap();
         assert_eq!(res["success"], true);
@@ -737,7 +762,7 @@ mod tests {
     #[tokio::test]
     async fn list_workflow_sub_agents_returns_chronological_list() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let wid = uuid::Uuid::new_v4().to_string();
         let parent = uuid::Uuid::new_v4().to_string();
         let worker_a = uuid::Uuid::new_v4().to_string();
@@ -769,7 +794,7 @@ mod tests {
     #[tokio::test]
     async fn list_workflow_sub_agents_isolates_by_workflow() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let wid_a = uuid::Uuid::new_v4().to_string();
         let wid_b = uuid::Uuid::new_v4().to_string();
         let parent = uuid::Uuid::new_v4().to_string();
@@ -787,7 +812,7 @@ mod tests {
     #[tokio::test]
     async fn list_workflow_sub_agents_rejects_invalid_uuid() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let err = tool
             .list_workflow_sub_agents("not-a-uuid")
             .await
@@ -798,7 +823,7 @@ mod tests {
     #[tokio::test]
     async fn read_workflow_unknown_returns_not_found() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let wid = uuid::Uuid::new_v4().to_string();
         let err = tool.read_workflow(&wid, false, None).await.unwrap_err();
         assert!(matches!(err, ToolError::NotFound(_)));
@@ -827,7 +852,7 @@ mod tests {
     #[tokio::test]
     async fn list_workflows_excludes_hidden() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let visible = uuid::Uuid::new_v4().to_string();
         let hidden = uuid::Uuid::new_v4().to_string();
         let aid = uuid::Uuid::new_v4().to_string();
@@ -853,7 +878,7 @@ mod tests {
     #[tokio::test]
     async fn read_workflow_rejects_hidden() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let hidden = uuid::Uuid::new_v4().to_string();
         let aid = uuid::Uuid::new_v4().to_string();
         seed_workflow_hidden(&state.db, &hidden, &aid, true).await;
@@ -870,7 +895,7 @@ mod tests {
     #[tokio::test]
     async fn move_workflow_to_folder_rejects_hidden() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let hidden = uuid::Uuid::new_v4().to_string();
         let aid = uuid::Uuid::new_v4().to_string();
         seed_workflow_hidden(&state.db, &hidden, &aid, true).await;
@@ -890,7 +915,7 @@ mod tests {
     #[tokio::test]
     async fn rename_workflow_rejects_hidden() {
         let (state, _g) = setup_test_state().await;
-        let tool = WorkflowManagerTool::new(state.db.clone());
+        let tool = WorkflowManagerTool::new(state.db.clone(), Some(AgentKind::Kanban));
         let hidden = uuid::Uuid::new_v4().to_string();
         let aid = uuid::Uuid::new_v4().to_string();
         seed_workflow_hidden(&state.db, &hidden, &aid, true).await;
@@ -908,5 +933,25 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(rows[0]["name"], "hidden chat", "name must not change");
+    }
+
+    /// B(-1): a non-Kanban caller is refused on every operation at execution,
+    /// even a read — the self-gate complements the defensive strip upstream.
+    #[tokio::test]
+    async fn non_kanban_caller_is_denied_every_operation() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone(), None);
+        let res = tool.execute(json!({"operation": "list_workflows"})).await;
+        assert!(
+            matches!(res, Err(ToolError::PermissionDenied(_))),
+            "non-Kanban list_workflows must be denied, got {res:?}"
+        );
+        let res = tool
+            .execute(json!({"operation": "create_workflow_folder", "name": "X"}))
+            .await;
+        assert!(
+            matches!(res, Err(ToolError::PermissionDenied(_))),
+            "non-Kanban create_workflow_folder must be denied, got {res:?}"
+        );
     }
 }

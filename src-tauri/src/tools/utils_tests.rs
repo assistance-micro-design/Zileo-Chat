@@ -234,3 +234,31 @@ fn test_safe_truncate_utf8_multibyte() {
     let not_truncated = safe_truncate(short_text, 100, false);
     assert_eq!(not_truncated, "Court");
 }
+
+#[test]
+fn test_neutralize_for_display_strips_bidi_and_control() {
+    // A Trojan-Source style payload using a right-to-left override + a newline
+    // and a NUL must come back clean and single-line.
+    let payload = "safe\u{202E}evil\u{0000}\nmore";
+    let out = neutralize_for_display(payload, 100);
+    assert!(!out.contains('\u{202E}'), "bidi override must be stripped");
+    assert!(!out.contains('\u{0000}'), "NUL must be stripped");
+    assert!(!out.contains('\n'), "newline (control) must be stripped");
+    assert_eq!(out, "safeevilmore");
+}
+
+#[test]
+fn test_neutralize_for_display_truncates_after_stripping() {
+    // Stripping happens BEFORE truncation: the dangling-opener risk is removed
+    // first, then the visible content is bounded with an ellipsis.
+    let payload = "\u{202A}abcdefghij";
+    let out = neutralize_for_display(payload, 5);
+    assert_eq!(out, "abcde...");
+}
+
+#[test]
+fn test_neutralize_for_display_passes_clean_text() {
+    // Accented French text is preserved (only control/bidi are removed).
+    let out = neutralize_for_display("Réécriture du prompt", 100);
+    assert_eq!(out, "Réécriture du prompt");
+}

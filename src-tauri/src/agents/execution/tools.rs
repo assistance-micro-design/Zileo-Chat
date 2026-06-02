@@ -21,97 +21,161 @@ use crate::agents::prompt::MCPServerSummary;
 use crate::constants::mcp::{
     MCP_MAX_CALLS_PER_RUN, MCP_MAX_RESULT_BYTES_PER_RUN, MCP_MAX_SINGLE_RESULT_BYTES,
 };
+use crate::constants::validation::MANAGER_MAX_WRITES_PER_RUN;
+use crate::db::DBClient;
 use crate::mcp::MCPManager;
 use crate::models::agent::AgentKind;
 use crate::models::function_calling::{FunctionCall, FunctionCallResult};
 use crate::models::mcp::MCPTool;
-use crate::models::AgentConfig;
+use crate::models::{AgentConfig, RiskLevel, ValidationType};
 use crate::tools::{
     context::AgentToolContext,
-    validation_helper::{is_destructive_file_op, ValidationHelper},
-    Tool, ToolDefinition, ToolError, ToolFactory, ToolResult,
+    validation_helper::{is_destructive_file_op, should_require_validation, ValidationHelper},
+    Tool, ToolDefinition, ToolFactory,
 };
-use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-/// Tool decorator that rejects a fixed set of (write) operations while
-/// delegating everything else to the wrapped tool. Used to make the Prompt and
-/// Skill managers read-only in DETACHED runs (K6.1): the Kanban analyze/compose
-/// runs carry no agent context and inject an UNTRUSTED worker report, so a
-/// prompt-injection payload must not be able to rewrite shared prompts/skills.
-/// `list`/`read` operations stay available so the analyzer can still consult
-/// them to inform its verdict.
-pub(crate) struct ReadOnlyToolGuard {
-    inner: Arc<dyn Tool>,
-    forbidden_ops: &'static [&'static str],
-}
+// ===========================================================================
+// B0 — *Manager write governance: pure classification + decision.
+//
+// These replace the old `ReadOnlyToolGuard`/`harden_detached_writes` blanket
+// refusal (K6.1 lifted): a *Manager content write is no longer refused in a
+// detached run, it transits the EXISTING validation flow classified by risk.
+// The decision is concentrated in `manager_write_gate` (in `execute_function_call`)
+// — the single enforcement point — so a tool-wrapper backstop (which would
+// refuse the very Auto-execute path it is meant to allow, since the gate calls
+// the wrapped tool) is unnecessary. The fail-closed guarantees B4 asked of the
+// backstop (refuse a validation-required detached write, refuse when no helper
+// can enforce) are encoded in `manager_write_action` below and consumed by the
+// gate, which is armed by the explicit `is_detached` flag (NOT `context.is_none()`
+// — so `rerun_worker`, detached WITH a context, is covered, §4.4).
+// ===========================================================================
 
-impl ReadOnlyToolGuard {
-    pub(crate) fn new(inner: Arc<dyn Tool>, forbidden_ops: &'static [&'static str]) -> Self {
-        Self {
-            inner,
-            forbidden_ops,
-        }
-    }
-}
-
-#[async_trait]
-impl Tool for ReadOnlyToolGuard {
-    fn id(&self) -> &str {
-        self.inner.id()
-    }
-
-    fn definition(&self) -> ToolDefinition {
-        self.inner.definition()
-    }
-
-    async fn execute(&self, input: Value) -> ToolResult<Value> {
-        let op = input
-            .get("operation")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        if self.forbidden_ops.contains(&op) {
-            return Err(ToolError::PermissionDenied(format!(
-                "Operation '{}' is disabled in a detached run (read-only). Prompt/skill \
-                 edits happen via the card review chat with the user.",
-                op
-            )));
-        }
-        self.inner.execute(input).await
-    }
-
-    fn validate_input(&self, input: &Value) -> ToolResult<()> {
-        self.inner.validate_input(input)
-    }
-}
-
-/// Write operations stripped from the Prompt/Skill managers in detached runs.
+/// Source-single sets of write operations per *Manager tool. The classification
+/// (`classify_manager_op`) is the ONLY reader; keeping them here makes the
+/// covering-union test (CONTENT ∪ PRIVILEGE ∪ READONLY == dispatched ops) the
+/// guard against a future op slipping through unclassified (fail-open).
 const PROMPT_MANAGER_WRITE_OPS: &[&str] = &["create_prompt", "update_prompt"];
-const SKILL_MANAGER_WRITE_OPS: &[&str] = &[
-    "create_skill",
-    "update_skill",
-    "restore_skill_version",
-    "grant_skill_to_agent",
-    "revoke_skill_from_agent",
+const SKILL_MANAGER_CONTENT_WRITE_OPS: &[&str] =
+    &["create_skill", "update_skill", "restore_skill_version"];
+const SKILL_MANAGER_PRIVILEGE_OPS: &[&str] = &["grant_skill_to_agent", "revoke_skill_from_agent"];
+const WORKFLOW_MANAGER_WRITE_OPS: &[&str] = &[
+    "rename_workflow",
+    "create_workflow_folder",
+    "move_workflow_to_folder",
 ];
 
-/// Wraps the Prompt/Skill manager tools of a DETACHED run so their write
-/// operations are rejected (K6.1). Other tools pass through untouched.
-fn harden_detached_writes(tools: Vec<Arc<dyn Tool>>) -> Vec<Arc<dyn Tool>> {
-    tools
-        .into_iter()
-        .map(|t| match t.id() {
-            "PromptManagerTool" => {
-                Arc::new(ReadOnlyToolGuard::new(t, PROMPT_MANAGER_WRITE_OPS)) as Arc<dyn Tool>
-            }
-            "SkillManagerTool" => {
-                Arc::new(ReadOnlyToolGuard::new(t, SKILL_MANAGER_WRITE_OPS)) as Arc<dyn Tool>
-            }
-            _ => t,
-        })
-        .collect()
+/// Governance category of a *Manager tool operation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ManagerOpClass {
+    /// A content write governed by the EXISTING validation flow at the given
+    /// risk (prompt/skill content = High; workflow organization = Low).
+    Content(RiskLevel),
+    /// A privilege-escalation write (grant/revoke a skill on an agent's
+    /// allowlist) — always Critical so `always_confirm_high` catches it.
+    Privilege,
+    /// A read-only operation — never governed.
+    ReadOnly,
+}
+
+/// Classifies a `(tool_id, operation)` pair into its governance category.
+///
+/// Pure and total: any operation not in the write/privilege sets — including a
+/// read, an unknown op, or a non-*Manager tool — is `ReadOnly` (ungoverned).
+/// The covering-union test pins the write/read partition per tool so a newly
+/// dispatched write can never silently fall through as `ReadOnly` (fail-open).
+pub(crate) fn classify_manager_op(tool_id: &str, op: &str) -> ManagerOpClass {
+    match tool_id {
+        "PromptManagerTool" if PROMPT_MANAGER_WRITE_OPS.contains(&op) => {
+            ManagerOpClass::Content(RiskLevel::High)
+        }
+        "SkillManagerTool" if SKILL_MANAGER_CONTENT_WRITE_OPS.contains(&op) => {
+            ManagerOpClass::Content(RiskLevel::High)
+        }
+        "SkillManagerTool" if SKILL_MANAGER_PRIVILEGE_OPS.contains(&op) => {
+            ManagerOpClass::Privilege
+        }
+        "WorkflowManagerTool" if WORKFLOW_MANAGER_WRITE_OPS.contains(&op) => {
+            ManagerOpClass::Content(RiskLevel::Low)
+        }
+        _ => ManagerOpClass::ReadOnly,
+    }
+}
+
+/// Risk level a `ManagerOpClass` carries (Privilege = Critical).
+pub(crate) fn manager_op_risk(class: &ManagerOpClass) -> Option<RiskLevel> {
+    match class {
+        ManagerOpClass::Content(risk) => Some(risk.clone()),
+        ManagerOpClass::Privilege => Some(RiskLevel::Critical),
+        ManagerOpClass::ReadOnly => None,
+    }
+}
+
+/// Outcome of the single *Manager-write decision predicate, consumed by the
+/// gate in `execute_function_call`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ManagerWriteAction {
+    /// Run the write without a modal, then record a `PreApproved` audit + toast.
+    Execute,
+    /// Attended run requiring validation → emit the modal (attached human).
+    Validate,
+    /// Refuse with a stable reason (audited).
+    Refuse(ManagerWriteRefusal),
+}
+
+/// Why a *Manager write was refused. Each maps to a stable, secret-free message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ManagerWriteRefusal {
+    /// The agent does not own the targeted resource (scope §4.2(A)).
+    Scope,
+    /// The per-run write cap was reached (§4.3).
+    Volume,
+    /// Validation is required but the run is unattended (detached) — no human
+    /// can answer the modal, so the detached policy applies directly (§2/B2).
+    Detached,
+    /// Validation is required, the run is attended, but no validation helper is
+    /// available to enforce it — fail closed (B4 `RefuseNoHelper`).
+    NoHelper,
+}
+
+/// The SINGLE *Manager-write decision (B0). Pure: consumed by the gate (B1/B2)
+/// and exercised in isolation by the unit tests.
+///
+/// Order matters: scope and volume are hard invariants checked first (a refusal
+/// there never reaches the validation flow), then the validation requirement is
+/// resolved. `requires_validation` is `should_require_validation(settings,
+/// ManagerWrite | risk)` precomputed by the caller; `has_helper` is whether a
+/// `ValidationHelper` is available to drive the modal/audit.
+pub(crate) fn manager_write_action(
+    requires_validation: bool,
+    is_detached: bool,
+    has_helper: bool,
+    owns_target: bool,
+    writes_so_far: usize,
+    max_writes: usize,
+) -> ManagerWriteAction {
+    if !owns_target {
+        return ManagerWriteAction::Refuse(ManagerWriteRefusal::Scope);
+    }
+    if writes_so_far >= max_writes {
+        return ManagerWriteAction::Refuse(ManagerWriteRefusal::Volume);
+    }
+    if !requires_validation {
+        return ManagerWriteAction::Execute;
+    }
+    // Validation IS required from here on.
+    if is_detached {
+        // No human to answer: apply the detached policy directly (refuse+audit),
+        // never block the poll on a modal nobody can see (§2/B2, DoS-boot fix).
+        return ManagerWriteAction::Refuse(ManagerWriteRefusal::Detached);
+    }
+    if !has_helper {
+        // Attended but nothing can drive the modal → fail closed (B4).
+        return ManagerWriteAction::Refuse(ManagerWriteRefusal::NoHelper);
+    }
+    ManagerWriteAction::Validate
 }
 
 /// Collects MCP tool definitions with full metadata from configured servers.
@@ -235,6 +299,17 @@ pub(crate) async fn create_local_tools(
                 }
             }
         }
+    } else {
+        // B(-1): the *Manager tools (prompt / skill / workflow) are reserved to
+        // Kanban supervisors (PAT_KANBAN_STRICT_SEPARATION). Strip them
+        // defensively for a non-Kanban agent so they never appear in the tool
+        // set — the tools ALSO self-gate at execution (`ensure_kanban`), so this
+        // is defense-in-depth, not the sole guard. Without it a user could
+        // persist a Manager tool on a standard agent and at least see it in the
+        // system prompt (it would still refuse on call).
+        tool_names.retain(|t| {
+            t != "PromptManagerTool" && t != "SkillManagerTool" && t != "WorkflowManagerTool"
+        });
     }
 
     // If this is the primary agent and we have context, use create_tools_with_context
@@ -269,17 +344,14 @@ pub(crate) async fn create_local_tools(
         }
     };
 
-    // K6.1: a DETACHED run carries no agent context (the Kanban analyze/compose
-    // runs pass `agent_context: None`). With no human in the loop and an
-    // UNTRUSTED worker report injected into analyze, the Prompt/Skill managers
-    // must not be able to WRITE shared prompts/skills — wrap them read-only.
-    // Runs WITH a context (the /agent page, the card review chat) keep full
-    // write access.
-    if effective_context.is_none() {
-        harden_detached_writes(tools)
-    } else {
-        tools
-    }
+    // K6.1 lifted: a detached run NO LONGER wraps the *Manager tools read-only.
+    // Write governance is now enforced centrally by `manager_write_gate` in
+    // `execute_function_call`, armed by the explicit `is_detached` flag (which,
+    // unlike the old `context.is_none()` wrapper trigger, also covers
+    // `rerun_worker` — detached WITH a context, §4.4). A detached content write
+    // either passes per the user's validation settings (audited `PreApproved`)
+    // or is refused there.
+    tools
 }
 
 /// Collects all tool definitions from local tools and MCP tools.
@@ -335,6 +407,11 @@ pub(crate) struct FunctionCallContext<'a> {
     pub is_delegated: bool,
     /// Per-(server_id, tool) allowlist consulted by the detached MCP gate.
     pub mcp_tool_allowlist: &'a [crate::models::agent::McpToolAllowlistEntry],
+    /// The calling agent's skill-name allowlist (`config.skills`). Consulted by
+    /// the *Manager write gate to decide ownership (scope §4.2(A)): a skill
+    /// content update/restore is only "owned" when the skill's name is in this
+    /// list. Empty for agents with no skills.
+    pub agent_skills: &'a [String],
 }
 
 /// Pure R-SEC-4 decision: is `(server_id, tool)` armed in the agent's detached
@@ -462,18 +539,295 @@ pub(crate) fn mcp_result_budget_charge(is_mcp_tool: bool, result_byte_len: usize
     }
 }
 
+/// Scope decision §4.2(A): does the calling agent OWN the resource a *Manager
+/// write targets? Coupling the auto-improvement to the agent's own scope cuts
+/// cross-agent skill poisoning while leaving genuine self-improvement open.
+///
+/// - `update_skill` / `restore_skill_version`: resolve the skill (`skill_id`)
+///   to its current name and require it to be in the agent's `config.skills`.
+///   An unresolved / not-owned skill is NOT owned (fail-closed → Scope refusal;
+///   the inner tool would `NotFound` anyway).
+/// - Everything else (create_skill = new content; prompt writes = no ownership,
+///   risk accepted §13-MF-2; workflow organization = not agent-scoped;
+///   grant/revoke = bounded by the same-kind guard + Critical risk, recoverable
+///   in AgentForm) is owned by construction.
+async fn manager_owns_target(
+    db: &DBClient,
+    agent_skills: &[String],
+    tool_id: &str,
+    op: &str,
+    args: &Value,
+) -> bool {
+    if tool_id == "SkillManagerTool" && (op == "update_skill" || op == "restore_skill_version") {
+        let Some(skill_id) = args.get("skill_id").and_then(|v| v.as_str()) else {
+            return false; // missing id → cannot own
+        };
+        let Ok(id) = crate::security::validate_uuid_field(skill_id, "skill_id") else {
+            return false; // malformed id → not owned
+        };
+        let q = format!("SELECT name FROM skill:`{}`", id);
+        let name = match db.query_json(&q).await {
+            Ok(rows) => rows
+                .into_iter()
+                .next()
+                .and_then(|r| r["name"].as_str().map(String::from)),
+            Err(_) => None,
+        };
+        return name.is_some_and(|n| agent_skills.iter().any(|s| s == &n));
+    }
+    true
+}
+
+/// Builds the `details` payload for a *Manager write validation modal.
+///
+/// The authority fields (`tool_id`, `operation`) come from the BACKEND
+/// classification — never echoed from the (untrusted) tool arguments — so an
+/// injected arg cannot spoof what the human sees as the operation. The arg
+/// `preview` is neutralized (bidi/control stripped, then truncated) and clearly
+/// labeled untrusted on the frontend. The whole object is run through
+/// `sanitize_for_surrealdb` BEFORE `create_and_wait_validation` because
+/// `db.create` does NOT sanitize (ERR_SURREAL_006: a `\0` would panic).
+fn build_manager_validation_details(tool_id: &str, operation: &str, args: &Value) -> Value {
+    // Pick the most informative free-text arg for the preview, if present.
+    let preview_src = ["content", "new_name", "name", "skill_name", "edit_summary"]
+        .iter()
+        .find_map(|k| args.get(*k).and_then(|v| v.as_str()))
+        .unwrap_or("");
+    let details = serde_json::json!({
+        // Authority — backend-controlled, dominant in the modal.
+        "tool_id": tool_id,
+        "operation": operation,
+        // Untrusted, agent-supplied — neutralized + labeled on the frontend.
+        "agent_preview": crate::tools::utils::neutralize_for_display(preview_src, 200),
+    });
+    crate::db::sanitize_for_surrealdb(details)
+}
+
+/// Per-resource discriminant for the `record_preapproved` dedup key, so the
+/// audit counts distinct resources (not just `(tool, op)`). Picks the first
+/// stable identifier present in the args (id before name). Empty when none.
+fn manager_target_discriminant(args: &Value) -> String {
+    [
+        "prompt_id",
+        "skill_id",
+        "version_id",
+        "name",
+        "skill_name",
+        "target_agent_id",
+    ]
+    .iter()
+    .find_map(|k| args.get(*k).and_then(|v| v.as_str()))
+    .unwrap_or("")
+    .to_string()
+}
+
+/// Stable, secret-free refusal message for a `ManagerWriteRefusal`.
+fn manager_refusal_message(reason: ManagerWriteRefusal, tool_id: &str, op: &str) -> String {
+    match reason {
+        ManagerWriteRefusal::Scope => format!(
+            "Refused: this agent may only modify its OWN skills (operation '{}' on {} targets a \
+             resource it does not own).",
+            op, tool_id
+        ),
+        ManagerWriteRefusal::Volume => format!(
+            "Refused: per-run *Manager write limit reached ({MANAGER_MAX_WRITES_PER_RUN}); no \
+             further self-improvement writes are permitted in this run."
+        ),
+        ManagerWriteRefusal::Detached => format!(
+            "Refused: operation '{}' on {} requires validation but the run is unattended \
+             (detached) — no human can approve it.",
+            op, tool_id
+        ),
+        ManagerWriteRefusal::NoHelper => format!(
+            "Refused: operation '{}' on {} requires validation but no approval channel is \
+             available.",
+            op, tool_id
+        ),
+    }
+}
+
+/// B1/B2/B4 — the SINGLE *Manager-write enforcement point. Returns `Some(result)`
+/// when `call` is a *Manager WRITE op (fully handled here: executed + audited,
+/// validated, or refused); returns `None` when it is not a *Manager write (a
+/// read or a non-*Manager tool) so the caller proceeds with the normal flow.
+///
+/// Centralizes what the old read-only wrapper backstop did, but governed by the
+/// user's EXISTING validation settings instead of a blanket refusal — armed by
+/// the explicit `ctx.is_detached` (covers `rerun_worker`, §4.4).
+async fn manager_write_gate(
+    call: &FunctionCall,
+    ctx: &FunctionCallContext<'_>,
+    tool: &Arc<dyn Tool>,
+    manager_writes_made: &mut usize,
+    start: std::time::Instant,
+) -> Option<FunctionCallResult> {
+    let op = call
+        .arguments
+        .get("operation")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let class = classify_manager_op(&call.name, op);
+    let risk = match manager_op_risk(&class) {
+        Some(r) => r,
+        None => return None, // ReadOnly / non-Manager → normal flow.
+    };
+
+    // The decision needs a helper to load settings, look up ownership, drive the
+    // modal and write the audit. Without one we cannot enforce: fail closed in a
+    // detached run (defense-in-depth), otherwise defer to the normal flow.
+    let Some(helper) = ctx.validation_helper else {
+        if ctx.is_detached {
+            warn!(
+                tool = %call.name, operation = %op,
+                "Manager write refused: detached run with no validation helper (fail-closed)"
+            );
+            return Some(FunctionCallResult::failure(
+                &call.id,
+                &call.name,
+                manager_refusal_message(ManagerWriteRefusal::NoHelper, &call.name, op),
+            ));
+        }
+        return None;
+    };
+
+    let owns_target = manager_owns_target(
+        &helper.db,
+        ctx.agent_skills,
+        &call.name,
+        op,
+        &call.arguments,
+    )
+    .await;
+    let settings = helper.load_validation_settings().await;
+    // *Manager content writes are governed UNIFORMLY by the user's existing
+    // settings, exactly like prompts: a `create_skill` (incl. one a Kanban
+    // supervisor composes FOR a worker — the legitimate auto-improvement flow in
+    // compose_card) passes in Auto + always_confirm_high OFF (PreApproved), and
+    // requires review when always_confirm_high is ON (High → detached refuse /
+    // attended modal). The cross-agent skill-creation risk is accepted-and-named,
+    // consistent with prompts (§13-MF-2, option B) and grant/revoke (§4.1):
+    // mitigated by Kanban-only gating + audit + toast + manual recovery.
+    let requires_validation =
+        should_require_validation(&settings, &ValidationType::ManagerWrite, &risk);
+
+    let action = manager_write_action(
+        requires_validation,
+        ctx.is_detached,
+        true, // helper present (checked above)
+        owns_target,
+        *manager_writes_made,
+        MANAGER_MAX_WRITES_PER_RUN,
+    );
+
+    match action {
+        ManagerWriteAction::Execute => {
+            // Auto / permissive: run it, then record PreApproved + opportunistic
+            // toast. Count it toward the per-run cap (self-grants included, MF-3).
+            *manager_writes_made += 1;
+            match tool.execute(call.arguments.clone()).await {
+                Ok(result) => {
+                    info!(tool = %call.name, operation = %op, "Manager write pre-approved (auto)");
+                    helper
+                        .record_preapproved(
+                            &call.name,
+                            op,
+                            &manager_target_discriminant(&call.arguments),
+                            &risk,
+                            ctx.workflow_id,
+                        )
+                        .await;
+                    Some(
+                        FunctionCallResult::success(&call.id, &call.name, result)
+                            .with_execution_time(start.elapsed().as_millis() as u64),
+                    )
+                }
+                Err(e) => {
+                    warn!(tool = %call.name, error = %e, "Manager write (pre-approved) failed");
+                    Some(FunctionCallResult::failure(
+                        &call.id,
+                        &call.name,
+                        e.to_string(),
+                    ))
+                }
+            }
+        }
+        ManagerWriteAction::Validate => {
+            // Attended: emit the modal with a neutralized, authority-dominant
+            // payload (sanitized for the DB). On approval, execute + count.
+            let validation_id = uuid::Uuid::new_v4().to_string();
+            let details = build_manager_validation_details(&call.name, op, &call.arguments);
+            let description = format!("{}: {}", call.name, op);
+            match helper
+                .create_and_wait_validation(
+                    &validation_id,
+                    ctx.workflow_id,
+                    ValidationType::ManagerWrite,
+                    &description,
+                    details,
+                    risk,
+                    false, // attended (manager_write_action only reaches here when !is_detached)
+                )
+                .await
+            {
+                Ok(()) => {
+                    *manager_writes_made += 1;
+                    match tool.execute(call.arguments.clone()).await {
+                        Ok(result) => Some(
+                            FunctionCallResult::success(&call.id, &call.name, result)
+                                .with_execution_time(start.elapsed().as_millis() as u64),
+                        ),
+                        Err(e) => Some(FunctionCallResult::failure(
+                            &call.id,
+                            &call.name,
+                            e.to_string(),
+                        )),
+                    }
+                }
+                Err(e) => {
+                    warn!(tool = %call.name, error = %e, "Manager write validation rejected");
+                    Some(FunctionCallResult::failure(
+                        &call.id,
+                        &call.name,
+                        e.to_string(),
+                    ))
+                }
+            }
+        }
+        ManagerWriteAction::Refuse(reason) => {
+            let msg = manager_refusal_message(reason, &call.name, op);
+            warn!(tool = %call.name, operation = %op, reason = ?reason, "Manager write refused");
+            // Audit the refusal so a no-review block is visible (best-effort).
+            let reason_label = match reason {
+                ManagerWriteRefusal::Scope => "agent does not own target (scope)",
+                ManagerWriteRefusal::Volume => "per-run manager write cap reached",
+                ManagerWriteRefusal::Detached => "validation required in a detached run",
+                ManagerWriteRefusal::NoHelper => "validation required, no approval channel",
+            };
+            helper
+                .record_manager_refusal(&call.name, op, reason_label, &risk, ctx.workflow_id)
+                .await;
+            Some(FunctionCallResult::failure(&call.id, &call.name, msg))
+        }
+    }
+}
+
 /// Executes a single function call (local or MCP tool).
 ///
 /// `mcp_result_bytes` is the cumulative sink byte size (serialized result +
 /// error) of all prior MCP results in this run — success AND error — consulted by
 /// the R-SEC-10 per-run budget gate (the caller accumulates it in `iteration.rs`
 /// after each MCP call via [`result_sink_byte_len`] + [`mcp_result_budget_charge`]).
+///
+/// `manager_writes_made` is the run-scoped count of *Manager content/privilege
+/// writes already executed, consulted + incremented by the *Manager write gate
+/// for the per-run volume cap (§4.3).
 pub(crate) async fn execute_function_call(
     call: &FunctionCall,
     ctx: &FunctionCallContext<'_>,
     tools_used: &mut Vec<String>,
     mcp_calls_made: &mut Vec<String>,
     mcp_result_bytes: usize,
+    manager_writes_made: &mut usize,
 ) -> FunctionCallResult {
     let start = std::time::Instant::now();
 
@@ -544,7 +898,25 @@ pub(crate) async fn execute_function_call(
                         ),
                     );
                 }
-                // Armed: proceed without the interactive modal (no human present).
+                // Armed: proceed without the interactive modal (no human
+                // present). B3: record the pre-approved execution into the audit
+                // log so an unattended MCP call that ran by allowlist policy is
+                // traceable (decided_by = PreApproved). Best-effort + run-scoped
+                // dedup per (tool, op) inside the helper; MCP is Medium risk so
+                // no toast is emitted.
+                if let Some(helper) = ctx.validation_helper {
+                    helper
+                        .record_preapproved(
+                            &call.name,
+                            "armed_mcp_call",
+                            // Discriminant empty: the full mcp__server__tool name
+                            // is already in `tool_name`, so dedup is per-tool/run.
+                            "",
+                            &RiskLevel::Medium,
+                            ctx.workflow_id,
+                        )
+                        .await;
+                }
             }
 
             // R-SEC-10: per-run cap + cumulative byte budget. Checked AFTER the
@@ -566,6 +938,9 @@ pub(crate) async fn execute_function_call(
                             server,
                             tool,
                             call.arguments.clone(),
+                            // This branch only runs for an ATTENDED run
+                            // (`if !ctx.is_detached`), so the modal has a human.
+                            false,
                         )
                         .await
                     {
@@ -602,6 +977,16 @@ pub(crate) async fn execute_function_call(
         if let Some(tool) = matching_tool {
             tools_used.push(call.name.clone());
 
+            // B1/B2/B4 — *Manager WRITE gate (prompt/skill/workflow). Runs BEFORE
+            // the generic tool validation: a write op is fully handled here
+            // (executed + audited PreApproved, validated via modal, or refused).
+            // A read op / non-Manager tool returns None and falls through.
+            if let Some(result) =
+                manager_write_gate(call, ctx, tool, manager_writes_made, start).await
+            {
+                return result;
+            }
+
             // Request validation for local tool
             // Skip validation for sub-agent tools (they have their own validation)
             let is_sub_agent_tool = call.name == "SpawnAgentTool"
@@ -631,6 +1016,7 @@ pub(crate) async fn execute_function_call(
                                     operation,
                                     path,
                                     call.arguments.clone(),
+                                    ctx.is_detached,
                                 )
                                 .await
                             {
@@ -657,6 +1043,7 @@ pub(crate) async fn execute_function_call(
                             &call.name,
                             operation,
                             call.arguments.clone(),
+                            ctx.is_detached,
                         )
                         .await
                     {
@@ -774,69 +1161,23 @@ mod tests {
         );
     }
 
-    fn find_tool<'a>(tools: &'a [Arc<dyn Tool>], id: &str) -> &'a Arc<dyn Tool> {
-        tools
-            .iter()
-            .find(|t| t.id() == id)
-            .unwrap_or_else(|| panic!("{id} not found in {:?}", tool_ids(tools)))
-    }
-
-    /// K6.1: a DETACHED run (no agent context — the Kanban analyze/compose path)
-    /// must have PromptManager write operations blocked, while read operations
-    /// stay available.
+    /// B(-1): a non-Kanban (kind = None) agent must NOT receive ANY *Manager
+    /// tool — they are reserved to Kanban supervisors. The defensive strip in
+    /// `create_local_tools` removes them from the tool set entirely, even when
+    /// the user persisted them on the config.
     #[tokio::test]
-    async fn detached_run_blocks_prompt_manager_writes() {
-        let (state, _g) = setup_test_state().await;
-        let config = agent_config_from(serde_json::json!({
-            "id": uuid::Uuid::new_v4().to_string(),
-            "name": "Detached",
-            "tools": ["PromptManagerTool"],
-        }));
-
-        // agent_context None + context_override None => detached.
-        let tools = create_local_tools(
-            &config,
-            Some(&state.tool_factory),
-            None,
-            Some("wf-1".to_string()),
-            false,
-            None,
-        )
-        .await;
-
-        let pm = find_tool(&tools, "PromptManagerTool");
-        let write = pm
-            .execute(serde_json::json!({
-                "operation": "create_prompt",
-                "name": "x",
-                "content": "y"
-            }))
-            .await;
-        assert!(
-            matches!(write, Err(crate::tools::ToolError::PermissionDenied(_))),
-            "detached create_prompt must be denied, got {write:?}"
-        );
-
-        // Read stays available (not denied).
-        let read = pm
-            .execute(serde_json::json!({"operation": "list_prompts"}))
-            .await;
-        assert!(
-            !matches!(read, Err(crate::tools::ToolError::PermissionDenied(_))),
-            "detached list_prompts must NOT be denied, got {read:?}"
-        );
-    }
-
-    /// K6.1: a run WITH an agent context (the /agent page, the card review chat)
-    /// keeps full PromptManager write access — the guard is detached-only.
-    #[tokio::test]
-    async fn contextful_run_allows_prompt_manager_writes() {
+    async fn non_kanban_agent_does_not_receive_manager_tools() {
         let (state, _g) = setup_test_state().await;
         let context = AgentToolContext::from_app_state_full(&state);
         let config = agent_config_from(serde_json::json!({
             "id": uuid::Uuid::new_v4().to_string(),
-            "name": "Contextful",
-            "tools": ["PromptManagerTool"],
+            "name": "Std",
+            "tools": [
+                "MemoryTool",
+                "PromptManagerTool",
+                "SkillManagerTool",
+                "WorkflowManagerTool"
+            ],
         }));
 
         let tools = create_local_tools(
@@ -848,35 +1189,38 @@ mod tests {
             None,
         )
         .await;
-
-        let pm = find_tool(&tools, "PromptManagerTool");
-        let write = pm
-            .execute(serde_json::json!({
-                "operation": "create_prompt",
-                "name": "x",
-                "content": "y"
-            }))
-            .await;
+        let ids = tool_ids(&tools);
+        for forbidden in [
+            "PromptManagerTool",
+            "SkillManagerTool",
+            "WorkflowManagerTool",
+        ] {
+            assert!(
+                !ids.contains(&forbidden.to_string()),
+                "non-Kanban agent must NOT receive {forbidden}, got {ids:?}"
+            );
+        }
         assert!(
-            !matches!(write, Err(crate::tools::ToolError::PermissionDenied(_))),
-            "contextful create_prompt must NOT be denied by the read-only guard, got {write:?}"
+            ids.contains(&"MemoryTool".to_string()),
+            "non-Kanban agent keeps its non-Manager tools, got {ids:?}"
         );
     }
 
-    /// K6.1: a DETACHED run must have SkillManager write operations blocked by
-    /// the read-only guard. We assert the GUARD denied it (its distinctive
-    /// message) — not the unrelated `ensure_kanban` gate — to confirm the
-    /// wrapping is what intercepts the write before it reaches the inner tool.
+    /// B(-1): a Kanban-kind agent DOES receive the *Manager tools (they are the
+    /// supervisors that curate prompts/skills/workflows). The detached
+    /// classification is no longer about wrapping — write governance moved to
+    /// the validation gate in `execute_function_call`.
     #[tokio::test]
-    async fn detached_run_wraps_skill_manager_writes() {
+    async fn kanban_agent_receives_manager_tools() {
         let (state, _g) = setup_test_state().await;
         let config = agent_config_from(serde_json::json!({
             "id": uuid::Uuid::new_v4().to_string(),
             "name": "KanbanDetached",
             "kind": "kanban",
-            "tools": ["SkillManagerTool"],
+            "tools": ["PromptManagerTool", "SkillManagerTool", "WorkflowManagerTool"],
         }));
 
+        // Detached (no context) Kanban analyze/compose path.
         let tools = create_local_tools(
             &config,
             Some(&state.tool_factory),
@@ -886,77 +1230,17 @@ mod tests {
             None,
         )
         .await;
-
-        let sm = find_tool(&tools, "SkillManagerTool");
-        let write = sm
-            .execute(serde_json::json!({
-                "operation": "create_skill",
-                "name": "x",
-                "content": "y",
-                "description": "d",
-                "target_agent_id": uuid::Uuid::new_v4().to_string()
-            }))
-            .await;
-        match write {
-            Err(crate::tools::ToolError::PermissionDenied(msg)) => assert!(
-                msg.contains("read-only"),
-                "create_skill must be denied by the read-only GUARD, got: {msg}"
-            ),
-            other => panic!("expected PermissionDenied from the guard, got {other:?}"),
-        }
-    }
-
-    /// K6.1: the `ReadOnlyToolGuard` itself — forbidden ops are denied with the
-    /// read-only message, every other op delegates to the wrapped tool. Covers
-    /// the SkillManager forbidden list (read ops pass through) without the
-    /// `ensure_kanban` confound of a non-persisted agent.
-    #[tokio::test]
-    async fn read_only_guard_blocks_forbidden_and_passes_through() {
-        // Minimal fake tool that echoes the input back on execute.
-        struct EchoTool;
-        #[async_trait]
-        impl Tool for EchoTool {
-            fn id(&self) -> &str {
-                "SkillManagerTool"
-            }
-            fn definition(&self) -> ToolDefinition {
-                ToolDefinition {
-                    id: "SkillManagerTool".to_string(),
-                    name: "SkillManager".to_string(),
-                    summary: String::new(),
-                    description: String::new(),
-                    input_schema: serde_json::json!({}),
-                    output_schema: serde_json::json!({}),
-                    requires_confirmation: false,
-                }
-            }
-            async fn execute(&self, input: Value) -> ToolResult<Value> {
-                Ok(input)
-            }
-            fn validate_input(&self, _input: &Value) -> ToolResult<()> {
-                Ok(())
-            }
-        }
-
-        let guard = ReadOnlyToolGuard::new(Arc::new(EchoTool), SKILL_MANAGER_WRITE_OPS);
-        assert_eq!(guard.id(), "SkillManagerTool", "id delegates to inner");
-
-        for write_op in SKILL_MANAGER_WRITE_OPS {
-            let r = guard
-                .execute(serde_json::json!({"operation": write_op}))
-                .await;
+        let ids = tool_ids(&tools);
+        for expected in [
+            "PromptManagerTool",
+            "SkillManagerTool",
+            "WorkflowManagerTool",
+        ] {
             assert!(
-                matches!(r, Err(crate::tools::ToolError::PermissionDenied(_))),
-                "write op {write_op} must be denied, got {r:?}"
+                ids.contains(&expected.to_string()),
+                "Kanban agent must receive {expected}, got {ids:?}"
             );
         }
-
-        // A read op delegates to the inner tool (echoes the input back).
-        let read = guard
-            .execute(serde_json::json!({"operation": "list_skills"}))
-            .await
-            .expect("read op must delegate");
-        assert_eq!(read["operation"], "list_skills");
     }
 
     /// A standard (kind = None) agent that lists UserQuestionTool keeps it:
@@ -1021,6 +1305,418 @@ mod tests {
         assert!(
             ids.contains(&"MemoryTool".to_string()),
             "Kanban agent must still receive its non-delegation tools, got {ids:?}"
+        );
+    }
+
+    // ----------------------------------------------------------------------
+    // B0: *Manager write classification + decision (pure).
+    // ----------------------------------------------------------------------
+
+    #[test]
+    fn classify_manager_op_partitions_each_tool() {
+        use ManagerOpClass::*;
+        // Prompt: writes are High content, reads are ReadOnly.
+        assert_eq!(
+            classify_manager_op("PromptManagerTool", "create_prompt"),
+            Content(RiskLevel::High)
+        );
+        assert_eq!(
+            classify_manager_op("PromptManagerTool", "update_prompt"),
+            Content(RiskLevel::High)
+        );
+        assert_eq!(
+            classify_manager_op("PromptManagerTool", "list_prompts"),
+            ReadOnly
+        );
+        // Skill: content writes High, privilege ops Privilege, reads ReadOnly.
+        assert_eq!(
+            classify_manager_op("SkillManagerTool", "restore_skill_version"),
+            Content(RiskLevel::High)
+        );
+        assert_eq!(
+            classify_manager_op("SkillManagerTool", "grant_skill_to_agent"),
+            Privilege
+        );
+        assert_eq!(
+            classify_manager_op("SkillManagerTool", "revoke_skill_from_agent"),
+            Privilege
+        );
+        assert_eq!(
+            classify_manager_op("SkillManagerTool", "read_skill"),
+            ReadOnly
+        );
+        // Workflow organization ops are Low content.
+        assert_eq!(
+            classify_manager_op("WorkflowManagerTool", "rename_workflow"),
+            Content(RiskLevel::Low)
+        );
+        assert_eq!(
+            classify_manager_op("WorkflowManagerTool", "list_workflows"),
+            ReadOnly
+        );
+        // Non-Manager tool / unknown op are ungoverned.
+        assert_eq!(classify_manager_op("MemoryTool", "create_prompt"), ReadOnly);
+        assert_eq!(
+            classify_manager_op("PromptManagerTool", "nonexistent_op"),
+            ReadOnly
+        );
+    }
+
+    /// MF-4 (BLOCKING): every operation a *Manager tool actually dispatches must
+    /// be covered exactly once by CONTENT ∪ PRIVILEGE ∪ READONLY. An op present
+    /// in the dispatch `match` but absent from the classification would be a
+    /// fail-open silent write once the hard refusal is replaced by a flow.
+    #[test]
+    fn manager_op_classification_is_a_covering_partition() {
+        // The dispatched ops are mirrored from each tool's execute() match arms;
+        // if a tool gains an op, this list must grow with it or the assertion
+        // below trips (CI-blocking).
+        let cases: &[(&str, &[&str], &[&str])] = &[
+            (
+                "PromptManagerTool",
+                // dispatched ops
+                &[
+                    "list_prompts",
+                    "get_prompt",
+                    "create_prompt",
+                    "update_prompt",
+                ],
+                // expected WRITE ops (Content or Privilege)
+                PROMPT_MANAGER_WRITE_OPS,
+            ),
+            (
+                "SkillManagerTool",
+                &[
+                    "list_skills",
+                    "read_skill",
+                    "create_skill",
+                    "update_skill",
+                    "list_skill_versions",
+                    "restore_skill_version",
+                    "grant_skill_to_agent",
+                    "revoke_skill_from_agent",
+                ],
+                // content + privilege writes
+                &[
+                    "create_skill",
+                    "update_skill",
+                    "restore_skill_version",
+                    "grant_skill_to_agent",
+                    "revoke_skill_from_agent",
+                ],
+            ),
+            (
+                "WorkflowManagerTool",
+                &[
+                    "list_workflows",
+                    "rename_workflow",
+                    "list_workflow_folders",
+                    "create_workflow_folder",
+                    "move_workflow_to_folder",
+                    "read_workflow",
+                    "list_workflow_errors",
+                    "list_workflow_sub_agents",
+                ],
+                WORKFLOW_MANAGER_WRITE_OPS,
+            ),
+        ];
+
+        for (tool, dispatched, expected_writes) in cases {
+            for op in *dispatched {
+                let class = classify_manager_op(tool, op);
+                let is_write = matches!(
+                    class,
+                    ManagerOpClass::Content(_) | ManagerOpClass::Privilege
+                );
+                let should_be_write = expected_writes.contains(op);
+                assert_eq!(
+                    is_write, should_be_write,
+                    "{tool}.{op}: classified write={is_write} but expected write={should_be_write} \
+                     — every dispatched op must be in exactly one of CONTENT∪PRIVILEGE (write) \
+                     or READONLY (read)"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn manager_write_action_executes_when_validation_not_required() {
+        // Auto + accept-high (requires_validation = false) → execute directly.
+        assert_eq!(
+            manager_write_action(false, false, true, true, 0, MANAGER_MAX_WRITES_PER_RUN),
+            ManagerWriteAction::Execute
+        );
+        // Even detached: no validation required → execute (the nominal case).
+        assert_eq!(
+            manager_write_action(false, true, true, true, 0, MANAGER_MAX_WRITES_PER_RUN),
+            ManagerWriteAction::Execute
+        );
+    }
+
+    #[test]
+    fn manager_write_action_validates_attended_else_refuses_detached() {
+        // Attended + requires validation + helper present → modal.
+        assert_eq!(
+            manager_write_action(true, false, true, true, 0, MANAGER_MAX_WRITES_PER_RUN),
+            ManagerWriteAction::Validate
+        );
+        // Detached + requires validation → refuse (court-circuit, B2): no modal.
+        assert_eq!(
+            manager_write_action(true, true, true, true, 0, MANAGER_MAX_WRITES_PER_RUN),
+            ManagerWriteAction::Refuse(ManagerWriteRefusal::Detached)
+        );
+        // Attended + requires validation but NO helper → fail closed (B4).
+        assert_eq!(
+            manager_write_action(true, false, false, true, 0, MANAGER_MAX_WRITES_PER_RUN),
+            ManagerWriteAction::Refuse(ManagerWriteRefusal::NoHelper)
+        );
+    }
+
+    #[test]
+    fn manager_write_action_refuses_scope_and_volume_first() {
+        // Scope violation refused regardless of validation requirement.
+        assert_eq!(
+            manager_write_action(false, false, true, false, 0, MANAGER_MAX_WRITES_PER_RUN),
+            ManagerWriteAction::Refuse(ManagerWriteRefusal::Scope)
+        );
+        // Volume cap reached → refuse (owns_target true, validation off).
+        assert_eq!(
+            manager_write_action(
+                false,
+                false,
+                true,
+                true,
+                MANAGER_MAX_WRITES_PER_RUN,
+                MANAGER_MAX_WRITES_PER_RUN
+            ),
+            ManagerWriteAction::Refuse(ManagerWriteRefusal::Volume)
+        );
+        // Scope takes precedence over volume when both would trip.
+        assert_eq!(
+            manager_write_action(
+                false,
+                false,
+                true,
+                false,
+                MANAGER_MAX_WRITES_PER_RUN,
+                MANAGER_MAX_WRITES_PER_RUN
+            ),
+            ManagerWriteAction::Refuse(ManagerWriteRefusal::Scope)
+        );
+    }
+
+    #[test]
+    fn manager_op_risk_maps_privilege_to_critical() {
+        assert_eq!(
+            manager_op_risk(&ManagerOpClass::Content(RiskLevel::High)),
+            Some(RiskLevel::High)
+        );
+        assert_eq!(
+            manager_op_risk(&ManagerOpClass::Privilege),
+            Some(RiskLevel::Critical)
+        );
+        assert_eq!(manager_op_risk(&ManagerOpClass::ReadOnly), None);
+    }
+
+    // ----------------------------------------------------------------------
+    // B1/B5 — *Manager write gate, end-to-end through execute_function_call.
+    // ----------------------------------------------------------------------
+
+    /// Builds a FunctionCallContext for the gate integration tests.
+    fn manager_ctx<'a>(
+        helper: &'a ValidationHelper,
+        local_tools: &'a [Arc<dyn Tool>],
+        is_detached: bool,
+        agent_skills: &'a [String],
+    ) -> FunctionCallContext<'a> {
+        FunctionCallContext {
+            local_tools,
+            mcp_manager: None,
+            workflow_id: "wf-mgr",
+            validation_helper: Some(helper),
+            require_file_confirmation: false,
+            is_detached,
+            is_delegated: false,
+            mcp_tool_allowlist: &[],
+            agent_skills,
+        }
+    }
+
+    async fn count_preapproved_audit(db: &crate::db::DBClient) -> usize {
+        let rows = db
+            .query_json("SELECT decided_by FROM validation_audit")
+            .await
+            .unwrap_or_default();
+        rows.iter()
+            .filter(|r| r.get("decided_by").and_then(|v| v.as_str()) == Some("pre_approved"))
+            .count()
+    }
+
+    /// B1 nominal: a DETACHED Kanban content write executes under the DEFAULT
+    /// validation settings (Selective + tools unchecked → no validation
+    /// required) and is recorded as a `PreApproved` audit entry. This is the
+    /// auto-improvement path K6.1 now permits (the old wrapper refused it).
+    #[tokio::test]
+    async fn detached_manager_write_executes_and_audits_preapproved() {
+        let (state, _g) = setup_test_state().await;
+        let helper = ValidationHelper::new(state.db.clone(), None);
+        let pm: Arc<dyn Tool> = Arc::new(crate::tools::prompt_manager::PromptManagerTool::new(
+            state.db.clone(),
+            uuid::Uuid::new_v4().to_string(),
+            Some(AgentKind::Kanban),
+        ));
+        let tools = vec![pm];
+        let ctx = manager_ctx(&helper, &tools, true, &[]);
+
+        let call = FunctionCall {
+            id: "m1".to_string(),
+            name: "PromptManagerTool".to_string(),
+            arguments: serde_json::json!({
+                "operation": "create_prompt",
+                "name": "auto-improved",
+                "content": "Refined {{x}}",
+                "category": "custom"
+            }),
+        };
+        let (mut tu, mut mc, mut mw) = (Vec::new(), Vec::new(), 0usize);
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut mw).await;
+        assert!(
+            res.success,
+            "detached create_prompt must execute under default settings, got {:?}",
+            res.error
+        );
+        assert_eq!(mw, 1, "the write must count toward the per-run cap");
+        assert_eq!(
+            count_preapproved_audit(&state.db).await,
+            1,
+            "an executed manager write must leave a PreApproved audit row"
+        );
+    }
+
+    /// B1 scope §4.2(A): a DETACHED update_skill targeting a skill the agent
+    /// does NOT own (its name is not in `config.skills`) is refused for scope —
+    /// regardless of the validation mode — and audited.
+    #[tokio::test]
+    async fn detached_skill_update_outside_scope_is_refused() {
+        let (state, _g) = setup_test_state().await;
+        let helper = ValidationHelper::new(state.db.clone(), None);
+        let sm: Arc<dyn Tool> = Arc::new(crate::tools::skill_manager::SkillManagerTool::new(
+            state.db.clone(),
+            uuid::Uuid::new_v4().to_string(),
+            Some(AgentKind::Kanban),
+        ));
+        let tools = vec![sm];
+        // agent_skills empty → no skill is owned.
+        let ctx = manager_ctx(&helper, &tools, true, &[]);
+
+        let call = FunctionCall {
+            id: "m2".to_string(),
+            name: "SkillManagerTool".to_string(),
+            arguments: serde_json::json!({
+                "operation": "update_skill",
+                "skill_id": uuid::Uuid::new_v4().to_string(),
+                "content": "poisoned",
+                "edit_summary": "x"
+            }),
+        };
+        let (mut tu, mut mc, mut mw) = (Vec::new(), Vec::new(), 0usize);
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut mw).await;
+        assert!(!res.success, "an out-of-scope skill write must be refused");
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("OWN skills"),
+            "refusal must name the scope rule, got: {err:?}"
+        );
+        assert_eq!(mw, 0, "a refused write must NOT count toward the cap");
+    }
+
+    /// B2/B1 at the gate: a DETACHED content write that WOULD require validation
+    /// (Manual mode) is refused immediately (no modal), not executed.
+    #[tokio::test]
+    async fn detached_manager_write_refused_when_validation_required() {
+        let (state, _g) = setup_test_state().await;
+        // Seed Manual mode so ManagerWrite (High) requires validation.
+        let upsert = "UPSERT settings:`settings:validation` CONTENT { id: 'settings:validation', \
+             config: { mode: 'manual', selectiveConfig: { tools: false, subAgents: true, mcp: true, \
+             fileOps: true, dbOps: true }, riskThresholds: { autoApproveLow: true, \
+             alwaysConfirmHigh: false }, timeoutSeconds: 60, timeoutBehavior: 'reject', \
+             audit: { enableLogging: true, retentionDays: 30 }, updatedAt: time::now() } }";
+        state
+            .db
+            .execute(upsert)
+            .await
+            .expect("seed manual settings");
+
+        let helper = ValidationHelper::new(state.db.clone(), None);
+        let pm: Arc<dyn Tool> = Arc::new(crate::tools::prompt_manager::PromptManagerTool::new(
+            state.db.clone(),
+            uuid::Uuid::new_v4().to_string(),
+            Some(AgentKind::Kanban),
+        ));
+        let tools = vec![pm];
+        let ctx = manager_ctx(&helper, &tools, true, &[]);
+
+        let call = FunctionCall {
+            id: "m3".to_string(),
+            name: "PromptManagerTool".to_string(),
+            arguments: serde_json::json!({
+                "operation": "create_prompt", "name": "x", "content": "y", "category": "custom"
+            }),
+        };
+        let started = std::time::Instant::now();
+        let (mut tu, mut mc, mut mw) = (Vec::new(), Vec::new(), 0usize);
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut mw).await;
+        assert!(
+            !res.success,
+            "a detached validation-required write must be refused"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "detached refusal must be immediate (no modal/poll)"
+        );
+        assert_eq!(mw, 0, "a refused write must NOT count toward the cap");
+    }
+
+    /// B1 fix (§4.2(A)): a `create_skill` targeting ANOTHER agent is forced
+    /// through validation even under default (Auto-permissive) settings — so in
+    /// a DETACHED run it is REFUSED, never executed unreviewed. Closes the
+    /// `create_skill` is governed UNIFORMLY like `create_prompt`: in a detached
+    /// run under default (Auto-permissive) settings it PASSES the gate (it is the
+    /// legitimate compose_card auto-improvement flow — a Kanban supervisor
+    /// composing a skill, possibly for a worker). It is NOT refused for being
+    /// cross-agent; the gate lets it through to the tool (which here fails for an
+    /// UNRELATED reason — the target agent is not seeded — proving the gate did
+    /// not refuse it). Mirrors the create_prompt behavior the user expects.
+    #[tokio::test]
+    async fn detached_create_skill_passes_gate_in_auto_like_prompt() {
+        let (state, _g) = setup_test_state().await;
+        let helper = ValidationHelper::new(state.db.clone(), None);
+        let sm: Arc<dyn Tool> = Arc::new(crate::tools::skill_manager::SkillManagerTool::new(
+            state.db.clone(),
+            uuid::Uuid::new_v4().to_string(),
+            Some(AgentKind::Kanban),
+        ));
+        let tools = vec![sm];
+        let ctx = manager_ctx(&helper, &tools, true, &[]);
+
+        let call = FunctionCall {
+            id: "cs1".to_string(),
+            name: "SkillManagerTool".to_string(),
+            arguments: serde_json::json!({
+                "operation": "create_skill",
+                "name": "composed-skill",
+                "content": "improve the worker",
+                "description": "d",
+                // A worker target distinct from the caller — must NOT be refused.
+                "target_agent_id": uuid::Uuid::new_v4().to_string()
+            }),
+        };
+        let (mut tu, mut mc, mut mw) = (Vec::new(), Vec::new(), 0usize);
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut mw).await;
+        let err = res.error.as_deref().unwrap_or("");
+        assert!(
+            !err.contains("unattended") && !err.contains("requires validation"),
+            "detached create_skill in Auto must pass the gate like create_prompt, got: {err:?}"
         );
     }
 
@@ -1295,6 +1991,7 @@ mod tests {
             is_detached,
             is_delegated,
             mcp_tool_allowlist: allowlist,
+            agent_skills: &[],
         }
     }
 
@@ -1309,7 +2006,7 @@ mod tests {
         };
         let ctx = call_ctx(&state.mcp_manager, true, false, &[]);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut 0usize).await;
         assert!(!res.success, "detached unarmed MCP call must fail");
         let err = res.error.as_deref().unwrap_or("");
         assert!(
@@ -1331,7 +2028,7 @@ mod tests {
         };
         let ctx = call_ctx(&state.mcp_manager, false, false, &[]);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut 0usize).await;
         assert!(
             !res.error
                 .as_deref()
@@ -1396,7 +2093,7 @@ mod tests {
         };
         let ctx = call_ctx(&state.mcp_manager, true, false, &allowlist);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut 0usize).await;
 
         assert!(
             !res.success,
@@ -1428,9 +2125,15 @@ mod tests {
         };
         let ctx = call_ctx(&state.mcp_manager, false, false, &[]);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res =
-            execute_function_call(&call, &ctx, &mut tu, &mut mc, MCP_MAX_RESULT_BYTES_PER_RUN)
-                .await;
+        let res = execute_function_call(
+            &call,
+            &ctx,
+            &mut tu,
+            &mut mc,
+            MCP_MAX_RESULT_BYTES_PER_RUN,
+            &mut 0usize,
+        )
+        .await;
         assert!(!res.success, "an over-budget MCP call must be refused");
         let err = res.error.as_deref().unwrap_or("");
         assert!(
@@ -1460,7 +2163,7 @@ mod tests {
         let mut mc: Vec<String> = (0..MCP_MAX_CALLS_PER_RUN)
             .map(|i| format!("mcp__s__t{i}"))
             .collect();
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut 0usize).await;
         assert!(
             !res.success,
             "the call past the per-run cap must be refused"
@@ -1487,9 +2190,15 @@ mod tests {
         };
         let ctx = call_ctx(&state.mcp_manager, true, false, &[]);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res =
-            execute_function_call(&call, &ctx, &mut tu, &mut mc, MCP_MAX_RESULT_BYTES_PER_RUN)
-                .await;
+        let res = execute_function_call(
+            &call,
+            &ctx,
+            &mut tu,
+            &mut mc,
+            MCP_MAX_RESULT_BYTES_PER_RUN,
+            &mut 0usize,
+        )
+        .await;
         assert!(
             !res.success,
             "an unarmed detached call must stay refused even when over budget"
@@ -1521,9 +2230,15 @@ mod tests {
         let allowlist = vec![allow("srv-budget-id", &["read"])];
         let ctx = call_ctx(&state.mcp_manager, true, false, &allowlist);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res =
-            execute_function_call(&call, &ctx, &mut tu, &mut mc, MCP_MAX_RESULT_BYTES_PER_RUN)
-                .await;
+        let res = execute_function_call(
+            &call,
+            &ctx,
+            &mut tu,
+            &mut mc,
+            MCP_MAX_RESULT_BYTES_PER_RUN,
+            &mut 0usize,
+        )
+        .await;
         assert!(!res.success, "an over-budget armed call must be refused");
         let err = res.error.as_deref().unwrap_or("");
         assert!(
@@ -1577,7 +2292,7 @@ mod tests {
             arguments: serde_json::json!({}),
         };
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut 0usize).await;
 
         assert!(
             !res.success,
@@ -1620,7 +2335,7 @@ mod tests {
             arguments: serde_json::json!({}),
         };
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut 0usize).await;
         assert!(
             !res.error
                 .as_deref()
@@ -1662,7 +2377,7 @@ mod tests {
         // even though validation_helper is None (gate is unconditional → 3.2).
         let ctx = call_ctx(&state.mcp_manager, true, true, &strict);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0).await;
+        let res = execute_function_call(&call, &ctx, &mut tu, &mut mc, 0, &mut 0usize).await;
         assert!(!res.success, "delegated + strict entry must be refused");
         let err = res.error.as_deref().unwrap_or("");
         assert!(
@@ -1674,7 +2389,7 @@ mod tests {
         // → NOT refused by the allowlist (flag is irrelevant for direct runs).
         let ctx_direct = call_ctx(&state.mcp_manager, true, false, &strict);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx_direct, &mut tu, &mut mc, 0).await;
+        let res = execute_function_call(&call, &ctx_direct, &mut tu, &mut mc, 0, &mut 0usize).await;
         assert!(
             !res.error
                 .as_deref()
@@ -1689,7 +2404,7 @@ mod tests {
         let delegable = vec![allow_delegated("srv-x-id", &["danger"])];
         let ctx_ok = call_ctx(&state.mcp_manager, true, true, &delegable);
         let (mut tu, mut mc) = (Vec::new(), Vec::new());
-        let res = execute_function_call(&call, &ctx_ok, &mut tu, &mut mc, 0).await;
+        let res = execute_function_call(&call, &ctx_ok, &mut tu, &mut mc, 0, &mut 0usize).await;
         assert!(
             !res.error
                 .as_deref()

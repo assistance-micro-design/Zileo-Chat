@@ -30,6 +30,7 @@
 	import { sttSettingsStore } from '$lib/stores/sttSettings';
 	import { backgroundWorkflowsStore } from '$lib/stores/background-workflows';
 	import { kanbanEventsStore } from '$lib/stores/kanban-events';
+	import { toastStore } from '$lib/stores/toast';
 
 	let { children } = $props();
 
@@ -40,6 +41,19 @@
 	let legalModalType = $state<'legal-notice' | 'privacy-policy'>('legal-notice');
 	let unlistenLegal: TauriUnlistenFn | null = null;
 	let unlistenPrivacy: TauriUnlistenFn | null = null;
+	let unlistenManagerWrite: TauriUnlistenFn | null = null;
+
+	/**
+	 * Payload of `manager_write_notice` — a *Manager self-improvement write that
+	 * executed without a human review (Auto/permissive mode). Surfaced as an
+	 * opportunistic toast; the durable record is the PreApproved audit entry.
+	 */
+	interface ManagerWriteNoticeEvent {
+		workflow_id: string;
+		tool_name: string;
+		operation: string;
+		risk_level: string;
+	}
 
 	onMount(async () => {
 		theme.init();
@@ -80,11 +94,32 @@
 			legalModalType = 'privacy-policy';
 			legalModalOpen = true;
 		});
+
+		// Opportunistic toast when an agent rewrote a prompt/skill (or granted a
+		// skill) without review under a permissive validation mode. The audit log
+		// is the durable record — this is just a live heads-up so the auto-write
+		// is not silent. Attached at the root so it shows on every route.
+		unlistenManagerWrite = await tauriListen<ManagerWriteNoticeEvent>(
+			'manager_write_notice',
+			(event) => {
+				const { tool_name, operation } = event.payload;
+				toastStore.add({
+					type: 'warning',
+					title: $i18n('toast_manager_write_title'),
+					message: $i18n('toast_manager_write_message')
+						.replace('{tool}', tool_name)
+						.replace('{operation}', operation),
+					persistent: false,
+					duration: 8000
+				});
+			}
+		);
 	});
 
 	onDestroy(() => {
 		unlistenLegal?.();
 		unlistenPrivacy?.();
+		unlistenManagerWrite?.();
 		backgroundWorkflowsStore.destroy();
 		kanbanEventsStore.destroy();
 	});

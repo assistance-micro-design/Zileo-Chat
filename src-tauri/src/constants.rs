@@ -42,6 +42,17 @@ pub mod validation {
 
     /// Upper bound for user-configurable validation timeout.
     pub const VALIDATION_TIMEOUT_MAX_SECS: u64 = 600;
+
+    /// Maximum number of *Manager content/privilege writes (create/update
+    /// prompt or skill, restore, grant/revoke) a single agent run may perform.
+    ///
+    /// Run-scoped volume cap (counted like `mcp_calls_made`) that bounds the DB
+    /// amplification a prompt-injected supervisor could trigger in Auto mode
+    /// (gonflement de `prompt_version` / `skill_version`). Sized well above any
+    /// legitimate self-improvement run: a supervisor refining a handful of
+    /// prompts/skills in one pass stays far under it, while a runaway/adversarial
+    /// loop is refused once the cap is reached. Self-grants count toward it (MF-3).
+    pub const MANAGER_MAX_WRITES_PER_RUN: usize = 20;
 }
 
 /// Audit log constants.

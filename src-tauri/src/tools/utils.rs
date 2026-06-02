@@ -280,6 +280,39 @@ pub fn safe_truncate(s: &str, max_chars: usize, ellipsis: bool) -> String {
     }
 }
 
+/// Returns `true` for a Unicode bidirectional formatting/override codepoint.
+///
+/// These invisible characters (LRE/RLE/PDF/LRO/RLO, the isolates LRI/RLI/FSI/PDI,
+/// and the marks LRM/RLM/ALM) can reorder how text renders without changing its
+/// logical content — a classic spoofing vector for previews shown to a human
+/// reviewer (Trojan-Source style). Stripped from any agent-supplied preview.
+fn is_bidi_control(c: char) -> bool {
+    matches!(
+        c,
+        '\u{202A}'..='\u{202E}' // LRE, RLE, PDF, LRO, RLO
+            | '\u{2066}'..='\u{2069}' // LRI, RLI, FSI, PDI
+            | '\u{200E}' // LRM
+            | '\u{200F}' // RLM
+            | '\u{061C}' // ALM
+    )
+}
+
+/// Neutralizes an UNTRUSTED, agent-supplied string for display in a validation
+/// modal: strips control characters (except none are kept — even `\n` is
+/// dropped so the preview is single-line) and Unicode bidi formatting/override
+/// codepoints, THEN char-boundary-safe truncates to `max_chars` with an ellipsis.
+///
+/// Order matters (strip BEFORE truncate): truncating first could leave a
+/// dangling bidi opener that flips the surrounding modal chrome. The result is
+/// safe to render verbatim as a "provided by the agent (untrusted)" preview.
+pub fn neutralize_for_display(s: &str, max_chars: usize) -> String {
+    let cleaned: String = s
+        .chars()
+        .filter(|c| !c.is_control() && !is_bidi_control(*c))
+        .collect();
+    safe_truncate(&cleaned, max_chars, true)
+}
+
 #[cfg(test)]
 #[path = "utils_tests.rs"]
 mod tests;

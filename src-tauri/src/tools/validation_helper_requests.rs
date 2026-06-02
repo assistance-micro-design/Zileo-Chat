@@ -55,6 +55,7 @@ impl ValidationHelper {
         operation_description: &str,
         details: Value,
         risk_level: RiskLevel,
+        is_detached: bool,
     ) -> Result<(), ToolError> {
         let settings = self.load_validation_settings().await;
 
@@ -84,6 +85,7 @@ impl ValidationHelper {
             operation_description,
             details,
             risk_level,
+            is_detached,
         )
         .await
     }
@@ -163,6 +165,7 @@ impl ValidationHelper {
         tool_name: &str,
         operation: &str,
         arguments: Value,
+        is_detached: bool,
     ) -> Result<(), ToolError> {
         let settings = self.load_validation_settings().await;
         let risk_level = RiskLevel::Low; // Local tools are generally low risk
@@ -195,6 +198,7 @@ impl ValidationHelper {
             &description,
             details,
             risk_level,
+            is_detached,
         )
         .await
     }
@@ -225,6 +229,7 @@ impl ValidationHelper {
         server_name: &str,
         tool_name: &str,
         arguments: Value,
+        is_detached: bool,
     ) -> Result<(), ToolError> {
         let settings = self.load_validation_settings().await;
         let risk_level = RiskLevel::Medium; // MCP calls are medium risk (external system)
@@ -259,6 +264,7 @@ impl ValidationHelper {
             &description,
             details,
             risk_level,
+            is_detached,
         )
         .await
     }
@@ -289,6 +295,7 @@ impl ValidationHelper {
         operation: &str,
         path: &str,
         details: Value,
+        is_detached: bool,
     ) -> Result<(), ToolError> {
         let settings = self.load_validation_settings().await;
         // Delete is high risk (permanent data loss), other destructive ops are medium
@@ -328,6 +335,7 @@ impl ValidationHelper {
             &description,
             full_details,
             risk_level,
+            is_detached,
         )
         .await
     }

@@ -47,6 +47,7 @@ impl SubAgentExecutor {
         operation_type: SubAgentOperationType,
         description: &str,
         details: Value,
+        is_detached: bool,
     ) -> ToolResult<()> {
         let validation_helper = ValidationHelper::new(self.db.clone(), self.app_handle.clone());
         let risk_level = ValidationHelper::determine_risk_level(&operation_type);
@@ -58,6 +59,7 @@ impl SubAgentExecutor {
                 description,
                 details,
                 risk_level,
+                is_detached,
             )
             .await
     }

@@ -140,7 +140,7 @@ DEFINE INDEX OVERWRITE memory_chunk_parent_idx ON memory_chunk FIELDS memory_id;
 DEFINE TABLE OVERWRITE validation_request SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON validation_request TYPE string;
 DEFINE FIELD OVERWRITE workflow_id ON validation_request TYPE string;
-DEFINE FIELD OVERWRITE type ON validation_request TYPE string ASSERT $value IN ['tool', 'sub_agent', 'mcp', 'file_op', 'db_op'];
+DEFINE FIELD OVERWRITE type ON validation_request TYPE string ASSERT $value IN ['tool', 'sub_agent', 'mcp', 'file_op', 'db_op', 'manager_write'];
 DEFINE FIELD OVERWRITE operation ON validation_request TYPE string;
 DEFINE FIELD OVERWRITE details ON validation_request TYPE string DEFAULT '{}'; -- JSON string (ERR_SURREAL_001: TYPE object drops dynamic keys)
 DEFINE FIELD OVERWRITE risk_level ON validation_request TYPE string ASSERT $value IN ['low', 'medium', 'high', 'critical'];
@@ -161,7 +161,7 @@ DEFINE FIELD OVERWRITE decision ON validation_audit TYPE string
     ASSERT $value IN ['approved', 'rejected', 'skipped', 'timeout', 'blocked'];
 DEFINE FIELD OVERWRITE decided_at ON validation_audit TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE decided_by ON validation_audit TYPE string
-    ASSERT $value IN ['user', 'auto', 'timeout', 'policy'];
+    ASSERT $value IN ['user', 'auto', 'timeout', 'policy', 'pre_approved'];
 DEFINE FIELD OVERWRITE risk_level ON validation_audit TYPE string
     ASSERT $value IN ['low', 'medium', 'high', 'critical'];
 DEFINE FIELD OVERWRITE workflow_id ON validation_audit TYPE option<string>;

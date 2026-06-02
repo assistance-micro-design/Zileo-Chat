@@ -49,7 +49,8 @@
 		user: 'audit_decided_by_user',
 		auto: 'audit_decided_by_auto',
 		timeout: 'audit_decided_by_timeout',
-		policy: 'audit_decided_by_policy'
+		policy: 'audit_decided_by_policy',
+		pre_approved: 'audit_decided_by_pre_approved'
 	} as const;
 
 	const riskKeys = {

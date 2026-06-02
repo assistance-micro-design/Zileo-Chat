@@ -20,9 +20,13 @@
 export type ValidationMode = 'auto' | 'manual' | 'selective';
 
 /**
- * Type of operation requiring validation
+ * Type of operation requiring validation.
+ *
+ * `manager_write` is a write through a *Manager tool (prompt / skill / workflow)
+ * issued by a Kanban supervisor for self-improvement; it is governed by the same
+ * controls as `tool`.
  */
-export type ValidationType = 'tool' | 'sub_agent' | 'mcp' | 'file_op' | 'db_op';
+export type ValidationType = 'tool' | 'sub_agent' | 'mcp' | 'file_op' | 'db_op' | 'manager_write';
 
 /**
  * Risk level of the operation
@@ -269,8 +273,15 @@ export const DEFAULT_VALIDATION_SETTINGS: ValidationSettingsConfig = {
 /** Final decision recorded in the audit log. */
 export type AuditDecision = 'approved' | 'rejected' | 'skipped' | 'timeout' | 'blocked';
 
-/** Source of the decision. */
-export type DecidedBy = 'user' | 'auto' | 'timeout' | 'policy';
+/**
+ * Source of the decision.
+ *
+ * `pre_approved` = executed without human review because the active validation
+ * mode is permissive for this risk (e.g. Auto + alwaysConfirmHigh OFF) — a
+ * *Manager self-improvement write or an armed detached MCP call. Distinct from
+ * `auto` (auto-approved by a threshold such as autoApproveLow).
+ */
+export type DecidedBy = 'user' | 'auto' | 'timeout' | 'policy' | 'pre_approved';
 
 /**
  * One row of the audit log, returned by `list_validation_audit`.
