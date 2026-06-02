@@ -206,6 +206,15 @@ export interface AgentSummary {
 	folders_count: number;
 	/** Specialization, if any (e.g. 'kanban'). */
 	kind?: AgentKind;
+	/**
+	 * True when the agent has at least one MCP tool auto-approved for unattended
+	 * (detached) runs (a non-empty allowlist entry). Used by the per-agent
+	 * authorizations UI to flag agents whose MCP auto-approval has been
+	 * configured. `require_file_confirmation` is deliberately NOT part of this
+	 * (it is near-universally off and would defeat differentiation). Matches Rust
+	 * `#[serde(default)] bool`.
+	 */
+	has_mcp_auto_approval: boolean;
 }
 
 // Re-export tool constants from centralized location

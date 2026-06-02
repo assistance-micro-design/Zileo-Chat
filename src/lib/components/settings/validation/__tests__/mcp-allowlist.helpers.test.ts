@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { McpToolAllowlistEntry } from '$types/agent';
 import type { MCPServerStatus } from '$types/mcp';
 import {
+	areAllToolsArmed,
 	buildMcpToolAllowlist,
 	filterEditableMcpServers,
 	mergeServerTools,
 	preservedMcpAllowlistEntries,
 	removePreservedEntry,
 	seedMcpArmingState,
+	toggleAllServerTools,
 	type McpArmingState
 } from '../mcp-allowlist.helpers';
 
@@ -170,5 +172,31 @@ describe('mergeServerTools (orphan transparency)', () => {
 
 	it('returns only exposed tools when nothing is armed', () => {
 		expect(mergeServerTools(['a'], [])).toEqual([{ name: 'a', orphan: false }]);
+	});
+});
+
+describe('areAllToolsArmed / toggleAllServerTools (select all-or-none)', () => {
+	it('reports all-armed only when every displayed tool is armed', () => {
+		expect(areAllToolsArmed(['a', 'b'], ['a', 'b'])).toBe(true);
+		expect(areAllToolsArmed(['a', 'b'], ['a'])).toBe(false);
+		expect(areAllToolsArmed(['a', 'b'], [])).toBe(false);
+	});
+
+	it('treats an empty displayed list as NOT all-armed (toggle stays an arm-all)', () => {
+		expect(areAllToolsArmed([], [])).toBe(false);
+		expect(areAllToolsArmed([], ['orphan'])).toBe(false);
+	});
+
+	it('arms every displayed tool when not all are armed yet', () => {
+		expect(toggleAllServerTools(['a', 'b', 'c'], ['a']).sort()).toEqual(['a', 'b', 'c']);
+	});
+
+	it('keeps armed orphans when arming all (union, never drops them)', () => {
+		// "gone" is armed but no longer displayed; arming all must preserve it.
+		expect(toggleAllServerTools(['a', 'b'], ['gone']).sort()).toEqual(['a', 'b', 'gone']);
+	});
+
+	it('clears the whole selection when all displayed tools are already armed', () => {
+		expect(toggleAllServerTools(['a', 'b'], ['a', 'b'])).toEqual([]);
 	});
 });

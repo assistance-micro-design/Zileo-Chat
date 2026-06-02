@@ -65,9 +65,21 @@ MCP servers are preserved verbatim by the allowlist helpers.
 	// cross-write A's authorizations onto B). Non-reactive on purpose.
 	let seq = 0;
 
+	// Agent options, with a textual marker on agents that have >=1 MCP tool
+	// auto-approved for unattended runs — native <option> can only carry text, so
+	// the marker is folded into the label. (file-operation confirmation is NOT
+	// part of this: it is near-universally off and would mark every agent.)
 	const agentOptions = $derived<SelectOption[]>(
-		$agents.map((a) => ({ value: a.id, label: a.name }))
+		$agents.map((a) => ({
+			value: a.id,
+			label: a.has_mcp_auto_approval
+				? $i18n('validation_authorizations_configured_marker', { name: a.name })
+				: a.name
+		}))
 	);
+
+	/** True when any agent has MCP auto-approval configured (shows the legend). */
+	const anyConfigured = $derived($agents.some((a) => a.has_mcp_auto_approval));
 
 	/**
 	 * Localized label of the current GLOBAL validation mode — shown for context
@@ -163,6 +175,10 @@ MCP servers are preserved verbatim by the allowlist helpers.
 			requireFileConfirmation = config.require_file_confirmation ?? true;
 			dirty = false;
 			saved = true;
+			// Refresh the summary list so the "MCP auto-approval" marker in the
+			// agent dropdown reflects the change just persisted (the list is
+			// otherwise only loaded on mount).
+			void agentStore.loadAgents();
 		} catch (e) {
 			errorMsg = getErrorMessage(e);
 		} finally {
@@ -180,6 +196,12 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		disabled={loading || saving}
 		onchange={(e) => selectAgent(e.currentTarget.value)}
 	/>
+
+	{#if anyConfigured}
+		<p class="auth-legend" role="note">
+			{$i18n('validation_authorizations_configured_legend')}
+		</p>
+	{/if}
 
 	{#if errorMsg}
 		<p class="auth-error" role="alert">{errorMsg}</p>
@@ -249,6 +271,13 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		margin: 0;
 		font-size: var(--font-size-sm);
 		color: var(--color-danger);
+	}
+
+	.auth-legend {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+		font-style: italic;
 	}
 
 	.auth-info {

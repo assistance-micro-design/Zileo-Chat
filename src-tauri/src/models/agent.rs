@@ -448,6 +448,19 @@ pub struct AgentSummary {
     /// Specialization, if any (e.g. `Kanban`). `None` = plain agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<AgentKind>,
+    /// True when the agent has at least one MCP tool auto-approved for
+    /// unattended (detached) runs (an `mcp_tool_allowlist` entry with a
+    /// non-empty `tools` list). Surfaced so the per-agent authorizations UI can
+    /// flag agents whose MCP auto-approval has been configured, without loading
+    /// each full config. Preserved orphan-only entries (zero armed tools, e.g. a
+    /// stopped server) do NOT count — only a genuinely armed tool does.
+    ///
+    /// NOTE: `require_file_confirmation == false` is deliberately NOT folded in.
+    /// In practice it is disabled across (nearly) all agents, so including it
+    /// would mark everyone and destroy the per-agent differentiation this flag
+    /// exists for. The marker tracks the thing the user actively ticks here.
+    #[serde(default)]
+    pub has_mcp_auto_approval: bool,
 }
 
 impl From<&AgentConfig> for AgentSummary {
@@ -463,6 +476,10 @@ impl From<&AgentConfig> for AgentSummary {
             skills_count: config.skills.len(),
             folders_count: config.folders.len(),
             kind: config.kind.clone(),
+            has_mcp_auto_approval: config
+                .mcp_tool_allowlist
+                .iter()
+                .any(|e| !e.tools.is_empty()),
         }
     }
 }
@@ -791,5 +808,74 @@ mod tests {
 
         assert!(config.has_valid_tools());
         assert_eq!(config.tools.len(), 7);
+    }
+
+    /// Minimal valid config for summary tests (only the allowlist varies).
+    fn summary_test_config(allowlist: Vec<McpToolAllowlistEntry>) -> AgentConfig {
+        AgentConfig {
+            id: "test_agent".to_string(),
+            name: "Test Agent".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+                is_reasoning: false,
+                context_window: None,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
+            system_prompt: "Test".to_string(),
+            max_tool_iterations: 50,
+            reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
+            mcp_tool_allowlist: allowlist,
+        }
+    }
+
+    #[test]
+    fn test_summary_has_mcp_auto_approval_false_when_empty() {
+        let summary = AgentSummary::from(&summary_test_config(Vec::new()));
+        assert!(!summary.has_mcp_auto_approval);
+    }
+
+    #[test]
+    fn test_summary_has_mcp_auto_approval_true_when_tool_armed() {
+        let summary = AgentSummary::from(&summary_test_config(vec![McpToolAllowlistEntry {
+            server_id: "srv-1".to_string(),
+            tools: vec!["read".to_string()],
+            allow_in_delegated_runs: false,
+        }]));
+        assert!(summary.has_mcp_auto_approval);
+    }
+
+    #[test]
+    fn test_summary_has_mcp_auto_approval_false_for_orphan_only_entry() {
+        // A preserved entry with zero armed tools (e.g. a stopped server) must
+        // NOT flag the agent: the marker tracks genuinely armed tools, never the
+        // mere presence of a bare allowlist entry (fail-safe, never over-signals).
+        let summary = AgentSummary::from(&summary_test_config(vec![McpToolAllowlistEntry {
+            server_id: "srv-stopped".to_string(),
+            tools: Vec::new(),
+            allow_in_delegated_runs: true,
+        }]));
+        assert!(!summary.has_mcp_auto_approval);
+    }
+
+    #[test]
+    fn test_summary_has_mcp_auto_approval_ignores_file_confirmation() {
+        // Disabling file-operation confirmation is deliberately NOT folded into
+        // this marker: it is near-universally off and would defeat the per-agent
+        // differentiation. An agent with no armed MCP tools stays unmarked even
+        // with confirmation disabled.
+        let mut config = summary_test_config(Vec::new());
+        config.require_file_confirmation = false;
+        let summary = AgentSummary::from(&config);
+        assert!(!summary.has_mcp_auto_approval);
     }
 }

@@ -42,11 +42,13 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 	import type { MCPServer } from '$types/mcp';
 	import type { McpToolAllowlistEntry } from '$types/agent';
 	import {
+		areAllToolsArmed,
 		buildMcpToolAllowlist,
 		mergeServerTools,
 		preservedMcpAllowlistEntries,
 		removePreservedEntry,
-		seedMcpArmingState
+		seedMcpArmingState,
+		toggleAllServerTools
 	} from './mcp-allowlist.helpers';
 
 	interface Props {
@@ -138,6 +140,29 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		onchange(buildMcpToolAllowlist(armed, enumerableIds, value));
 	}
 
+	/** Whether every displayed tool of `server` is currently auto-approved. */
+	function isAllArmed(server: MCPServer): boolean {
+		return areAllToolsArmed(
+			displayedTools(server).map((t) => t.name),
+			armedToolsFor(server.id)
+		);
+	}
+
+	/**
+	 * Select-all / none for one server: arms every displayed tool when not all
+	 * are armed yet, otherwise clears the selection. Preserves armed orphans.
+	 */
+	function toggleAllTools(server: MCPServer): void {
+		const armed = currentArming();
+		const cur = armed[server.id] ?? { tools: [], allowInDelegatedRuns: false };
+		const tools = toggleAllServerTools(
+			displayedTools(server).map((t) => t.name),
+			armedToolsFor(server.id)
+		);
+		armed[server.id] = { tools, allowInDelegatedRuns: cur.allowInDelegatedRuns };
+		onchange(buildMcpToolAllowlist(armed, enumerableIds, value));
+	}
+
 	/** Flips the per-server delegation flag and emits the rebuilt allowlist. */
 	function toggleDelegated(serverId: string): void {
 		const armed = currentArming();
@@ -189,7 +214,7 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 					type="button"
 					class="server-summary"
 					aria-expanded={isExpanded(server.id)}
-					aria-controls="mcp-srv-body-{server.id}"
+					aria-controls={isExpanded(server.id) ? `mcp-srv-body-${server.id}` : undefined}
 					onclick={() => toggleExpanded(server.id)}
 				>
 					<span class={['chevron', isExpanded(server.id) && 'chevron-open']} aria-hidden="true">
@@ -202,13 +227,15 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 				</button>
 
 				{#if displayed.length === 0}
-					<p id="mcp-srv-body-{server.id}" class="server-no-tools" hidden={!isExpanded(server.id)}>
-						{$i18n('validation_mcp_allowlist_no_tools')}
-					</p>
+					{#if isExpanded(server.id)}
+						<p id="mcp-srv-body-{server.id}" class="server-no-tools">
+							{$i18n('validation_mcp_allowlist_no_tools')}
+						</p>
+					{/if}
 				{:else}
 					<!-- Delegation toggle stays visible without expanding (it governs the
 					     whole server). Disabled when nothing is armed: it only takes effect
-					     once at least one tool is armed (otherwise the entry is pruned). -->
+					     once at least one tool is auto-approved (otherwise the entry is pruned). -->
 					<label class="delegated-item">
 						<input
 							type="checkbox"
@@ -226,21 +253,33 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 						</div>
 					</label>
 
-					<div id="mcp-srv-body-{server.id}" class="tool-group" hidden={!isExpanded(server.id)}>
-						{#each displayed as tool (tool.name)}
-							<label class={['tool-item', tool.orphan && 'tool-orphan']}>
+					{#if isExpanded(server.id)}
+						<div id="mcp-srv-body-{server.id}" class="tool-group">
+							<label class="tool-item tool-select-all">
 								<input
 									type="checkbox"
-									checked={isToolArmed(server.id, tool.name)}
-									onchange={() => toggleTool(server.id, tool.name)}
+									checked={isAllArmed(server)}
+									onchange={() => toggleAllTools(server)}
 								/>
-								<span class="tool-name">{tool.name}</span>
-								{#if tool.orphan}
-									<span class="orphan-badge">{$i18n('validation_mcp_allowlist_orphan_badge')}</span>
-								{/if}
+								<span class="select-all-label">{$i18n('validation_mcp_allowlist_select_all')}</span>
 							</label>
-						{/each}
-					</div>
+							{#each displayed as tool (tool.name)}
+								<label class={['tool-item', tool.orphan && 'tool-orphan']}>
+									<input
+										type="checkbox"
+										checked={isToolArmed(server.id, tool.name)}
+										onchange={() => toggleTool(server.id, tool.name)}
+									/>
+									<span class="tool-name">{tool.name}</span>
+									{#if tool.orphan}
+										<span class="orphan-badge"
+											>{$i18n('validation_mcp_allowlist_orphan_badge')}</span
+										>
+									{/if}
+								</label>
+							{/each}
+						</div>
+					{/if}
 				{/if}
 			</div>
 		{/each}
@@ -379,6 +418,18 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		font-size: var(--font-size-sm);
 		font-family: var(--font-mono);
 		color: var(--color-text-primary);
+	}
+
+	.tool-select-all {
+		padding-bottom: var(--spacing-xs);
+		margin-bottom: 2px;
+		border-bottom: 1px dashed var(--color-border);
+	}
+
+	.select-all-label {
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+		color: var(--color-text-secondary);
 	}
 
 	.tool-orphan .tool-name {

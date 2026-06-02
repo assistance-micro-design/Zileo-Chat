@@ -51,7 +51,8 @@ describe('Agent Store', () => {
 		tools_count: 2,
 		mcp_servers_count: 1,
 		skills_count: 0,
-		folders_count: 0
+		folders_count: 0,
+		has_mcp_auto_approval: false
 	});
 
 	// Helper to create mock agent config
