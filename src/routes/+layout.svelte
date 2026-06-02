@@ -146,7 +146,11 @@
 		// `auto`-mode user was wrongly throttled to the non-auto cap (1) and a
 		// second validated card stalled. Idempotent: /agent re-fetches silently.
 		void validationSettingsStore.loadSettings().catch(() => {
-			/* defaults applied by the gate when settings stay null */
+			// Fail-safe: the gate falls back to the conservative cap (1, never
+			// over-concurrency) until a later load succeeds, and the failure is not
+			// lost — loadSettings records it in the store's `error` state, surfaced
+			// on the Validation settings page for diagnosis (a /agent or /settings
+			// visit re-fetches). No console here (project bans it in production).
 		});
 
 		// Load the backend worker-concurrency cap once so the Kanban board's

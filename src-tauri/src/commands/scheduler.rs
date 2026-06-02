@@ -52,21 +52,19 @@ pub const MAX_CATCHUP_PER_SCHEDULE: usize = 7;
 /// being wired up by the frontend.
 pub const ORPHAN_DOING_GRACE_SECS: i64 = 2 * SCHEDULER_TICK_SECS as i64;
 
-/// Grace period (seconds) before a `doing` card whose linked workflow never
-/// produced a single persisted message is reset to its pre-promotion state.
+/// Grace period (seconds) before a `doing` card whose linked workflow is no
+/// longer alive is recovered at boot.
 ///
 /// Distinct from [`ORPHAN_DOING_GRACE_SECS`], which targets cards with NO
 /// `workflow_id`. This one targets cards that DID get a `workflow_id` stamped by
-/// the frontend (`set_kanban_card_workflow_id`, which refreshes `updated_at`)
-/// but whose worker never actually ran — e.g. the app crashed or was closed in
-/// the sub-second window between stamping the id and `WorkflowExecutorService`
-/// persisting the first (user) message, or an `execute()` that failed before any
-/// run. The "no persisted message" predicate is the real discriminator (a live
-/// run saves its user message within milliseconds of starting), so a genuinely
-/// in-flight workflow is never reset however long it runs; this window is a
-/// belt-and-suspenders guard against resetting a card during that tiny wiring
-/// window. Sized at 2× the tick like the orphan grace.
-pub const STUCK_DOING_NO_MESSAGE_GRACE_SECS: i64 = 2 * SCHEDULER_TICK_SECS as i64;
+/// the frontend (`set_kanban_card_workflow_id`, which refreshes `updated_at`).
+/// At boot no frontend run can be live yet, so any such card older than this
+/// window belonged to a previous session: its worker either finished (and the
+/// card missed its review transition) or died mid-run. The window's only job is
+/// to spare a card the CURRENT boot's frontend is wiring up right now — its
+/// `updated_at` stays fresh, so a real in-flight run is never touched. Sized at
+/// 2× the tick like the orphan grace.
+pub const STUCK_DOING_GRACE_SECS: i64 = 2 * SCHEDULER_TICK_SECS as i64;
 
 /// Tauri command exposing the backend's worker-promotion concurrency budget
 /// ([`DEFAULT_MAX_CONCURRENT_WORKFLOWS`]) to the frontend.
@@ -189,36 +187,55 @@ pub async fn reclaim_orphaned_doing_cards_core(
     Ok(ids)
 }
 
-/// Recovers `doing` cards linked to a workflow that never actually executed
-/// (K1-bis): a card stamped with a `workflow_id` whose linked `workflow` has
-/// ZERO persisted `message` rows, and whose `updated_at` is older than
-/// `grace_secs`.
+/// Outcome of [`recover_stuck_doing_cards_core`], split by the action taken.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct StuckDoingRecovery {
+    /// Cards whose workflow had produced a final assistant message (the run
+    /// completed but the card missed its `review` transition) — moved to
+    /// `review` via [`mark_card_done_core`].
+    pub finalized: Vec<String>,
+    /// Cards whose workflow never produced a final message (never started, or
+    /// died mid-run) — reset to `ready`/`todo` for a fresh promotion.
+    pub requeued: Vec<String>,
+}
+
+impl StuckDoingRecovery {
+    /// True when nothing was recovered (both buckets empty).
+    pub fn is_empty(&self) -> bool {
+        self.finalized.is_empty() && self.requeued.is_empty()
+    }
+}
+
+/// Recovers `doing` cards whose linked workflow is no longer alive (K1-bis).
 ///
-/// Such a card is a true zombie — it can never be re-run by the frontend
-/// (`runCardWorkflow` short-circuits once `workflow_id` is set, and both orphan
-/// reconcilers target only `workflow_id = NONE`), yet it permanently holds a
-/// `doing` slot (counted by `status='doing'`). Typical causes: the app crashed
-/// or was closed in the sub-second window between
-/// `set_kanban_card_workflow_id` and the worker persisting its first message,
-/// or an `execute()` that failed before any run. The card is reset to its
-/// pre-promotion state `status='ready', column='todo', workflow_id = NONE` so
-/// the scheduler re-promotes it.
+/// Intended for boot-time use: at boot no frontend run is live yet, so every
+/// `doing` card carrying a `workflow_id` older than `grace_secs` is a leftover
+/// from a previous session that neither orphan reconciler can reach
+/// (`runCardWorkflow` short-circuits once `workflow_id` is set; both reconcilers
+/// target only `workflow_id = NONE`). Left untouched, such a card holds a
+/// `doing` slot forever (slots are counted by `status='doing'`).
 ///
-/// Safety (never resets a live run): `WorkflowExecutorService` persists the user
-/// message (`MessageService.saveUser`) BEFORE the streaming call, so any
-/// genuinely running workflow has at least one `message` row within
-/// milliseconds — the "no persisted message" predicate excludes it regardless
-/// of how long it runs. The `grace_secs` window (measured on `updated_at`,
-/// refreshed by `set_kanban_card_workflow_id`) is an extra guard against the
-/// tiny wiring window. Intended for boot-time use (no live frontend run exists
-/// yet), mirroring `catchup_unanalyzed_review_cards_core`.
+/// A persisted ASSISTANT message is the reliable run-completed signal:
+/// `WorkflowExecutorService` saves the assistant message only AFTER the
+/// streaming call returns. (The `workflow.status` field is unusable here — the
+/// streaming path never transitions it out of `idle`.) So per card:
+///   - **has** an assistant message → the run finished but the card missed its
+///     `review` transition (e.g. shutdown raced the `workflow_complete`
+///     listener) → replay [`mark_card_done_core`] to move it to `review`
+///     (the boot auto-analyze catch-up then picks it up). Re-running it would
+///     waste a completed (paid) LLM run.
+///   - **no** assistant message → the run never completed (never started, or
+///     crashed/was-killed mid-run) → reset to `ready`/`todo` so the scheduler
+///     re-runs it from scratch (a partial dead run leaves no usable result).
 ///
-/// Returns the reset card ids. The final UPDATE re-checks `column='doing'` for
+/// Safety (never touches a live run): a run started by the CURRENT boot has a
+/// fresh `updated_at` (stamped by `set_kanban_card_workflow_id`) and is excluded
+/// by `grace_secs`. The requeue UPDATE re-checks `column='doing'` for
 /// race-safety, mirroring [`reclaim_orphaned_doing_cards_core`].
-pub async fn reset_stuck_doing_cards_core(
+pub async fn recover_stuck_doing_cards_core(
     db: &Arc<DBClient>,
     grace_secs: i64,
-) -> Result<Vec<String>, String> {
+) -> Result<StuckDoingRecovery, String> {
     // 1. Candidate `doing` cards that DO carry a workflow_id, past the grace
     //    window. (Cards with NO workflow_id are the orphan reclaimer's job.)
     let pick_q = format!(
@@ -232,9 +249,9 @@ pub async fn reset_stuck_doing_cards_core(
         .await
         .map_err(|e| format!("Failed to pick stuck doing cards: {}", e))?;
 
-    // 2. Keep only those whose linked workflow has zero persisted messages — the
-    //    discriminator that proves the worker never actually ran.
-    let mut victims: Vec<String> = Vec::new();
+    // 2. Partition by the run-completed signal (a persisted assistant message).
+    let mut recovery = StuckDoingRecovery::default();
+    let mut requeue: Vec<String> = Vec::new();
     for row in &rows {
         let Some(card_id) = row["id"].as_str() else {
             continue;
@@ -244,38 +261,45 @@ pub async fn reset_stuck_doing_cards_core(
         };
         let count_rows: Vec<serde_json::Value> = db
             .query_with_params(
-                "SELECT count() AS c FROM message WHERE workflow_id = $wid GROUP ALL",
+                "SELECT count() AS c FROM message \
+                 WHERE workflow_id = $wid AND role = 'assistant' GROUP ALL",
                 vec![("wid".to_string(), json!(wf_id))],
             )
             .await
-            .map_err(|e| format!("Failed to count messages for workflow: {}", e))?;
-        let msg_count = count_rows
+            .map_err(|e| format!("Failed to count assistant messages for workflow: {}", e))?;
+        let has_assistant = count_rows
             .into_iter()
             .next()
             .and_then(|r| r["c"].as_u64())
-            .unwrap_or(0);
-        if msg_count == 0 {
-            victims.push(card_id.to_string());
+            .unwrap_or(0)
+            > 0;
+        if has_assistant {
+            // Finished run that missed its review transition → finalize it.
+            mark_card_done_core(db, wf_id, true, None).await?;
+            recovery.finalized.push(card_id.to_string());
+        } else {
+            requeue.push(card_id.to_string());
         }
     }
-    if victims.is_empty() {
-        return Ok(victims);
-    }
 
-    // 3. Reset to the pre-promotion state. Re-check `column='doing'` so a card
-    //    that started executing between the SELECT and now is spared.
-    let ids_json = serde_json::to_string(&victims)
-        .map_err(|e| format!("Failed to serialize stuck ids: {}", e))?;
-    let upd = format!(
-        "UPDATE kanban_card SET status = 'ready', `column` = 'todo', \
-         workflow_id = NONE, updated_at = time::now() \
-         WHERE meta::id(id) IN {} AND `column` = 'doing'",
-        ids_json
-    );
-    db.execute(&upd)
-        .await
-        .map_err(|e| format!("Failed to reset stuck doing cards: {}", e))?;
-    Ok(victims)
+    // 3. Reset the never-completed cards to their pre-promotion state. Re-check
+    //    `column='doing'` so a card that started executing between the SELECT
+    //    and now is spared.
+    if !requeue.is_empty() {
+        let ids_json = serde_json::to_string(&requeue)
+            .map_err(|e| format!("Failed to serialize requeue ids: {}", e))?;
+        let upd = format!(
+            "UPDATE kanban_card SET status = 'ready', `column` = 'todo', \
+             workflow_id = NONE, updated_at = time::now() \
+             WHERE meta::id(id) IN {} AND `column` = 'doing'",
+            ids_json
+        );
+        db.execute(&upd)
+            .await
+            .map_err(|e| format!("Failed to reset stuck doing cards: {}", e))?;
+        recovery.requeued = requeue;
+    }
+    Ok(recovery)
 }
 
 /// Deletes cards stuck in `done` for more than `DONE_CARD_TTL_DAYS` days,
@@ -1333,21 +1357,24 @@ mod tests {
         );
     }
 
-    /// K1-bis: a `doing` card whose linked workflow has NO persisted message and
-    /// whose `updated_at` is older than the grace window is reset to
-    /// `ready`/`todo` with `workflow_id` cleared, so the scheduler re-promotes
-    /// it. A card whose workflow HAS a message (a real run) and a recently
-    /// updated card (still being wired up) are both spared.
+    /// K1-bis boot recovery. Four `doing` cards carrying a `workflow_id`:
+    ///   - old + no message            -> requeued (never started)
+    ///   - old + only a USER message   -> requeued (died mid-run, no result)
+    ///   - old + an ASSISTANT message  -> finalized to `review` (run completed,
+    ///                                    missed its transition)
+    ///   - fresh updated_at            -> spared (the current boot is wiring it up)
     #[tokio::test]
-    async fn test_reset_stuck_doing_cards() {
+    async fn test_recover_stuck_doing_cards() {
         let (state, _g) = setup_test_state().await;
         let agent_id = uuid::Uuid::new_v4().to_string();
 
-        let stuck = uuid::Uuid::new_v4().to_string(); // doing, wf, old, 0 msg -> reset
-        let stuck_wf = uuid::Uuid::new_v4().to_string();
-        let running = uuid::Uuid::new_v4().to_string(); // doing, wf, old, has msg -> spared
-        let running_wf = uuid::Uuid::new_v4().to_string();
-        let recent = uuid::Uuid::new_v4().to_string(); // doing, wf, fresh, 0 msg -> spared
+        let no_msg = uuid::Uuid::new_v4().to_string();
+        let no_msg_wf = uuid::Uuid::new_v4().to_string();
+        let user_only = uuid::Uuid::new_v4().to_string();
+        let user_only_wf = uuid::Uuid::new_v4().to_string();
+        let completed = uuid::Uuid::new_v4().to_string();
+        let completed_wf = uuid::Uuid::new_v4().to_string();
+        let recent = uuid::Uuid::new_v4().to_string();
         let recent_wf = uuid::Uuid::new_v4().to_string();
 
         let seed = |cid: &str, wf: &str, ts: &str| {
@@ -1362,14 +1389,20 @@ mod tests {
                 }}"
             )
         };
+        let old = "time::now() - 200s";
         state
             .db
-            .execute(&seed(&stuck, &stuck_wf, "time::now() - 200s"))
+            .execute(&seed(&no_msg, &no_msg_wf, old))
             .await
             .unwrap();
         state
             .db
-            .execute(&seed(&running, &running_wf, "time::now() - 200s"))
+            .execute(&seed(&user_only, &user_only_wf, old))
+            .await
+            .unwrap();
+        state
+            .db
+            .execute(&seed(&completed, &completed_wf, old))
             .await
             .unwrap();
         state
@@ -1378,23 +1411,49 @@ mod tests {
             .await
             .unwrap();
 
-        // The running card's workflow has a persisted user message — proof its
-        // worker actually started.
-        let mid = uuid::Uuid::new_v4().to_string();
-        let msg = format!(
-            "CREATE message:`{mid}` SET id = '{mid}', workflow_id = '{running_wf}', \
-             role = 'user', content = 'go', tokens = 0, \
-             created_at = time::now(), updated_at = time::now()"
-        );
-        state.db.execute(&msg).await.unwrap();
-
-        let reset = reset_stuck_doing_cards_core(&state.db, STUCK_DOING_NO_MESSAGE_GRACE_SECS)
+        // A message of the given role for a workflow.
+        let seed_msg = |wf: &str, role: &str| {
+            let mid = uuid::Uuid::new_v4().to_string();
+            format!(
+                "CREATE message:`{mid}` SET id = '{mid}', workflow_id = '{wf}', \
+                 role = '{role}', content = 'x', tokens = 0, \
+                 created_at = time::now(), updated_at = time::now()"
+            )
+        };
+        // user_only: only a user message (worker started, never finished).
+        state
+            .db
+            .execute(&seed_msg(&user_only_wf, "user"))
             .await
             .unwrap();
+        // completed: a user AND an assistant message (run produced its result).
+        state
+            .db
+            .execute(&seed_msg(&completed_wf, "user"))
+            .await
+            .unwrap();
+        state
+            .db
+            .execute(&seed_msg(&completed_wf, "assistant"))
+            .await
+            .unwrap();
+
+        let recovery = recover_stuck_doing_cards_core(&state.db, STUCK_DOING_GRACE_SECS)
+            .await
+            .unwrap();
+
         assert_eq!(
-            reset,
-            vec![stuck.clone()],
-            "only the old, message-less card is reset"
+            recovery.finalized,
+            vec![completed.clone()],
+            "only the card with an assistant message is finalized to review"
+        );
+        let mut requeued = recovery.requeued.clone();
+        requeued.sort();
+        let mut expected = vec![no_msg.clone(), user_only.clone()];
+        expected.sort();
+        assert_eq!(
+            requeued, expected,
+            "both message-less / user-only cards requeue"
         );
 
         let check = |cid: String| {
@@ -1414,10 +1473,17 @@ mod tests {
                 )
             }
         };
-        let (s, c, wf_present) = check(stuck).await;
-        assert_eq!((s.as_str(), c.as_str()), ("ready", "todo"));
-        assert!(!wf_present, "workflow_id must be cleared on reset");
-        assert_eq!(check(running).await.0, "doing", "running card spared");
+        // Requeued cards: ready/todo, workflow_id cleared.
+        for cid in [no_msg, user_only] {
+            let (s, c, wf_present) = check(cid).await;
+            assert_eq!((s.as_str(), c.as_str()), ("ready", "todo"));
+            assert!(!wf_present, "workflow_id must be cleared on requeue");
+        }
+        // Finalized card: done/review, workflow_id preserved.
+        let (s, c, wf_present) = check(completed).await;
+        assert_eq!((s.as_str(), c.as_str()), ("done", "review"));
+        assert!(wf_present, "workflow_id stays on a finalized card");
+        // Fresh card: untouched.
         assert_eq!(check(recent).await.0, "doing", "recent card spared");
     }
 

@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { get } from 'svelte/store';
 	import { i18n } from '$lib/i18n';
 	import { tauriListen, tauriInvoke as invoke, type TauriUnlistenFn } from '$lib/tauri';
@@ -578,14 +579,37 @@
 		}
 	}
 
+	/** Cards whose worker launch is in flight — per-card reentrancy guard. */
+	const launchingCardIds = new SvelteSet<string>();
+
+	/**
+	 * Reentrancy-guarded entry point for launching a card's worker. Two triggers
+	 * can fire for the same card in quick succession — the mount reconciliation
+	 * (`reconcileOrphanedDoingCards`) and a `kanban:card_ready` event — and there
+	 * are several awaits inside `launchCardWorkflow` between the `!workflow_id`
+	 * re-check and the `set_kanban_card_workflow_id` that closes the window. Both
+	 * could otherwise pass the check and start two workflows for one card. Keyed
+	 * by cardId: WorkflowExecutorService's own double-submit guard is keyed by the
+	 * per-call workflowId (fresh each launch), so it cannot catch this.
+	 */
+	async function runCardWorkflow(cardId: string): Promise<void> {
+		if (launchingCardIds.has(cardId)) return;
+		launchingCardIds.add(cardId);
+		try {
+			await launchCardWorkflow(cardId);
+		} finally {
+			launchingCardIds.delete(cardId);
+		}
+	}
+
 	/**
 	 * When a card is promoted to "doing" by the scheduler, the page is
 	 * responsible for kicking off the workflow execution: create a workflow,
 	 * invoke execute_workflow_streaming with the resolved prompt + variables,
 	 * then update the card with the workflow_id so the report viewer can link
-	 * back to it.
+	 * back to it. Always reached through `runCardWorkflow` (reentrancy guard).
 	 */
-	async function runCardWorkflow(cardId: string): Promise<void> {
+	async function launchCardWorkflow(cardId: string): Promise<void> {
 		// Refresh first to get the new column/status from the scheduler.
 		await kanbanStore.loadCards(agentFilter || undefined);
 		const card = await kanbanStore.getCard(cardId);

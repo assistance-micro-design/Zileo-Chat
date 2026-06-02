@@ -450,40 +450,44 @@ async fn main() -> anyhow::Result<()> {
                 tracing::info!("Kanban scheduler task spawned");
             }
 
-            // Boot-time recovery (K1-bis): reset `doing` cards whose linked
-            // workflow never executed — e.g. the app crashed or was closed
-            // between stamping `workflow_id` (`set_kanban_card_workflow_id`) and
-            // the worker persisting its first message. Such cards can never be
+            // Boot-time recovery (K1-bis): `doing` cards whose linked workflow is
+            // no longer alive (process restarted). Such cards can never be
             // re-run by the frontend (`runCardWorkflow` short-circuits once a
             // `workflow_id` is set; the orphan reconcilers only target
-            // `workflow_id = NONE`) and would hold a `doing` slot forever.
-            // Detached + best-effort; promote the next ready card afterwards so a
-            // freed slot is used immediately instead of waiting for a tick.
+            // `workflow_id = NONE`) and would hold a `doing` slot forever. Each
+            // card is finalized to `review` (run produced an assistant message)
+            // or requeued to `ready`/`todo` (no result). Detached + best-effort;
+            // promote the next ready card afterwards so any freed slot is used
+            // immediately instead of waiting for a scheduler tick.
             {
                 let db = state.inner().db.clone();
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    match commands::scheduler::reset_stuck_doing_cards_core(
+                    match commands::scheduler::recover_stuck_doing_cards_core(
                         &db,
-                        commands::scheduler::STUCK_DOING_NO_MESSAGE_GRACE_SECS,
+                        commands::scheduler::STUCK_DOING_GRACE_SECS,
                     )
                     .await
                     {
-                        Ok(ids) if !ids.is_empty() => {
+                        Ok(r) if !r.is_empty() => {
                             tracing::info!(
-                                reset = ids.len(),
-                                "Kanban boot recovery: reset stuck doing cards"
+                                finalized = r.finalized.len(),
+                                requeued = r.requeued.len(),
+                                "Kanban boot recovery: recovered stuck doing cards"
                             );
-                            if let Err(e) = commands::scheduler::start_next_pending_card_core(
-                                &db,
-                                &app_handle,
-                            )
-                            .await
-                            {
-                                tracing::warn!(
-                                    error = %e,
-                                    "Boot promotion after stuck reset failed (non-fatal)"
-                                );
+                            // Only a requeue frees a slot worth promoting into.
+                            if !r.requeued.is_empty() {
+                                if let Err(e) = commands::scheduler::start_next_pending_card_core(
+                                    &db,
+                                    &app_handle,
+                                )
+                                .await
+                                {
+                                    tracing::warn!(
+                                        error = %e,
+                                        "Boot promotion after stuck recovery failed (non-fatal)"
+                                    );
+                                }
                             }
                         }
                         Ok(_) => tracing::debug!("Kanban boot recovery: no stuck doing cards"),
