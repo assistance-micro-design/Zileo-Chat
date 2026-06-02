@@ -35,6 +35,24 @@ pub mod workflow {
     pub const FULL_STATE_LOAD_TIMEOUT_SECS: u64 = 60;
 }
 
+/// Async card-compose constants.
+pub mod compose {
+    /// Maximum number of detached `start_compose_card` generations that may run
+    /// concurrently — a GLOBAL cap (not per-agent), distinct from the worker
+    /// scheduler's `DEFAULT_MAX_CONCURRENT_WORKFLOWS` (3).
+    ///
+    /// Each compose is a full LLM tool-loop, so this bounds the cumulative LLM /
+    /// resource load and acts as the anti-DoS gate against spamming the
+    /// "Générer l'aperçu" button. The in-memory registry is reset at reboot.
+    pub const MAX_CONCURRENT_COMPOSE: usize = 4;
+
+    /// Hard wall-clock ceiling (seconds) for a single detached compose run
+    /// (M-3). A compose stuck on a pathological tool-loop holds its slot for the
+    /// whole duration; the timeout frees the slot (via the RAII guard) and emits
+    /// `kanban:compose_failed`, bounding cap saturation.
+    pub const COMPOSE_TIMEOUT_SECS: u64 = 300;
+}
+
 /// Validation flow constants.
 pub mod validation {
     /// Lower bound for user-configurable validation timeout.

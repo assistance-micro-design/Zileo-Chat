@@ -13,14 +13,15 @@
 // limitations under the License.
 
 use crate::agents::core::{AgentOrchestrator, AgentRegistry};
+use crate::constants::compose::MAX_CONCURRENT_COMPOSE;
 use crate::db::DBClient;
 use crate::llm::embedding::EmbeddingService;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
 use crate::models::ReindexJobStatus;
 use crate::tools::ToolFactory;
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock as StdRwLock};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 use tauri::AppHandle;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
@@ -66,6 +67,38 @@ pub struct AppState {
     pub kanban_scheduler_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     /// Shutdown flag polled by the kanban scheduler on every tick.
     pub kanban_scheduler_shutdown: Arc<std::sync::atomic::AtomicBool>,
+    /// In-flight async card-compose registry (card_id set), bounding concurrency
+    /// to `MAX_CONCURRENT_COMPOSE`. A `std::sync::Mutex` (not `tokio::Mutex`) so
+    /// the RAII [`ComposeSlotGuard`] can release a slot from `Drop` without an
+    /// `.await`. In-memory only — reset to empty at reboot.
+    pub compose_inflight: Arc<StdMutex<HashSet<String>>>,
+}
+
+/// Pure concurrency gate: can a new compose slot be reserved given the current
+/// number of in-flight composes? Extracted so the cap frontier is unit-testable
+/// without an `AppState`.
+pub fn can_reserve_compose(current_len: usize) -> bool {
+    current_len < MAX_CONCURRENT_COMPOSE
+}
+
+/// RAII guard that releases a reserved compose slot when dropped — covering BOTH
+/// the normal end of the detached task AND a panic unwind (the tool-loop is the
+/// most panic-prone code: SSE, third-party providers, RocksDB FFI). Without it a
+/// panicking compose would leak its slot until reboot, and 4 panics would
+/// saturate the cap (a self-inflicted DoS, H-2).
+///
+/// Poison-resilient: a mutex poisoned by a panicking holder is recovered via
+/// `into_inner` so the registry never wedges (MINEUR-1).
+pub struct ComposeSlotGuard {
+    set: Arc<StdMutex<HashSet<String>>>,
+    id: String,
+}
+
+impl Drop for ComposeSlotGuard {
+    fn drop(&mut self) {
+        let mut set = self.set.lock().unwrap_or_else(|p| p.into_inner());
+        set.remove(&self.id);
+    }
 }
 
 impl AppState {
@@ -145,6 +178,9 @@ impl AppState {
         let kanban_scheduler_handle = Arc::new(Mutex::new(None));
         let kanban_scheduler_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
+        // In-flight compose registry starts empty (reset at every reboot).
+        let compose_inflight = Arc::new(StdMutex::new(HashSet::new()));
+
         Ok(Self {
             db,
             registry,
@@ -160,6 +196,30 @@ impl AppState {
             audit_cleanup_handle,
             kanban_scheduler_handle,
             kanban_scheduler_shutdown,
+            compose_inflight,
+        })
+    }
+
+    /// Atomically reserves a compose slot for `card_id` under a SINGLE lock
+    /// (test-and-set — no TOCTOU window where two callers both read `len < cap`
+    /// and then both insert). Returns a [`ComposeSlotGuard`] that releases the
+    /// slot on drop, or an error string when the global cap is reached. The
+    /// frontend gate is only advisory; THIS is the real anti-DoS guard.
+    pub fn try_reserve_compose_slot(&self, card_id: &str) -> Result<ComposeSlotGuard, String> {
+        let mut set = self
+            .compose_inflight
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if !can_reserve_compose(set.len()) {
+            return Err(format!(
+                "Limite de {} générations simultanées atteinte",
+                MAX_CONCURRENT_COMPOSE
+            ));
+        }
+        set.insert(card_id.to_string());
+        Ok(ComposeSlotGuard {
+            set: self.compose_inflight.clone(),
+            id: card_id.to_string(),
         })
     }
 
@@ -374,6 +434,67 @@ impl AppState {
 mod tests {
     use super::*;
     use crate::test_utils::test_tempdir;
+
+    /// H-2: the pure cap gate. With `MAX_CONCURRENT_COMPOSE = 4`, the frontier
+    /// is exactly len 3 -> true, len 4 -> false.
+    #[test]
+    fn can_reserve_compose_frontier() {
+        assert!(can_reserve_compose(0));
+        assert!(can_reserve_compose(MAX_CONCURRENT_COMPOSE - 1));
+        assert!(!can_reserve_compose(MAX_CONCURRENT_COMPOSE));
+        assert!(!can_reserve_compose(MAX_CONCURRENT_COMPOSE + 1));
+    }
+
+    /// H-2 / MINEUR-1: `ComposeSlotGuard::drop` releases the slot even when the
+    /// holder panics (unwind), so a panicking tool-loop never leaks its slot.
+    #[test]
+    fn compose_slot_guard_releases_on_panic_unwind() {
+        let set: Arc<StdMutex<HashSet<String>>> = Arc::new(StdMutex::new(HashSet::new()));
+        let set_for_closure = set.clone();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = ComposeSlotGuard {
+                set: set_for_closure.clone(),
+                id: "x".to_string(),
+            };
+            set_for_closure.lock().unwrap().insert("x".to_string());
+            panic!("tool loop panicked mid-compose");
+        }));
+        assert!(result.is_err(), "the closure must have panicked");
+        assert!(
+            set.lock().unwrap().is_empty(),
+            "ComposeSlotGuard::drop must release the slot during unwind"
+        );
+    }
+
+    /// H-2: `try_reserve_compose_slot` reserves up to the cap, refuses the
+    /// overflow, and a dropped guard frees a slot for re-reservation.
+    #[tokio::test]
+    async fn compose_slot_reserve_caps_and_releases() {
+        let temp_dir = test_tempdir();
+        let db_path = temp_dir.path().join("compose_slots_db");
+        let state = AppState::new(db_path.to_str().unwrap()).await.unwrap();
+
+        let mut guards = Vec::new();
+        for i in 0..MAX_CONCURRENT_COMPOSE {
+            guards.push(
+                state
+                    .try_reserve_compose_slot(&format!("c{i}"))
+                    .expect("slot under cap must reserve"),
+            );
+        }
+        // Cap reached -> the next reservation is refused.
+        assert!(
+            state.try_reserve_compose_slot("overflow").is_err(),
+            "the {}-th compose must be refused",
+            MAX_CONCURRENT_COMPOSE + 1
+        );
+        // Releasing one slot (guard drop) frees capacity for a new reservation.
+        guards.pop();
+        assert!(
+            state.try_reserve_compose_slot("after-release").is_ok(),
+            "a freed slot must be reservable again"
+        );
+    }
 
     #[tokio::test]
     async fn test_appstate_new_success() {

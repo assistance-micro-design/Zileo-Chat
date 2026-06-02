@@ -30,8 +30,11 @@
 	import { UserQuestionModal, GlobalValidationModal } from '$lib/components/workflow';
 	import KanbanCardCreator from '$lib/components/kanban/KanbanCardCreator.svelte';
 	import { sttSettingsStore } from '$lib/stores/sttSettings';
+	import { validationSettingsStore } from '$lib/stores/validation-settings';
+	import { kanbanRuntimeStore } from '$lib/stores/kanban-runtime';
 	import { backgroundWorkflowsStore } from '$lib/stores/background-workflows';
 	import { kanbanEventsStore } from '$lib/stores/kanban-events';
+	import { composingStore } from '$lib/stores/kanban-compose';
 	import { cardCreatorStore, cardCreatorOpen } from '$lib/stores/card-creator';
 	import { kanbanStore } from '$lib/stores/kanban';
 	import { kanbanScheduleStore } from '$lib/stores/kanban-schedule';
@@ -124,9 +127,33 @@
 			/* listener failures are non-fatal; the board self-heals on remount */
 		});
 
+		// Initialise the async-compose store at the app root so a "Générer
+		// l'aperçu" launched from the global creator still toasts and refreshes
+		// the proposed zone if it finishes while the user is on another route.
+		void composingStore.init().catch(() => {
+			/* listener failures are non-fatal */
+		});
+
 		// Load STT settings — FAB visibility depends on `enabled` flag.
 		void sttSettingsStore.loadSettings().catch(() => {
 			/* defaults are surfaced by the store on failure */
+		});
+
+		// Load validation settings at the root so the concurrency gate
+		// (`backgroundWorkflowsStore.canStart`) reads the real persisted mode on
+		// EVERY route — not just /agent and /settings. Without this, arriving on
+		// or reloading /kanban left the derived `settings` store null, so an
+		// `auto`-mode user was wrongly throttled to the non-auto cap (1) and a
+		// second validated card stalled. Idempotent: /agent re-fetches silently.
+		void validationSettingsStore.loadSettings().catch(() => {
+			/* defaults applied by the gate when settings stay null */
+		});
+
+		// Load the backend worker-concurrency cap once so the Kanban board's
+		// "X / N actifs" badge reflects the SAME value the scheduler promotes
+		// with (DEFAULT_MAX_CONCURRENT_WORKFLOWS) instead of a recopied literal.
+		void kanbanRuntimeStore.load().catch(() => {
+			/* badge degrades to a placeholder until a later load succeeds */
 		});
 
 		// Check if onboarding should be shown (first launch)
@@ -170,6 +197,7 @@
 		unlistenManagerWrite?.();
 		backgroundWorkflowsStore.destroy();
 		kanbanEventsStore.destroy();
+		composingStore.destroy();
 	});
 
 	function handleOnboardingComplete(): void {

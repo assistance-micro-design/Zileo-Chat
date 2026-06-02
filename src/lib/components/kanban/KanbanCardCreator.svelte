@@ -13,6 +13,7 @@
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Modal, Button } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
+	import { canStartCompose } from '$lib/stores/kanban-compose';
 	import KanbanCardCreatorAuto from './KanbanCardCreatorAuto.svelte';
 	import KanbanCardCreatorManual from './KanbanCardCreatorManual.svelte';
 	import type { AgentSummary } from '$types/agent';
@@ -48,7 +49,8 @@
 	let mode = $state<Mode>('auto');
 	let submitting = $state(false);
 	let error = $state<string | null>(null);
-	let autoPreview = $state<KanbanCardCreate | null>(null);
+	/** True while the detached compose launch (`start_compose_card`) is in flight. */
+	let launching = $state(false);
 
 	// Force a fresh sub-pane each time the modal re-opens.
 	let paneKey = $state(0);
@@ -62,7 +64,7 @@
 				mode = 'auto';
 				error = null;
 				submitting = false;
-				autoPreview = null;
+				launching = false;
 			});
 		}
 	});
@@ -94,24 +96,18 @@
 		onclose();
 	}
 
+	/**
+	 * Auto mode: launch a DETACHED compose. On success the modal closes — the
+	 * generated card lands in the /kanban validation zone (via the composingStore
+	 * events + toast), so there is no inline preview / "Créer" step any more.
+	 */
 	async function runAutoCompose(): Promise<void> {
-		await autoPane?.compose();
-	}
-
-	async function submitAuto(): Promise<void> {
-		let payload = autoPreview;
-		if (!payload) {
-			payload = (await autoPane?.compose()) ?? null;
-			if (!payload) return;
-		}
-		submitting = true;
+		launching = true;
 		try {
-			await oncreated(payload);
-			close();
-		} catch (e) {
-			error = getErrorMessage(e);
+			const launched = await autoPane?.compose();
+			if (launched) close();
 		} finally {
-			submitting = false;
+			launching = false;
 		}
 	}
 
@@ -163,14 +159,9 @@
 			{#if mode === 'auto'}
 				<KanbanCardCreatorAuto
 					bind:this={autoPane}
-					{agents}
-					{prompts}
 					{kanbanAgentOptions}
 					{defaultKanbanAgentId}
-					{submitting}
 					onerror={(m) => (error = m)}
-					onpreview={(p) => (autoPreview = p)}
-					onsubmittingchange={(v) => (submitting = v)}
 				/>
 			{:else}
 				<KanbanCardCreatorManual
@@ -189,17 +180,12 @@
 		{/key}
 	{/snippet}
 	{#snippet footer()}
-		<Button variant="ghost" onclick={close} disabled={submitting}>
+		<Button variant="ghost" onclick={close} disabled={submitting || launching}>
 			{$i18n('common_cancel')}
 		</Button>
 		{#if mode === 'auto'}
-			<Button variant="secondary" onclick={runAutoCompose} disabled={submitting}>
-				{submitting && !autoPreview
-					? $i18n('kanban_composing_preview_btn')
-					: $i18n('kanban_compose_preview')}
-			</Button>
-			<Button variant="primary" onclick={submitAuto} disabled={submitting || !autoPreview}>
-				{$i18n('common_create')}
+			<Button variant="primary" onclick={runAutoCompose} disabled={launching || !$canStartCompose}>
+				{launching ? $i18n('kanban_composing_preview_btn') : $i18n('kanban_compose_preview')}
 			</Button>
 		{:else}
 			<Button variant="primary" onclick={submitManual} disabled={submitting}>

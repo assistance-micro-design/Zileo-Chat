@@ -128,6 +128,10 @@
 				return 'error';
 			case 'review':
 				return 'warning';
+			case 'proposed':
+				// Generated, awaiting human validation — same "needs attention"
+				// amber as review (BLOQUANT-2), not the misleading default primary.
+				return 'warning';
 			default:
 				return 'primary';
 		}

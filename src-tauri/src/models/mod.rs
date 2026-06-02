@@ -60,7 +60,9 @@ pub use embedding::{
     CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat, ImportResult,
     MemoryStats, MemoryTokenStats, ReindexJobStatus,
 };
-pub use kanban_card::{KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanColumn};
+pub use kanban_card::{
+    KanbanCard, KanbanCardCreate, KanbanCardStatus, KanbanCardUpdate, KanbanColumn,
+};
 pub use kanban_schedule::{KanbanSchedule, KanbanScheduleCreate, KanbanScheduleUpdate};
 pub use memory::{ChunkSearchResult, Memory, MemoryCreate, MemoryType};
 pub use message::{Message, MessageAttachment, MessageCreate, MessageMetrics, PaginatedMessages};

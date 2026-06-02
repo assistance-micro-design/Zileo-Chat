@@ -11,7 +11,9 @@
 
 use crate::commands::scheduler::start_next_pending_card_core;
 use crate::db::DBClient;
-use crate::models::{KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanColumn};
+use crate::models::{
+    KanbanCard, KanbanCardCreate, KanbanCardStatus, KanbanCardUpdate, KanbanColumn,
+};
 use crate::security::{serialize_for_query, validate_uuid_field};
 use crate::AppState;
 use serde_json::json;
@@ -71,9 +73,19 @@ pub(crate) fn validate_xor_prompt(
     }
 }
 
+/// Persists a new kanban card.
+///
+/// `initial_status` is the status the row starts in — `Ready` for the normal
+/// create path (the scheduler then promotes it), `Proposed` for an async compose
+/// result awaiting human validation. It is a HARDCODED enum value (never
+/// user-controllable), so embedding its wire string in the query is safe (M-2:
+/// the async compose reuses this single validated+bound path instead of a
+/// duplicated persistence helper). `column` is always `todo` (placeholder for
+/// proposed cards; the scheduler only ever promotes `status='ready'`).
 pub async fn create_kanban_card_core(
     db: &DBClient,
     data: KanbanCardCreate,
+    initial_status: KanbanCardStatus,
 ) -> Result<KanbanCard, String> {
     validate_xor_prompt(&data.prompt_id, &data.inline_prompt)?;
     let title = validate_title(&data.title)?;
@@ -108,6 +120,7 @@ pub async fn create_kanban_card_core(
         None => "NONE".to_string(),
     };
 
+    let status_sql = initial_status.as_str();
     let query = format!(
         "CREATE kanban_card:`{card_id}` CONTENT {{
             id: '{card_id}',
@@ -119,7 +132,7 @@ pub async fn create_kanban_card_core(
             inline_prompt: {inline_prompt_sql},
             variables: $variables,
             target_folder_id: {folder_sql},
-            status: 'ready',
+            status: '{status_sql}',
             `column`: 'todo',
             `column_order`: 0,
             workflow_id: NONE,
@@ -540,7 +553,7 @@ pub async fn create_kanban_card(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     info!("Creating kanban card");
-    let card = create_kanban_card_core(&state.db, config).await?;
+    let card = create_kanban_card_core(&state.db, config, KanbanCardStatus::Ready).await?;
     // Kick the scheduler so the freshly-ready card is promoted immediately
     // instead of waiting for the next 60s tick. Failures here are best-effort:
     // the scheduler loop will still pick the card up on its next tick.
@@ -689,6 +702,37 @@ mod tests {
     /// the scheduler re-promotes it (a review/done card carries `status='done'`,
     /// which the promotion query `WHERE status='ready' AND column='todo'` would
     /// otherwise never match → dead card). Covers both Review→Todo and
+    /// M-2: the async compose reuses `create_kanban_card_core` with
+    /// `initial_status = Proposed`. The persisted row must carry
+    /// `status='proposed'`, `column='todo'` (placeholder), and reuse the
+    /// pre-generated id passed in `KanbanCardCreate.id`.
+    #[tokio::test]
+    async fn create_with_proposed_status_persists_proposed_todo_and_reuses_id() {
+        use crate::test_utils::setup_test_state;
+        let (state, _g) = setup_test_state().await;
+        let card_id = uuid::Uuid::new_v4().to_string();
+        let agent = uuid::Uuid::new_v4().to_string();
+        let data = KanbanCardCreate {
+            id: Some(card_id.clone()),
+            title: "Generated task".to_string(),
+            description: "d".to_string(),
+            kanban_agent_id: agent.clone(),
+            target_agent_id: agent.clone(),
+            prompt_id: None,
+            inline_prompt: Some("do it".to_string()),
+            variables: "{}".to_string(),
+            target_folder_id: None,
+        };
+
+        let created = create_kanban_card_core(&state.db, data, KanbanCardStatus::Proposed)
+            .await
+            .expect("proposed create succeeds");
+
+        assert_eq!(created.id, card_id, "the pre-generated id must be reused");
+        assert_eq!(created.status, KanbanCardStatus::Proposed);
+        assert!(matches!(created.column, KanbanColumn::Todo));
+    }
+
     /// Done→Todo.
     #[tokio::test]
     async fn test_send_back_to_todo_resets_status_to_ready() {

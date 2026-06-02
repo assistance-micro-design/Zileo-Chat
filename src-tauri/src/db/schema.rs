@@ -604,7 +604,7 @@ DEFINE FIELD OVERWRITE inline_prompt ON kanban_card TYPE option<string>;
 DEFINE FIELD OVERWRITE variables ON kanban_card TYPE string DEFAULT '{}';
 DEFINE FIELD OVERWRITE target_folder_id ON kanban_card TYPE option<string>;
 DEFINE FIELD OVERWRITE status ON kanban_card TYPE string
-    ASSERT $value IN ['todo', 'ready', 'doing', 'review', 'done', 'failed'];
+    ASSERT $value IN ['todo', 'ready', 'doing', 'review', 'done', 'failed', 'proposed'];
 DEFINE FIELD OVERWRITE column ON kanban_card TYPE string
     ASSERT $value IN ['todo', 'doing', 'review', 'done'];
 DEFINE FIELD OVERWRITE column_order ON kanban_card TYPE int DEFAULT 0;

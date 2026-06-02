@@ -169,7 +169,9 @@ async fn main() -> anyhow::Result<()> {
             commands::kanban_schedule::list_kanban_schedules,
             commands::kanban_schedule::update_kanban_schedule,
             commands::kanban_schedule::delete_kanban_schedule,
-            commands::compose_card::compose_card_from_description,
+            commands::scheduler::get_max_concurrent_workflows,
+            commands::compose_card::start_compose_card,
+            commands::compose_card::approve_proposed_card,
             // Agent commands (CRUD)
             commands::agent::list_agents,
             commands::agent::get_agent_config,
@@ -446,6 +448,50 @@ async fn main() -> anyhow::Result<()> {
                     *slot.lock().await = Some(handle);
                 });
                 tracing::info!("Kanban scheduler task spawned");
+            }
+
+            // Boot-time recovery (K1-bis): reset `doing` cards whose linked
+            // workflow never executed — e.g. the app crashed or was closed
+            // between stamping `workflow_id` (`set_kanban_card_workflow_id`) and
+            // the worker persisting its first message. Such cards can never be
+            // re-run by the frontend (`runCardWorkflow` short-circuits once a
+            // `workflow_id` is set; the orphan reconcilers only target
+            // `workflow_id = NONE`) and would hold a `doing` slot forever.
+            // Detached + best-effort; promote the next ready card afterwards so a
+            // freed slot is used immediately instead of waiting for a tick.
+            {
+                let db = state.inner().db.clone();
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match commands::scheduler::reset_stuck_doing_cards_core(
+                        &db,
+                        commands::scheduler::STUCK_DOING_NO_MESSAGE_GRACE_SECS,
+                    )
+                    .await
+                    {
+                        Ok(ids) if !ids.is_empty() => {
+                            tracing::info!(
+                                reset = ids.len(),
+                                "Kanban boot recovery: reset stuck doing cards"
+                            );
+                            if let Err(e) = commands::scheduler::start_next_pending_card_core(
+                                &db,
+                                &app_handle,
+                            )
+                            .await
+                            {
+                                tracing::warn!(
+                                    error = %e,
+                                    "Boot promotion after stuck reset failed (non-fatal)"
+                                );
+                            }
+                        }
+                        Ok(_) => tracing::debug!("Kanban boot recovery: no stuck doing cards"),
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Kanban boot recovery failed (non-fatal)")
+                        }
+                    }
+                });
             }
 
             // Listen for workflow_complete events to update kanban cards.

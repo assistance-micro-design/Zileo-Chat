@@ -84,6 +84,24 @@ export interface ExecutionResult {
 }
 
 /**
+ * Optional execution-time behaviour switches.
+ */
+export interface ExecutionOptions {
+	/**
+	 * Skip the interactive concurrency gate (`canStart`) and register the run as
+	 * backend-initiated so it does not consume a frontend slot.
+	 *
+	 * Set by Kanban workers: their concurrency is already bounded by the backend
+	 * promotion budget (`DEFAULT_MAX_CONCURRENT_WORKFLOWS`), which is the single
+	 * authority. Re-applying the interactive gate — designed for manual /agent
+	 * launches and tied to the validation mode — would refuse a card the backend
+	 * legitimately promoted, leaving it a `doing` zombie. The /agent path leaves
+	 * this false so its gate is strictly unchanged.
+	 */
+	bypassConcurrencyGate?: boolean;
+}
+
+/**
  * Callbacks for execution events.
  */
 export interface ExecutionCallbacks {
@@ -204,10 +222,16 @@ export const WorkflowExecutorService = {
 	 *
 	 * @param params - Execution parameters
 	 * @param callbacks - Optional callbacks for UI updates
+	 * @param options - Optional behaviour switches (e.g. bypassing the gate)
 	 * @returns Execution result with success status and metrics
 	 */
-	async execute(params: ExecutionParams, callbacks?: ExecutionCallbacks): Promise<ExecutionResult> {
+	async execute(
+		params: ExecutionParams,
+		callbacks?: ExecutionCallbacks,
+		options?: ExecutionOptions
+	): Promise<ExecutionResult> {
 		const { workflowId, message, agentId, locale, attachments } = params;
+		const bypassGate = options?.bypassConcurrencyGate ?? false;
 
 		// Double-submit guard: prevent concurrent executions for same workflow
 		if (executingWorkflows.has(workflowId)) {
@@ -217,8 +241,10 @@ export const WorkflowExecutorService = {
 			};
 		}
 
-		// Check concurrent limit before starting
-		if (!backgroundWorkflowsStore.canStart()) {
+		// Check concurrent limit before starting — UNLESS this run is governed by
+		// the backend promotion budget (Kanban worker), in which case the
+		// interactive gate must not double-throttle it (see ExecutionOptions).
+		if (!bypassGate && !backgroundWorkflowsStore.canStart()) {
 			const max = backgroundWorkflowsStore.getMaxConcurrent();
 			toastStore.add({
 				type: 'warning',
@@ -249,9 +275,17 @@ export const WorkflowExecutorService = {
 				callbacks?.onUserMessage?.(userMessage);
 			}
 
-			// Track execution in background store so it persists across workflow switches
+			// Track execution in background store so it persists across workflow
+			// switches. A gate-bypassed (Kanban) run registers as backend-initiated
+			// so it is excluded from the /agent concurrency gate and running count
+			// (Rel-I1) — its budget is the backend promotion cap, not the UI slot.
 			const selectedWorkflow = workflowStore.getSelected();
-			backgroundWorkflowsStore.register(workflowId, agentId, selectedWorkflow?.name ?? 'Workflow');
+			backgroundWorkflowsStore.register(
+				workflowId,
+				agentId,
+				selectedWorkflow?.name ?? 'Workflow',
+				bypassGate
+			);
 
 			// Initialize execution block UI only for the viewed workflow
 			if (isStillViewed()) {

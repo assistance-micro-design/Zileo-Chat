@@ -165,4 +165,32 @@ describe('kanbanCardsByColumn', () => {
 		expect(groups.review).toEqual([]);
 		expect(groups.done).toEqual([]);
 	});
+
+	// B2: a `proposed` card is stored with column='todo' but belongs to the
+	// dedicated validation zone, NOT the board — the board grouping must skip it.
+	it('excludes proposed cards from the board grouping', async () => {
+		vi.mocked(tauriInvoke).mockResolvedValueOnce([
+			card('ready', 'todo', 0),
+			card('gen', 'todo', 1, { status: 'proposed' })
+		]);
+		await kanbanStore.loadCards();
+
+		const groups = get(kanbanCardsByColumn);
+		expect(groups.todo.map((c) => c.id)).toEqual(['ready']);
+		expect(groups.todo.some((c) => c.status === 'proposed')).toBe(false);
+	});
+
+	// B2 counterpart: the raw `kanbanCards` list MUST keep proposed cards so the
+	// validation zone can derive `proposedCards` from it.
+	it('keeps proposed cards in the raw kanbanCards list', async () => {
+		vi.mocked(tauriInvoke).mockResolvedValueOnce([
+			card('ready', 'todo', 0),
+			card('gen', 'todo', 1, { status: 'proposed' })
+		]);
+		await kanbanStore.loadCards();
+
+		const raw = get(kanbanCards);
+		expect(raw.map((c) => c.id).sort()).toEqual(['gen', 'ready']);
+		expect(raw.find((c) => c.id === 'gen')?.status).toBe('proposed');
+	});
 });

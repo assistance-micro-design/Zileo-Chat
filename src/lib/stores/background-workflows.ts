@@ -405,11 +405,24 @@ export const backgroundWorkflowsStore = {
 	 * @param workflowId - Unique workflow identifier
 	 * @param agentId - Agent executing the workflow
 	 * @param workflowName - Human-readable workflow name
+	 * @param backendInitiated - When true, the run is excluded from the
+	 *   concurrency gate (`canStart` / `canStartNew`) and the running count, just
+	 *   like an auto-registered detached run (Rel-I1). Used for Kanban workers,
+	 *   whose concurrency is governed solely by the backend promotion budget — so
+	 *   they must not consume a /agent slot or block the user's next manual launch.
 	 */
-	register(workflowId: string, agentId: string, workflowName: string): void {
+	register(
+		workflowId: string,
+		agentId: string,
+		workflowName: string,
+		backendInitiated = false
+	): void {
 		store.update((s) => {
 			const newExecs = new Map(s.executions);
-			newExecs.set(workflowId, createInitialExecution(workflowId, agentId, workflowName));
+			newExecs.set(
+				workflowId,
+				createInitialExecution(workflowId, agentId, workflowName, backendInitiated)
+			);
 			return { ...s, executions: newExecs };
 		});
 	},

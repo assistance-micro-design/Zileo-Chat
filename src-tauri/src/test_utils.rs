@@ -95,6 +95,7 @@ pub async fn setup_test_state() -> (AppState, TempDir) {
         audit_cleanup_handle: Arc::new(tokio::sync::Mutex::new(None)),
         kanban_scheduler_handle: Arc::new(tokio::sync::Mutex::new(None)),
         kanban_scheduler_shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        compose_inflight: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
     };
 
     (state, temp_dir)
