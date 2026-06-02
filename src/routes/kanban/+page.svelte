@@ -10,8 +10,8 @@
 	import { tauriListen, tauriInvoke as invoke, type TauriUnlistenFn } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { locale } from '$lib/stores/locale';
-	import { Badge, Button, DeleteConfirmModal } from '$lib/components/ui';
-	import { Plus, Activity } from '@lucide/svelte';
+	import { Badge, DeleteConfirmModal } from '$lib/components/ui';
+	import { Activity } from '@lucide/svelte';
 
 	import { kanbanStore, kanbanCardsByColumn, kanbanCards } from '$lib/stores/kanban';
 	import {
@@ -32,22 +32,15 @@
 
 	import KanbanBoard from '$lib/components/kanban/KanbanBoard.svelte';
 	import KanbanCardItem from '$lib/components/kanban/KanbanCardItem.svelte';
-	import KanbanCardCreator from '$lib/components/kanban/KanbanCardCreator.svelte';
 	import KanbanCardReportViewer from '$lib/components/kanban/KanbanCardReportViewer.svelte';
 	import KanbanFiltres from '$lib/components/kanban/KanbanFiltres.svelte';
 	import KanbanImprovePromptModal from '$lib/components/kanban/KanbanImprovePromptModal.svelte';
 	import KanbanScheduleModal from '$lib/components/kanban/KanbanScheduleModal.svelte';
 	import KanbanCardEditModal from '$lib/components/kanban/KanbanCardEditModal.svelte';
 
-	import type {
-		KanbanCard,
-		KanbanCardCreate,
-		KanbanColumn,
-		KanbanScheduleCreate
-	} from '$types/kanban';
+	import type { KanbanCard, KanbanColumn } from '$types/kanban';
 	import { WorkflowExecutorService } from '$lib/services/workflowExecutor.service';
 
-	let creatorOpen = $state(false);
 	let viewerOpen = $state(false);
 	let viewerCard = $state<KanbanCard | null>(null);
 	let improveOpen = $state(false);
@@ -320,25 +313,6 @@
 	function handleFilterChange(filters: { agentId: string; folderId: string }): void {
 		agentFilter = filters.agentId;
 		folderFilter = filters.folderId;
-	}
-
-	async function createCard(
-		payload: KanbanCardCreate,
-		schedule?: Omit<KanbanScheduleCreate, 'card_template_id'>
-	): Promise<void> {
-		const created = await kanbanStore.createCard(payload);
-		if (schedule) {
-			const cardTemplateId = typeof created === 'string' ? created : '';
-			if (cardTemplateId) {
-				await kanbanScheduleStore.createSchedule({
-					card_template_id: cardTemplateId,
-					days_of_week: schedule.days_of_week,
-					hour: schedule.hour,
-					minute: schedule.minute
-				});
-			}
-		}
-		await kanbanStore.loadCards(agentFilter || undefined);
 	}
 
 	/**
@@ -669,10 +643,6 @@
 					</Badge>
 				{/if}
 			</div>
-			<Button variant="primary" onclick={() => (creatorOpen = true)}>
-				<Plus size={16} />
-				{$i18n('kanban_new_card')}
-			</Button>
 		</div>
 	</header>
 
@@ -706,16 +676,6 @@
 		{/snippet}
 	</KanbanBoard>
 </section>
-
-<KanbanCardCreator
-	open={creatorOpen}
-	agents={$agentsStore}
-	prompts={$promptsStore}
-	folders={$foldersStore}
-	defaultKanbanAgentId={agentFilter}
-	onclose={() => (creatorOpen = false)}
-	oncreated={createCard}
-/>
 
 <KanbanScheduleModal
 	open={scheduleModalOpen}

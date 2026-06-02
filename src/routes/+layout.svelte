@@ -16,6 +16,7 @@
 
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { tauriListen, type TauriUnlistenFn } from '$lib/tauri';
 	import '../styles/global.css';
 	import { theme } from '$lib/stores/theme';
@@ -27,12 +28,59 @@
 	import LegalModal from '$lib/components/legal/LegalModal.svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 	import { UserQuestionModal, GlobalValidationModal } from '$lib/components/workflow';
+	import KanbanCardCreator from '$lib/components/kanban/KanbanCardCreator.svelte';
 	import { sttSettingsStore } from '$lib/stores/sttSettings';
 	import { backgroundWorkflowsStore } from '$lib/stores/background-workflows';
 	import { kanbanEventsStore } from '$lib/stores/kanban-events';
+	import { cardCreatorStore, cardCreatorOpen } from '$lib/stores/card-creator';
+	import { kanbanStore } from '$lib/stores/kanban';
+	import { kanbanScheduleStore } from '$lib/stores/kanban-schedule';
+	import { agents as agentsStore, agentStore } from '$lib/stores/agents';
+	import { prompts as promptsStore, promptStore } from '$lib/stores/prompts';
+	import { folders as foldersStore, folderStore } from '$lib/stores/folders';
 	import { toastStore } from '$lib/stores/toast';
+	import type { KanbanCardCreate, KanbanScheduleCreate } from '$types/kanban';
 
 	let { children } = $props();
+
+	// Lazy-load the creator's option lists when the global modal opens — these
+	// stores are NOT populated at boot (only /kanban and /settings load them),
+	// so opening "Nouvelle tâche à faire" from /agent would otherwise show empty
+	// selects. The loaders are idempotent (no concurrent double-fetch).
+	$effect(() => {
+		if ($cardCreatorOpen) {
+			void agentStore.loadAgents();
+			void promptStore.loadPrompts();
+			void folderStore.loadFolders();
+		}
+	});
+
+	/**
+	 * Persist a card created from the global creator, then land the user on
+	 * /kanban. Mirrors the page's former `createCard` (manual mode may attach a
+	 * recurrence). The shared `kanbanStore` is reloaded so an already-mounted
+	 * /kanban reflects the new card without waiting for a navigation.
+	 */
+	async function handleGlobalCardCreated(
+		payload: KanbanCardCreate,
+		schedule?: Omit<KanbanScheduleCreate, 'card_template_id'>
+	): Promise<void> {
+		const created = await kanbanStore.createCard(payload);
+		if (schedule) {
+			const cardTemplateId = typeof created === 'string' ? created : '';
+			if (cardTemplateId) {
+				await kanbanScheduleStore.createSchedule({
+					card_template_id: cardTemplateId,
+					days_of_week: schedule.days_of_week,
+					hour: schedule.hour,
+					minute: schedule.minute
+				});
+			}
+		}
+		await kanbanStore.loadCards();
+		cardCreatorStore.close();
+		await goto('/kanban');
+	}
 
 	let showOnboarding = $state(false);
 
@@ -167,3 +215,18 @@
   validationStore lifecycle; /agent no longer hosts its own validation branch.
 -->
 <GlobalValidationModal />
+
+<!--
+  Global "new task" creator (DP-5): a SINGLE instance mounted at the root so the
+  FloatingMenu's "Nouvelle tâche à faire" button can open it from any route. The
+  /kanban page no longer hosts its own creator (two instances would diverge in
+  form state). Option lists are loaded lazily on open (see the $effect above).
+-->
+<KanbanCardCreator
+	open={$cardCreatorOpen}
+	agents={$agentsStore}
+	prompts={$promptsStore}
+	folders={$foldersStore}
+	onclose={() => cardCreatorStore.close()}
+	oncreated={handleGlobalCardCreated}
+/>

@@ -427,6 +427,34 @@ body {
   border-color: var(--color-secondary-hover);
 }
 
+/* Navigation buttons reuse EXISTING palette tokens (no new colors): the Kanban
+   task board reads blue (the project's blue is --color-accent-hover, dark text
+   like .btn-primary) and the Agent workspace reuses the secondary (orange)
+   accent. The blue hover darkens via brightness so no extra hover token is
+   invented; orange uses its existing hover token. */
+.btn-nav-kanban {
+  background: var(--color-accent-hover);
+  color: var(--color-accent-text);
+  border-color: var(--color-accent-hover);
+  font-weight: var(--font-weight-semibold);
+}
+
+.btn-nav-kanban:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.btn-nav-agent {
+  background: var(--color-secondary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.btn-nav-agent:hover:not(:disabled) {
+  background: var(--color-secondary-hover);
+  border-color: var(--color-secondary-hover);
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--color-text-secondary);

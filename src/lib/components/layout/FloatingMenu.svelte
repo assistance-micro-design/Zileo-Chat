@@ -25,10 +25,11 @@
   <FloatingMenu />
 -->
 <script lang="ts">
-	import { Sun, Moon, Settings, Bot, KanbanSquare } from '@lucide/svelte';
+	import { Sun, Moon, Settings, Bot, KanbanSquare, Plus } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { theme } from '$lib/stores/theme';
 	import { i18n } from '$lib/i18n';
+	import { cardCreatorStore } from '$lib/stores/card-creator';
 	import LanguageSelector from '$lib/components/ui/LanguageSelector.svelte';
 	import MicButton from '$lib/components/ui/MicButton.svelte';
 
@@ -66,6 +67,11 @@
 
 	<!-- Center: Main Navigation -->
 	<div class="menu-center">
+		<button type="button" class="btn btn-nav-kanban" onclick={() => cardCreatorStore.open()}>
+			<Plus size={16} />
+			<span class="floating-menu-link-text">{$i18n('kanban_new_card')}</span>
+		</button>
+
 		<a
 			href="/settings"
 			class="btn btn-secondary"
@@ -78,7 +84,7 @@
 
 		<a
 			href="/kanban"
-			class="btn btn-secondary"
+			class="btn btn-nav-kanban"
 			class:active={isKanban}
 			aria-current={isKanban ? 'page' : undefined}
 		>
@@ -88,7 +94,7 @@
 
 		<a
 			href="/agent"
-			class="btn btn-primary"
+			class="btn btn-nav-agent"
 			class:active={isAgent}
 			aria-current={isAgent ? 'page' : undefined}
 		>
@@ -154,8 +160,17 @@
 		display: inline;
 	}
 
-	.menu-center .btn.active {
-		box-shadow: 0 0 0 2px var(--color-accent);
+	/* Active-route halo uses the active button's own accent so a blue Kanban
+	   tab gets a blue ring and an orange Agent tab an orange ring (DP-3b),
+	   instead of a single cyan ring for all. Tokens are reused from the palette. */
+	.menu-center .btn-secondary.active {
+		box-shadow: 0 0 0 2px var(--color-secondary);
+	}
+	.menu-center .btn-nav-kanban.active {
+		box-shadow: 0 0 0 2px var(--color-accent-hover);
+	}
+	.menu-center .btn-nav-agent.active {
+		box-shadow: 0 0 0 2px var(--color-secondary);
 	}
 
 	@media (max-width: 640px) {
