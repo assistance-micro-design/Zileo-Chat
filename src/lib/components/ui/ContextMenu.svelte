@@ -117,18 +117,18 @@
 				event.preventDefault();
 				onclose();
 				break;
-				case 'Home': {
-					event.preventDefault();
-					const first = enabledItems[0];
-					focusedIndex = first ? items.indexOf(first) : -1;
-					break;
-				}
-				case 'End': {
-					event.preventDefault();
-					const last = enabledItems[enabledItems.length - 1];
-					focusedIndex = last ? items.indexOf(last) : -1;
-					break;
-				}
+			case 'Home': {
+				event.preventDefault();
+				const first = enabledItems[0];
+				focusedIndex = first ? items.indexOf(first) : -1;
+				break;
+			}
+			case 'End': {
+				event.preventDefault();
+				const last = enabledItems[enabledItems.length - 1];
+				focusedIndex = last ? items.indexOf(last) : -1;
+				break;
+			}
 		}
 	}
 

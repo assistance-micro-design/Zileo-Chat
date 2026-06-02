@@ -130,13 +130,8 @@
 />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-		class="markdown-content"
-		class:compact
-		onclick={handleClick}
-		onkeydown={handleKeydown}
-	>
-		<!-- eslint-disable-next-line svelte/no-at-html-tags -- Content sanitized via DOMPurify -->
+<div class="markdown-content" class:compact onclick={handleClick} onkeydown={handleKeydown}>
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -- Content sanitized via DOMPurify -->
 	{@html html}
 </div>
 
