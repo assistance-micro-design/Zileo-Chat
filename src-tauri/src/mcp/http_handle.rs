@@ -33,10 +33,14 @@
 //! The client POSTs JSON-RPC messages to this URL and reads the unary reply.
 
 use crate::mcp::http_auth::build_auth_headers;
+use crate::mcp::network_settings::current_network_settings;
 use crate::mcp::protocol::MCPServerCapabilities;
-use crate::mcp::redact::redact_headers;
+use crate::mcp::redact::{redact_headers, redact_url_userinfo};
 use crate::mcp::secrets::load_mcp_secret;
-use crate::mcp::ssrf::{mcp_redirect_policy, screen_http_auth, screen_request_url, SsrfResolver};
+use crate::mcp::ssrf::{
+    has_sensitive_extra_header, mcp_redirect_policy, screen_http_auth, screen_request_url,
+    ScreenPolicy, SsrfResolver,
+};
 use crate::mcp::{
     JsonRpcRequest, JsonRpcResponse, MCPError, MCPInitializeParams, MCPInitializeResult,
     MCPResourcesListResult, MCPResult, MCPToolCallParams, MCPToolCallResponse, MCPToolsListResult,
@@ -199,34 +203,60 @@ async fn get_host_throttle(host: &str) -> Option<Arc<Mutex<Instant>>> {
     Some(arc)
 }
 
-/// Shared HTTP client for connection pooling
+/// Pre-built MCP HTTP client for the **strict** variant (LAN opt-in OFF).
 ///
-/// Reuses TCP/TLS connections across all MCPHttpHandle instances.
-/// Configured with:
-/// - 5 idle connections per host
-/// - 90 second idle timeout
-/// - 30 second request timeout
-static SHARED_HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
-    // R-SEC-1/R-SEC-3: dedicated MCP client (LLM providers use their own in
-    // `llm/http.rs`). `.no_proxy()` guarantees the custom DNS resolver sees the
-    // real target IP (D1: proxy would hide it). `dns_resolver` classifies every
-    // resolved address; `redirect` caps hops at 3, blocks https->http downgrade,
-    // and re-resolves each hop through the same SSRF resolver.
+/// `SsrfResolver` blocks private/LAN ranges (loopback stays allowed for local
+/// MCP servers). This is byte-identical to the historical single shared client.
+static MCP_CLIENT_STRICT: LazyLock<Client> = LazyLock::new(|| build_mcp_client(false));
+
+/// Pre-built MCP HTTP client for the **private** variant (LAN opt-in ON).
+///
+/// Identical to the strict client except the `SsrfResolver` also permits
+/// private/LAN ranges. Selected only when the user has enabled the toggle.
+static MCP_CLIENT_PRIVATE: LazyLock<Client> = LazyLock::new(|| build_mcp_client(true));
+
+/// Builds a hardened MCP HTTP client.
+///
+/// R-SEC-1/R-SEC-3: dedicated MCP client (LLM providers use their own in
+/// `llm/http.rs`). `.no_proxy()` guarantees the custom DNS resolver sees the
+/// real target IP (D1: a proxy would hide it) — the LAN opt-in does NOT touch
+/// the proxy posture. `dns_resolver` classifies every resolved address;
+/// `redirect` caps hops at 3, blocks https->http downgrade, refuses cross-host
+/// hops, and re-resolves each hop through the same SSRF resolver.
+///
+/// `allow_private` flips only the resolver's private-range policy; loopback is
+/// always permitted (runtime policy). Pooling: 5 idle conns/host, 90 s idle.
+fn build_mcp_client(allow_private: bool) -> Client {
     Client::builder()
         .pool_max_idle_per_host(5)
         .pool_idle_timeout(Duration::from_secs(90))
         .timeout(Duration::from_millis(DEFAULT_HTTP_TIMEOUT_MS))
         .no_proxy()
-        .dns_resolver(Arc::new(SsrfResolver::new(true)))
+        .dns_resolver(Arc::new(SsrfResolver::new(ScreenPolicy::runtime(
+            allow_private,
+        ))))
         .redirect(mcp_redirect_policy())
         .build()
         .unwrap_or_else(|e| {
             // Near-impossible (TLS backend init). The pre-connect literal check
-            // still guards literal-IP targets even on this fallback path.
+            // still guards literal-IP targets even on this fallback path. No
+            // `.unwrap()` — `Client::new()` is infallible.
             warn!("Failed to create hardened MCP HTTP client: {e}, falling back to default");
             Client::new()
         })
-});
+}
+
+/// Selects the pre-built client variant for the given LAN opt-in state.
+///
+/// Lock-free clone of a `LazyLock`-initialised client (the `Arc` inside reqwest
+/// makes `.clone()` cheap). No global lock is taken on the hot path.
+fn mcp_client_for(allow_private: bool) -> Client {
+    if allow_private {
+        MCP_CLIENT_PRIVATE.clone()
+    } else {
+        MCP_CLIENT_STRICT.clone()
+    }
+}
 
 /// Builds the HTTP `HeaderMap` for a server config (v1.2).
 ///
@@ -388,21 +418,49 @@ impl MCPHttpHandle {
                 reason: "HTTP deployment requires URL in args[0]".to_string(),
             })?;
 
+        // URL safe for logging: strip any `user:pass@` userinfo so credentials
+        // embedded in the authority never reach a log line (never log secrets).
+        let safe_url = redact_url_userinfo(&base_url);
+
+        // Read the user's LAN opt-in ONCE at the connect boundary; thread the
+        // resulting policy through every screen and the client selection so the
+        // decision is consistent for this connect (no global re-reads later).
+        let net = current_network_settings();
+        let allow_private = net.allow_private_network;
+        if allow_private {
+            // A09 observability: trace every connect made under the relaxed
+            // policy so the support path can correlate a LAN connection.
+            info!(
+                server_id = %config.id,
+                server_name = %config.name,
+                url = %safe_url,
+                "MCP connect under allow_private_network (LAN opt-in is ON)"
+            );
+        }
+
         // R-SEC-1/R-SEC-3: validate the scheme and screen a literal-IP host
         // before connecting (hyper never invokes the DNS resolver for a literal
-        // IP). Runtime/manual policy allows loopback; imports block it upstream.
-        screen_request_url(&base_url, true).map_err(|reason| MCPError::InvalidConfig {
-            field: "args[0]".to_string(),
-            reason,
+        // IP). Runtime/manual policy allows loopback; the LAN opt-in adds
+        // private ranges. Imports block both upstream (ScreenPolicy::IMPORT).
+        screen_request_url(&base_url, ScreenPolicy::runtime(allow_private)).map_err(|reason| {
+            MCPError::InvalidConfig {
+                field: "args[0]".to_string(),
+                reason,
+            }
         })?;
 
         // R-SEC-7: refuse to send credentials over plaintext HTTP to a
-        // non-loopback host; warn for the acceptable cases.
+        // non-local host; warn for the acceptable cases. `has_auth` must count
+        // BOTH `auth_type` and any credential-bearing `extra_headers`, otherwise
+        // an `Authorization`/`X-API-Key` slipped in via extra headers would
+        // bypass the plaintext-credential refusal (§10.4).
+        let extra_headers = config.extra_headers.clone().unwrap_or_default();
         let has_auth = config
             .auth_type
             .map(|t| t != MCPAuthType::None)
-            .unwrap_or(false);
-        match screen_http_auth(&base_url, has_auth) {
+            .unwrap_or(false)
+            || has_sensitive_extra_header(&extra_headers);
+        match screen_http_auth(&base_url, has_auth, allow_private) {
             Err(reason) => {
                 return Err(MCPError::InvalidConfig {
                     field: "args[0]".to_string(),
@@ -412,7 +470,7 @@ impl MCPHttpHandle {
             Ok(Some(warning_msg)) => warn!(
                 server_id = %config.id,
                 server_name = %config.name,
-                url = %base_url,
+                url = %safe_url,
                 "{}",
                 warning_msg
             ),
@@ -425,8 +483,10 @@ impl MCPHttpHandle {
         // longer interpreted by the transport.
         let headers = build_headers_from_config(&config)?;
 
-        // Use shared client for connection pooling
-        let client = SHARED_HTTP_CLIENT.clone();
+        // Select the pre-built client variant matching the LAN opt-in. The
+        // strict variant (allow_private=false) is byte-identical to the
+        // historical shared client (no_proxy + private ranges blocked).
+        let client = mcp_client_for(allow_private);
 
         // Extract the hostname so this handle joins the per-host throttle
         // cadence. An unparseable URL falls back to an empty key — the
@@ -458,7 +518,7 @@ impl MCPHttpHandle {
 
         info!(
             server_id = %handle.config.id,
-            base_url = %handle.base_url,
+            base_url = %safe_url,
             "Prepared MCP HTTP handle"
         );
 
@@ -1243,6 +1303,32 @@ mod tests {
             "back-to-back throttle() on the same host must respect cadence (got {:?})",
             total
         );
+    }
+
+    // -------- LAN opt-in client variant policy --------
+
+    #[test]
+    fn test_strict_client_policy_blocks_private_allows_loopback() {
+        // The strict variant (allow_private=false) connects under
+        // ScreenPolicy::runtime(false): loopback OK, private/LAN blocked,
+        // metadata always blocked. This locks the byte-identical default.
+        let strict = ScreenPolicy::runtime(false);
+        assert!(screen_request_url("http://127.0.0.1:8080/mcp", strict).is_ok());
+        assert!(screen_request_url("http://[::1]/mcp", strict).is_ok());
+        assert!(screen_request_url("http://192.168.1.10/mcp", strict).is_err());
+        assert!(screen_request_url("http://10.0.0.1/mcp", strict).is_err());
+        assert!(screen_request_url("http://169.254.169.254/", strict).is_err());
+    }
+
+    #[test]
+    fn test_private_client_policy_allows_private_but_not_metadata() {
+        // The private variant (allow_private=true) unblocks LAN ranges but
+        // NEVER cloud metadata.
+        let private = ScreenPolicy::runtime(true);
+        assert!(screen_request_url("http://192.168.1.10/mcp", private).is_ok());
+        assert!(screen_request_url("http://100.64.0.1/mcp", private).is_ok()); // CGNAT
+        assert!(screen_request_url("http://127.0.0.1:8080/mcp", private).is_ok());
+        assert!(screen_request_url("http://169.254.169.254/", private).is_err());
     }
 
     // HTTP warning integration tests

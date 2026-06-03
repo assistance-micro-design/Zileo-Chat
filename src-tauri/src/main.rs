@@ -111,6 +111,25 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to initialize secure keystore: {}", e))?;
     tracing::info!("Secure keystore initialized");
 
+    // Seed the MCP network connectivity snapshot BEFORE any MCP auto-connect.
+    // `load_from_db()` below may connect HTTP servers, and `connect()` reads the
+    // process-global snapshot; if a LAN server is enabled, the snapshot must
+    // already reflect the user's opt-in or the first-boot connect would be
+    // refused by the strict default. Best-effort: a failure leaves the secure
+    // default (allow_private_network=false).
+    match commands::settings_mcp_network::load_mcp_network_settings(&app_state.db).await {
+        Ok(settings) => {
+            crate::mcp::network_settings::set_network_settings(settings);
+            tracing::info!(
+                allow_private_network = settings.allow_private_network,
+                "MCP network settings seeded from database"
+            );
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to seed MCP network settings; using secure default");
+        }
+    }
+
     // Run MCP loading, provider init, and embedding init in parallel.
     // MCP is fully independent. Providers and embedding both need keystore
     // (already initialized above) but are independent of each other.
@@ -327,6 +346,9 @@ async fn main() -> anyhow::Result<()> {
             commands::settings_stt::get_stt_settings,
             commands::settings_stt::update_stt_settings,
             commands::settings_stt::reset_stt_settings,
+            // MCP network connectivity (LAN opt-in)
+            commands::settings_mcp_network::get_mcp_network_settings,
+            commands::settings_mcp_network::update_mcp_network_settings,
         ])
         .setup(|app| {
             let legal_notice = MenuItemBuilder::with_id("legal-notice", "Mentions l\u{00e9}gales")

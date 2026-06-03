@@ -97,7 +97,7 @@ fn validate_imported_mcp_server(
     env: HashMap<String, String>,
 ) -> Result<crate::models::mcp::MCPServerConfig, String> {
     use crate::commands::mcp::validation::{validate_extra_headers, validate_mcp_server_config};
-    use crate::mcp::ssrf::screen_request_url;
+    use crate::mcp::ssrf::{screen_request_url, ScreenPolicy};
     use crate::models::mcp::{MCPAuthType, MCPDeploymentMethod, MCPServerConfig};
 
     let command: MCPDeploymentMethod =
@@ -126,7 +126,7 @@ fn validate_imported_mcp_server(
             .args
             .first()
             .ok_or_else(|| "HTTP MCP server requires a URL in args[0]".to_string())?;
-        screen_request_url(url, false)?;
+        screen_request_url(url, ScreenPolicy::IMPORT)?;
     }
 
     // Extra-header invariants (charset + Authorization conflict).

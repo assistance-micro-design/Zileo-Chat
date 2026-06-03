@@ -20,6 +20,39 @@
 
 use reqwest::header::HeaderMap;
 
+/// Placeholder returned by [`redact_url_userinfo`] when a URL cannot be parsed.
+///
+/// Returning a fixed safe string (rather than the original) guarantees an
+/// unparseable URL can never leak an embedded `user:pass@` into the logs.
+const REDACTED_URL_PLACEHOLDER: &str = "<url redacted>";
+
+/// Returns a copy of `url` with any userinfo (`user:pass@host`) stripped, safe
+/// for logging.
+///
+/// MCP base URLs can carry credentials in the authority
+/// (`http://user:pass@192.168.1.5/mcp`). Logging such a URL verbatim would leak
+/// the secret (violates "never log secrets"). This helper blanks both the
+/// username and password components while preserving scheme/host/port/path.
+///
+/// # Errors
+///
+/// Never returns an error: an unparseable or authority-less URL yields
+/// [`REDACTED_URL_PLACEHOLDER`] rather than the original string (fail-safe —
+/// never echo a possibly-secret raw value).
+pub fn redact_url_userinfo(url: &str) -> String {
+    let Ok(mut parsed) = url::Url::parse(url) else {
+        return REDACTED_URL_PLACEHOLDER.to_string();
+    };
+    // `set_username("")` / `set_password(None)` return Err for "cannot-be-a-base"
+    // URLs (no authority — e.g. `user:pass@not a url` parses as scheme `user:`
+    // with the rest as the path). Such a string would round-trip verbatim and
+    // could still embed a secret, so fail safe to the placeholder.
+    if parsed.set_username("").is_err() || parsed.set_password(None).is_err() {
+        return REDACTED_URL_PLACEHOLDER.to_string();
+    }
+    parsed.to_string()
+}
+
 /// Header names that always have their value masked.
 /// All comparisons are case-insensitive.
 const ALWAYS_MASKED: &[&str] = &[
@@ -168,5 +201,37 @@ mod tests {
         let redacted = redact_headers(&map);
         assert!(redacted[0].starts_with("authorization:"));
         assert!(redacted[0].ends_with("***"));
+    }
+
+    // -------- redact_url_userinfo --------
+
+    #[test]
+    fn test_redact_url_strips_user_and_password() {
+        let out = redact_url_userinfo("http://user:pass@192.168.1.5/mcp");
+        assert!(!out.contains("user"), "username leaked: {out}");
+        assert!(!out.contains("pass"), "password leaked: {out}");
+        assert!(out.contains("192.168.1.5"), "host lost: {out}");
+        assert!(out.contains("/mcp"), "path lost: {out}");
+    }
+
+    #[test]
+    fn test_redact_url_strips_username_only() {
+        let out = redact_url_userinfo("https://token@example.com/mcp");
+        assert!(!out.contains("token"), "username leaked: {out}");
+        assert!(out.contains("example.com"));
+    }
+
+    #[test]
+    fn test_redact_url_without_userinfo_is_unchanged() {
+        let url = "https://api.example.com:8443/mcp?x=1";
+        assert_eq!(redact_url_userinfo(url), url);
+    }
+
+    #[test]
+    fn test_redact_url_unparseable_returns_safe_placeholder() {
+        // A non-URL must never be echoed back verbatim (it could embed creds).
+        let out = redact_url_userinfo("user:pass@not a url");
+        assert_eq!(out, REDACTED_URL_PLACEHOLDER);
+        assert!(!out.contains("pass"));
     }
 }

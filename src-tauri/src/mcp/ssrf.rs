@@ -29,11 +29,53 @@
 //! (mapped / compatible / 6to4 / Teredo / NAT64) before re-classifying, so an
 //! IPv6 wrapper cannot smuggle a private/metadata v4.
 
+use crate::mcp::redact::redact_url_userinfo;
+use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use tracing::warn;
+
+/// Screening policy for an SSRF decision. Replaces the single positional
+/// `allow_loopback` bool so the second dimension (private/LAN ranges) can be
+/// carried explicitly instead of relying on argument order.
+///
+/// Two independent opt-ins:
+/// - `allow_loopback`: loopback (`127.0.0.0/8`, `::1`, `localhost`) is
+///   legitimate for a locally hosted MCP server (manual/runtime origin).
+/// - `allow_private`: RFC1918 / CGNAT / ULA ranges are reachable. This is a
+///   user opt-in (LAN toggle) — `false` by default (secure-by-default).
+///
+/// Neither flag ever unblocks `Metadata`, `LinkLocal`, `Reserved` or
+/// `Multicast`: cloud-metadata SSRF (`169.254.169.254`) stays closed
+/// unconditionally.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ScreenPolicy {
+    /// Whether loopback addresses may be connected to.
+    pub allow_loopback: bool,
+    /// Whether private/LAN addresses may be connected to.
+    pub allow_private: bool,
+}
+
+impl ScreenPolicy {
+    /// Import policy: the strictest — neither loopback nor private allowed.
+    pub const IMPORT: Self = Self {
+        allow_loopback: false,
+        allow_private: false,
+    };
+
+    /// Runtime/manual policy: loopback is always permitted (a local MCP server
+    /// is legitimate); private/LAN ranges are permitted only when the user has
+    /// opted in via the network settings toggle.
+    pub fn runtime(allow_private: bool) -> Self {
+        Self {
+            allow_loopback: true,
+            allow_private,
+        }
+    }
+}
 
 /// Security classification of an IP address. Only [`IpClass::Global`] is
 /// routable to the public internet; everything else is an SSRF risk
-/// (loopback is conditionally allowed via the `allow_loopback` flag).
+/// (loopback and private are conditionally allowed via [`ScreenPolicy`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IpClass {
     /// `127.0.0.0/8`, `::1`.
@@ -153,24 +195,28 @@ fn embedded_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
     None
 }
 
-/// Returns whether an address of the given class may be connected to.
+/// Returns whether an address of the given class may be connected to under the
+/// given [`ScreenPolicy`].
 ///
-/// `allow_loopback` is `true` for manual/runtime origins (a local MCP server
-/// is legitimate) and `false` for imports.
-fn ip_allowed(class: IpClass, allow_loopback: bool) -> bool {
+/// `Global` is always allowed; `Loopback` and `Private` follow their respective
+/// flags. `Metadata`, `LinkLocal`, `Reserved` and `Multicast` are **always**
+/// refused — no flag can unblock cloud-metadata SSRF.
+fn ip_allowed(class: IpClass, policy: ScreenPolicy) -> bool {
     match class {
         IpClass::Global => true,
-        IpClass::Loopback => allow_loopback,
-        _ => false,
+        IpClass::Loopback => policy.allow_loopback,
+        IpClass::Private => policy.allow_private,
+        _ => false, // Metadata / LinkLocal / Reserved / Multicast: always blocked.
     }
 }
 
 /// Pre-connect screen of a request URL. Rejects unsupported schemes and
 /// forbidden **literal** IP hosts; domains pass through (the resolver screens
-/// them at connect time). `allow_loopback`: `true` = manual/runtime, `false` =
-/// import.
-pub fn screen_request_url(url: &str, allow_loopback: bool) -> Result<(), String> {
-    let parsed = url::Url::parse(url).map_err(|e| format!("invalid URL '{url}': {e}"))?;
+/// them at connect time). The [`ScreenPolicy`] decides loopback/private access.
+pub fn screen_request_url(url: &str, policy: ScreenPolicy) -> Result<(), String> {
+    // The raw URL is omitted from the parse error: an unparseable string could
+    // embed `user:pass@` userinfo, and this message may be logged.
+    let parsed = url::Url::parse(url).map_err(|e| format!("invalid URL: {e}"))?;
     match parsed.scheme() {
         "http" | "https" => {}
         other => {
@@ -180,14 +226,14 @@ pub fn screen_request_url(url: &str, allow_loopback: bool) -> Result<(), String>
         }
     }
     match parsed.host() {
-        Some(url::Host::Ipv4(v4)) => enforce_ip(IpAddr::V4(v4), allow_loopback, url),
-        Some(url::Host::Ipv6(v6)) => enforce_ip(IpAddr::V6(v6), allow_loopback, url),
+        Some(url::Host::Ipv4(v4)) => enforce_ip(IpAddr::V4(v4), policy, url),
+        Some(url::Host::Ipv6(v6)) => enforce_ip(IpAddr::V6(v6), policy, url),
         Some(url::Host::Domain(d)) => {
             // A domain is normally screened by the resolver at connect, but the
             // well-known loopback name `localhost` (RFC 6761) must be blocked up
             // front under the import policy — it resolves to loopback, which the
             // shared runtime resolver allows.
-            if !allow_loopback && is_loopback_domain(d) {
+            if !policy.allow_loopback && is_loopback_domain(d) {
                 Err(format!(
                     "refused loopback host '{d}' in URL '{url}' (import policy)"
                 ))
@@ -206,25 +252,43 @@ fn is_loopback_domain(domain: &str) -> bool {
     d == "localhost" || d.ends_with(".localhost")
 }
 
-fn enforce_ip(ip: IpAddr, allow_loopback: bool, url: &str) -> Result<(), String> {
+fn enforce_ip(ip: IpAddr, policy: ScreenPolicy, url: &str) -> Result<(), String> {
     let class = classify_ip(ip);
-    if ip_allowed(class, allow_loopback) {
+    if ip_allowed(class, policy) {
         Ok(())
     } else {
+        // A09 observability: a structured warning on every refused literal-IP
+        // target (classification + URL) so SSRF rejections are diagnosable.
+        // The URL is redacted of any `user:pass@` userinfo before it touches a
+        // log or the propagated error (never log secrets).
+        let safe_url = redact_url_userinfo(url);
+        warn!(
+            ip = %ip,
+            ip_class = ?class,
+            url = %safe_url,
+            "SSRF refused: literal-IP target is not permitted by policy"
+        );
         Err(format!(
-            "refused SSRF target {ip} (classified {class:?}) in URL '{url}'"
+            "refused SSRF target {ip} (classified {class:?}) in URL '{safe_url}'"
         ))
     }
 }
 
 /// Screens the addresses a hostname resolved to. The **entire** resolution is
 /// refused if a single address is forbidden, so a hostile DNS cannot pair a
-/// public A record with `169.254.169.254`. `allow_loopback`: `true` =
-/// manual/runtime, `false` = import.
-pub fn screen_resolved_addrs(addrs: &[SocketAddr], allow_loopback: bool) -> Result<(), String> {
+/// public A record with `169.254.169.254`. The [`ScreenPolicy`] decides
+/// loopback/private access.
+pub fn screen_resolved_addrs(addrs: &[SocketAddr], policy: ScreenPolicy) -> Result<(), String> {
     for sa in addrs {
         let class = classify_ip(sa.ip());
-        if !ip_allowed(class, allow_loopback) {
+        if !ip_allowed(class, policy) {
+            // A09 observability: a structured warning on every refused resolved
+            // address (anti-DNS-rebinding path).
+            warn!(
+                ip = %sa.ip(),
+                ip_class = ?class,
+                "SSRF refused: resolved address is not permitted by policy"
+            );
             return Err(format!(
                 "refused SSRF: resolved address {} is {:?}",
                 sa.ip(),
@@ -237,34 +301,80 @@ pub fn screen_resolved_addrs(addrs: &[SocketAddr], allow_loopback: bool) -> Resu
 
 /// R-SEC-7: screens credentials sent over plaintext HTTP.
 ///
-/// Returns `Err` when authentication would be sent over `http://` to a
-/// non-loopback host (credentials leak), `Ok(Some(warning))` for an
+/// `has_auth` must already account for **both** `auth_type` *and* any sensitive
+/// `extra_headers` (see [`has_sensitive_extra_header`]) — otherwise the strict
+/// refusal is cosmetic (a bearer token slipped in via `Authorization` extra
+/// header would bypass it).
+///
+/// `allow_private` is the user's LAN opt-in: when it is on, a private/LAN host
+/// is treated as `trusted_local` (same as loopback) so credentials are
+/// *warned about* rather than refused — the LAN toggle's audience is exactly
+/// the http+auth self-hosted-by-IP case. When `allow_private` is off, a private
+/// host stays non-local and credentials over http are refused.
+///
+/// Returns `Err` when credentials would be sent over `http://` to a
+/// non-trusted-local host (credentials leak), `Ok(Some(warning))` for an
 /// acceptable-but-noteworthy case, and `Ok(None)` when there is nothing to
-/// report (https, or plain http without auth on loopback).
-pub fn screen_http_auth(url: &str, has_auth: bool) -> Result<Option<String>, String> {
-    let parsed = url::Url::parse(url).map_err(|e| format!("invalid URL '{url}': {e}"))?;
+/// report (https, or plain http without auth on a trusted-local host).
+pub fn screen_http_auth(
+    url: &str,
+    has_auth: bool,
+    allow_private: bool,
+) -> Result<Option<String>, String> {
+    let parsed = url::Url::parse(url).map_err(|e| format!("invalid URL: {e}"))?;
     if parsed.scheme() != "http" {
         // https (or anything non-http) carries no plaintext-credential risk here.
         return Ok(None);
     }
-    let is_loopback = match parsed.host() {
-        Some(url::Host::Ipv4(v4)) => classify_ip(IpAddr::V4(v4)) == IpClass::Loopback,
-        Some(url::Host::Ipv6(v6)) => classify_ip(IpAddr::V6(v6)) == IpClass::Loopback,
-        Some(url::Host::Domain(d)) => d.eq_ignore_ascii_case("localhost"),
-        None => false,
+    let class = match parsed.host() {
+        Some(url::Host::Ipv4(v4)) => Some(classify_ip(IpAddr::V4(v4))),
+        Some(url::Host::Ipv6(v6)) => Some(classify_ip(IpAddr::V6(v6))),
+        // Reuse `is_loopback_domain` so `localhost`, `app.localhost`, and a
+        // trailing-dot FQDN are all treated as loopback consistently with the
+        // pre-connect screen (R4). A non-loopback domain is left unclassified:
+        // only literal private IPs and `localhost` are trusted-local — a domain
+        // that *resolves* to a private IP is NOT (fail-secure; surfaced in UI).
+        Some(url::Host::Domain(d)) => {
+            if is_loopback_domain(d) {
+                Some(IpClass::Loopback)
+            } else {
+                None
+            }
+        }
+        None => None,
     };
-    match (has_auth, is_loopback) {
+    let is_loopback = class == Some(IpClass::Loopback);
+    let is_private = class == Some(IpClass::Private);
+    // The LAN opt-in extends the "credentials stay local" treatment to private
+    // ranges: on a consented LAN, http+auth is warned, not refused.
+    let trusted_local = is_loopback || (is_private && allow_private);
+    // Messages may be logged at the call site — redact any `user:pass@` first.
+    let safe_url = redact_url_userinfo(url);
+    match (has_auth, trusted_local) {
         (true, false) => Err(format!(
-            "refusing to send credentials over plaintext HTTP to a non-loopback host: '{url}' — use https://"
+            "refusing to send credentials over plaintext HTTP to a non-local host: '{safe_url}' — use https://"
         )),
         (true, true) => Ok(Some(format!(
-            "MCP server '{url}' uses HTTP (not HTTPS) with authentication on loopback; credentials stay on this host"
+            "MCP server '{safe_url}' uses HTTP (not HTTPS) with authentication; credentials stay on the local/private network"
         ))),
         (false, false) => Ok(Some(format!(
-            "MCP server '{url}' uses HTTP instead of HTTPS"
+            "MCP server '{safe_url}' uses HTTP instead of HTTPS"
         ))),
         (false, true) => Ok(None),
     }
+}
+
+/// Returns true when an `extra_headers` map carries a credential-bearing header
+/// (`Authorization`, `X-API-Key`, or any `X-Auth-*`), matched case-insensitively.
+///
+/// Used to close the R-SEC-7 bypass: an `Authorization`/`X-API-Key` slipped in
+/// via `extra_headers` (rather than `auth_type`) must still count as
+/// "has auth" so [`screen_http_auth`] can refuse it over plaintext http.
+pub fn has_sensitive_extra_header(extra: &HashMap<String, String>) -> bool {
+    extra.keys().any(|k| {
+        let lower = k.trim().to_ascii_lowercase();
+        lower == "authorization" || lower == "x-api-key" || lower.starts_with("x-auth-")
+    })
 }
 
 /// A `reqwest::dns::Resolve` that classifies every resolved address and refuses
@@ -272,27 +382,26 @@ pub fn screen_http_auth(url: &str, has_auth: bool) -> Result<Option<String>, Str
 /// (no decision cache) to close the DNS-rebinding window.
 #[derive(Debug, Clone)]
 pub struct SsrfResolver {
-    allow_loopback: bool,
+    policy: ScreenPolicy,
 }
 
 impl SsrfResolver {
-    /// Creates a resolver. `allow_loopback`: `true` = manual/runtime,
-    /// `false` = import.
-    pub fn new(allow_loopback: bool) -> Self {
-        Self { allow_loopback }
+    /// Creates a resolver bound to the given [`ScreenPolicy`].
+    pub fn new(policy: ScreenPolicy) -> Self {
+        Self { policy }
     }
 }
 
 impl reqwest::dns::Resolve for SsrfResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let host = name.as_str().to_owned();
-        let allow_loopback = self.allow_loopback;
+        let policy = self.policy;
         Box::pin(async move {
             let resolved: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), 0u16))
                 .await
                 .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?
                 .collect();
-            screen_resolved_addrs(&resolved, allow_loopback)
+            screen_resolved_addrs(&resolved, policy)
                 .map_err(|m| -> Box<dyn std::error::Error + Send + Sync> { m.into() })?;
             let iter: reqwest::dns::Addrs = Box::new(resolved.into_iter());
             Ok(iter)
@@ -346,12 +455,20 @@ pub fn classify_redirect(target: &url::Url, prev: &url::Url, hops: usize) -> Red
     // Literal-IP target: hyper never invokes the DNS resolver for a literal IP,
     // so it must be classified here. On a redirect target even loopback is
     // refused — a remote server must never bounce us to a local/private IP.
+    // The redirect policy stays strict even under the LAN opt-in: a redirect is
+    // server-controlled, not the user's directly-typed URL. The dedicated
+    // message steers the user toward pointing the configuration at the direct
+    // URL instead of the SSRF-generic wording.
     match target.host() {
         Some(url::Host::Ipv4(v4)) if classify_ip(IpAddr::V4(v4)) != IpClass::Global => {
-            RedirectDecision::Refuse(format!("refused redirect to non-global literal IP {v4}"))
+            RedirectDecision::Refuse(format!(
+                "refused redirect to local/private IP {v4} — configure the direct URL instead"
+            ))
         }
         Some(url::Host::Ipv6(v6)) if classify_ip(IpAddr::V6(v6)) != IpClass::Global => {
-            RedirectDecision::Refuse(format!("refused redirect to non-global literal IP {v6}"))
+            RedirectDecision::Refuse(format!(
+                "refused redirect to local/private IP {v6} — configure the direct URL instead"
+            ))
         }
         _ => RedirectDecision::Follow,
     }
@@ -443,19 +560,89 @@ mod tests {
 
     #[test]
     fn loopback_allowed_only_under_allow_policy() {
-        assert!(ip_allowed(IpClass::Loopback, true));
-        assert!(!ip_allowed(IpClass::Loopback, false));
-        assert!(ip_allowed(IpClass::Global, false));
-        assert!(!ip_allowed(IpClass::Metadata, true));
-        assert!(!ip_allowed(IpClass::Private, true));
+        let runtime = ScreenPolicy::runtime(false);
+        let import = ScreenPolicy::IMPORT;
+        assert!(ip_allowed(IpClass::Loopback, runtime));
+        assert!(!ip_allowed(IpClass::Loopback, import));
+        assert!(ip_allowed(IpClass::Global, import));
+        // Non-regression pivot: metadata/link-local/reserved/multicast are
+        // NEVER allowed, even when the private opt-in is on.
+        let runtime_private = ScreenPolicy::runtime(true);
+        assert!(!ip_allowed(IpClass::Metadata, runtime_private));
+        assert!(!ip_allowed(IpClass::LinkLocal, runtime_private));
+        assert!(!ip_allowed(IpClass::Reserved, runtime_private));
+        assert!(!ip_allowed(IpClass::Multicast, runtime_private));
+    }
+
+    #[test]
+    fn private_allowed_only_when_allow_private() {
+        // The new arm: Private follows allow_private, nothing else.
+        assert!(ip_allowed(IpClass::Private, ScreenPolicy::runtime(true)));
+        assert!(!ip_allowed(IpClass::Private, ScreenPolicy::runtime(false)));
+        assert!(!ip_allowed(IpClass::Private, ScreenPolicy::IMPORT));
+    }
+
+    #[test]
+    fn screen_policy_constructors() {
+        assert_eq!(
+            ScreenPolicy::IMPORT,
+            ScreenPolicy {
+                allow_loopback: false,
+                allow_private: false
+            }
+        );
+        assert_eq!(
+            ScreenPolicy::runtime(false),
+            ScreenPolicy {
+                allow_loopback: true,
+                allow_private: false
+            }
+        );
+        assert_eq!(
+            ScreenPolicy::runtime(true),
+            ScreenPolicy {
+                allow_loopback: true,
+                allow_private: true
+            }
+        );
     }
 
     // ---------- pre-connect literal screening ----------
 
     #[test]
     fn screen_url_literal_metadata_refused_any_policy() {
-        assert!(screen_request_url("http://169.254.169.254/", true).is_err());
-        assert!(screen_request_url("http://169.254.169.254/", false).is_err());
+        // Even with the LAN opt-in fully on, cloud-metadata stays blocked.
+        assert!(
+            screen_request_url("http://169.254.169.254/", ScreenPolicy::runtime(true)).is_err()
+        );
+        assert!(
+            screen_request_url("http://169.254.169.254/", ScreenPolicy::runtime(false)).is_err()
+        );
+        assert!(screen_request_url("http://169.254.169.254/", ScreenPolicy::IMPORT).is_err());
+    }
+
+    #[test]
+    fn screen_url_literal_private_depends_on_allow_private() {
+        for u in [
+            "http://192.168.1.5/mcp",
+            "http://10.0.0.1/mcp",
+            "http://172.16.0.1/mcp",
+            "http://100.64.0.1/mcp", // CGNAT (Tailscale)
+            "http://[fc00::1]/mcp",  // ULA
+        ] {
+            assert!(
+                screen_request_url(u, ScreenPolicy::runtime(true)).is_ok(),
+                "{u} should be allowed under runtime(true)"
+            );
+            assert!(
+                screen_request_url(u, ScreenPolicy::runtime(false)).is_err(),
+                "{u} should be blocked under runtime(false)"
+            );
+            assert!(
+                screen_request_url(u, ScreenPolicy::IMPORT).is_err(),
+                "{u} should be blocked under IMPORT"
+            );
+        }
     }
 
     #[test]
@@ -468,33 +655,33 @@ mod tests {
             "http://0x7f.0.0.1/",
         ] {
             assert!(
-                screen_request_url(u, true).is_ok(),
-                "{u} should be allowed under Allow"
+                screen_request_url(u, ScreenPolicy::runtime(false)).is_ok(),
+                "{u} should be allowed under runtime (loopback ok)"
             );
             assert!(
-                screen_request_url(u, false).is_err(),
-                "{u} should be blocked under Block (import)"
+                screen_request_url(u, ScreenPolicy::IMPORT).is_err(),
+                "{u} should be blocked under IMPORT"
             );
         }
     }
 
     #[test]
     fn screen_url_domain_passes_to_resolver() {
-        assert!(screen_request_url("https://example.com/mcp", false).is_ok());
+        assert!(screen_request_url("https://example.com/mcp", ScreenPolicy::IMPORT).is_ok());
     }
 
     #[test]
     fn screen_url_localhost_domain_blocked_on_import() {
         // The `localhost` name resolves to loopback -> blocked under import
-        // (allow_loopback=false) but allowed under runtime/manual (true).
-        assert!(screen_request_url("http://localhost:8080/", false).is_err());
-        assert!(screen_request_url("http://localhost:8080/", true).is_ok());
-        assert!(screen_request_url("http://app.localhost/", false).is_err());
+        // but allowed under runtime/manual.
+        assert!(screen_request_url("http://localhost:8080/", ScreenPolicy::IMPORT).is_err());
+        assert!(screen_request_url("http://localhost:8080/", ScreenPolicy::runtime(false)).is_ok());
+        assert!(screen_request_url("http://app.localhost/", ScreenPolicy::IMPORT).is_err());
     }
 
     #[test]
     fn screen_url_rejects_non_http_scheme() {
-        assert!(screen_request_url("file:///etc/passwd", true).is_err());
+        assert!(screen_request_url("file:///etc/passwd", ScreenPolicy::runtime(false)).is_err());
     }
 
     // ---------- resolver decision (no network) ----------
@@ -503,41 +690,71 @@ mod tests {
     fn resolved_addrs_reject_whole_set_if_any_forbidden() {
         let public: SocketAddr = "93.184.216.34:443".parse().unwrap();
         let meta: SocketAddr = "169.254.169.254:80".parse().unwrap();
-        assert!(screen_resolved_addrs(&[public], true).is_ok());
-        // [public, metadata] -> entire resolution refused.
-        assert!(screen_resolved_addrs(&[public, meta], true).is_err());
+        assert!(screen_resolved_addrs(&[public], ScreenPolicy::runtime(false)).is_ok());
+        // [public, metadata] -> entire resolution refused, even with LAN on.
+        assert!(screen_resolved_addrs(&[public, meta], ScreenPolicy::runtime(true)).is_err());
     }
 
     #[test]
     fn resolved_addrs_loopback_policy() {
         let lo: SocketAddr = "127.0.0.1:8080".parse().unwrap();
-        assert!(screen_resolved_addrs(&[lo], true).is_ok());
-        assert!(screen_resolved_addrs(&[lo], false).is_err());
+        assert!(screen_resolved_addrs(&[lo], ScreenPolicy::runtime(false)).is_ok());
+        assert!(screen_resolved_addrs(&[lo], ScreenPolicy::IMPORT).is_err());
+    }
+
+    #[test]
+    fn resolved_addrs_private_policy() {
+        // A domain resolving to a private IP is reachable only under the opt-in.
+        let priv_addr: SocketAddr = "192.168.1.20:443".parse().unwrap();
+        assert!(screen_resolved_addrs(&[priv_addr], ScreenPolicy::runtime(true)).is_ok());
+        assert!(screen_resolved_addrs(&[priv_addr], ScreenPolicy::runtime(false)).is_err());
+        assert!(screen_resolved_addrs(&[priv_addr], ScreenPolicy::IMPORT).is_err());
     }
 
     // ---------- R-SEC-7 ----------
 
     #[test]
     fn http_auth_remote_blocked() {
-        assert!(screen_http_auth("http://api.example.com/mcp", true).is_err());
+        assert!(screen_http_auth("http://api.example.com/mcp", true, false).is_err());
         // decimal-encoded public IP (8.8.8.8) is decoded and treated as remote.
-        assert!(screen_http_auth("http://134744072/", true).is_err());
+        assert!(screen_http_auth("http://134744072/", true, false).is_err());
+        // Even with the LAN opt-in, a public host still refuses plaintext creds.
+        assert!(screen_http_auth("http://api.example.com/mcp", true, true).is_err());
     }
 
     #[test]
     fn http_auth_loopback_warns_not_blocked() {
-        // localhost + auth over http -> warning, allowed.
-        let r = screen_http_auth("http://localhost:8080/mcp", true);
+        // localhost + auth over http -> warning, allowed (regardless of opt-in).
+        let r = screen_http_auth("http://localhost:8080/mcp", true, false);
         assert!(matches!(r, Ok(Some(_))), "got {r:?}");
         // 2130706433 == 127.0.0.1 (loopback) -> warning, NOT blocked.
-        let r2 = screen_http_auth("http://2130706433/", true);
+        let r2 = screen_http_auth("http://2130706433/", true, false);
         assert!(matches!(r2, Ok(Some(_))), "got {r2:?}");
+    }
+
+    #[test]
+    fn http_auth_localhost_subdomain_is_trusted_local() {
+        // R4: `*.localhost` is treated as loopback (consistent with the
+        // pre-connect screen via is_loopback_domain) -> warned, not refused.
+        let r = screen_http_auth("http://app.localhost:8080/mcp", true, false);
+        assert!(matches!(r, Ok(Some(_))), "got {r:?}");
+        // Trailing-dot FQDN form, too.
+        let r2 = screen_http_auth("http://localhost./mcp", true, false);
+        assert!(matches!(r2, Ok(Some(_))), "got {r2:?}");
+    }
+
+    #[test]
+    fn http_auth_private_refused_without_optin_warns_with_optin() {
+        // A LAN host with http+auth: refused unless the user opted in.
+        assert!(screen_http_auth("http://192.168.1.10/mcp", true, false).is_err());
+        let r = screen_http_auth("http://192.168.1.10/mcp", true, true);
+        assert!(matches!(r, Ok(Some(_))), "got {r:?}");
     }
 
     #[test]
     fn http_auth_https_ok() {
         assert_eq!(
-            screen_http_auth("https://api.example.com/mcp", true).unwrap(),
+            screen_http_auth("https://api.example.com/mcp", true, false).unwrap(),
             None
         );
     }
@@ -545,9 +762,49 @@ mod tests {
     #[test]
     fn http_no_auth_remote_warns() {
         assert!(matches!(
-            screen_http_auth("http://api.example.com/mcp", false),
+            screen_http_auth("http://api.example.com/mcp", false, false),
             Ok(Some(_))
         ));
+    }
+
+    #[test]
+    fn http_no_auth_private_with_optin_is_silent() {
+        // No auth + private + opt-in -> trusted local, nothing to report.
+        assert_eq!(
+            screen_http_auth("http://192.168.1.10/mcp", false, true).unwrap(),
+            None
+        );
+        // Without the opt-in, the host is non-local: the plain-http warning fires.
+        assert!(matches!(
+            screen_http_auth("http://192.168.1.10/mcp", false, false),
+            Ok(Some(_))
+        ));
+    }
+
+    // ---------- has_sensitive_extra_header (R-SEC-7 bypass closure) ----------
+
+    #[test]
+    fn sensitive_extra_header_detects_credential_headers() {
+        let mut h = HashMap::new();
+        h.insert("Authorization".to_string(), "Bearer x".to_string());
+        assert!(has_sensitive_extra_header(&h));
+
+        let mut h = HashMap::new();
+        h.insert("x-api-key".to_string(), "secret".to_string()); // lowercase
+        assert!(has_sensitive_extra_header(&h));
+
+        let mut h = HashMap::new();
+        h.insert("X-Auth-Token".to_string(), "t".to_string()); // x-auth-* prefix
+        assert!(has_sensitive_extra_header(&h));
+    }
+
+    #[test]
+    fn sensitive_extra_header_ignores_benign_headers() {
+        let mut h = HashMap::new();
+        h.insert("X-Tenant".to_string(), "42".to_string());
+        h.insert("Accept".to_string(), "application/json".to_string());
+        assert!(!has_sensitive_extra_header(&h));
+        assert!(!has_sensitive_extra_header(&HashMap::new()));
     }
 
     // ---------- redirect policy decision (R-SEC-3 hardening) ----------

@@ -57,6 +57,7 @@ pub mod helpers;
 pub mod http_auth;
 pub mod http_handle;
 pub mod manager;
+pub mod network_settings;
 pub mod protocol;
 pub mod redact;
 pub mod secrets;
