@@ -20,12 +20,15 @@
 	 * User enters Mistral API key with optional test
 	 */
 	import { i18n } from '$lib/i18n';
+	import { scale } from 'svelte/transition';
 	import { tauriInvoke } from '$lib/tauri';
 	import { onboardingStore, onboardingLoading } from '$lib/stores/onboarding';
 	import { Button, Input } from '$lib/components/ui';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { openExternalUrl } from '$lib/tauri';
 	import { isAllowedScheme } from '$lib/utils/url';
+	import { motionDuration } from '$lib/utils/motion';
+	import { CircleCheck } from '@lucide/svelte';
 
 	const MISTRAL_CONSOLE_URL = 'https://console.mistral.ai';
 
@@ -45,9 +48,40 @@
 
 	let { onNext }: Props = $props();
 
+	/** Minimum API key length enforced by the backend validator. */
+	const MIN_API_KEY_LEN = 16;
+
 	let apiKey = $state('');
 	let testError = $state<string | null>(null);
 	let testSuccess = $state(false);
+	/** Tracks the last key already persisted, to avoid redundant saves on blur. */
+	let savedKey = $state('');
+
+	/**
+	 * Persists the entered key so it is never lost when the user advances with
+	 * the modal footer "Next" button (which only blurs the field, never calling
+	 * testConnection). The footer button blurs the input first, so this fires
+	 * before navigation. Errors are surfaced inline but never block navigation.
+	 */
+	async function persistApiKey(): Promise<void> {
+		const trimmed = apiKey.trim();
+		if (trimmed.length < MIN_API_KEY_LEN || trimmed === savedKey) return;
+
+		try {
+			await tauriInvoke('save_api_key', { provider: 'mistral', apiKey: trimmed });
+			savedKey = trimmed;
+		} catch (e) {
+			testError = getErrorMessage(e);
+		}
+	}
+
+	/**
+	 * Auto-saves the key on blur so a key typed without an explicit test is not
+	 * silently discarded when the user clicks the footer "Next" button.
+	 */
+	function handleBlur(): void {
+		void persistApiKey();
+	}
 
 	async function testConnection(): Promise<void> {
 		if (!apiKey.trim()) return;
@@ -57,12 +91,15 @@
 		testSuccess = false;
 
 		try {
-			// Use the lowercase provider id consistently across save and test.
-			// The previous code mixed 'Mistral' (save) with 'mistral' (test);
-			// this worked only because the keystore happens to be case-insensitive
-			// today. APIKeysSection.svelte was migrated to lowercase in the same
-			// commit so the convention is now uniform across the app.
-			await tauriInvoke('save_api_key', { provider: 'mistral', apiKey: apiKey.trim() });
+			// Send the lowercase provider id (the app-wide convention). The
+			// backend canonicalizes built-in providers to their keystore key
+			// ("Mistral"), so save and every read path (boot init, STT, this
+			// connection test) agree even on case-sensitive OS keychains such
+			// as the Linux secret-service. save_api_key also reconfigures the
+			// running provider, so the key works without an app restart.
+			const trimmed = apiKey.trim();
+			await tauriInvoke('save_api_key', { provider: 'mistral', apiKey: trimmed });
+			savedKey = trimmed;
 
 			// Then test the connection
 			const result = await tauriInvoke<{ success: boolean; latency_ms?: number; error?: string }>(
@@ -101,6 +138,7 @@
 			placeholder={$i18n('onboarding_apikey_placeholder')}
 			label=""
 			disabled={$onboardingLoading}
+			onblur={handleBlur}
 		/>
 
 		<p class="help-text">
@@ -124,8 +162,9 @@
 		</div>
 
 		{#if testSuccess}
-			<div class="status success">
-				{$i18n('onboarding_apikey_valid')}
+			<div class="status success" transition:scale={{ duration: motionDuration(250), start: 0.85 }}>
+				<CircleCheck size={16} aria-hidden="true" />
+				<span>{$i18n('onboarding_apikey_valid')}</span>
 			</div>
 		{/if}
 
@@ -200,6 +239,10 @@
 	}
 
 	.status.success {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-xs);
 		background: var(--color-success-bg, #d1fae5);
 		color: var(--color-success, #059669);
 	}

@@ -15,7 +15,7 @@
  */
 
 /**
- * Import/Export Settings Types (Schema v1.1)
+ * Import/Export Settings Types (Schema v1.3)
  *
  * Types for exporting and importing configuration entities:
  * Agents, MCP Servers, Models, Prompts, Skills, Custom Providers.
@@ -24,7 +24,7 @@
  * @module types/import-export
  */
 
-import type { ReasoningEffort } from './agent';
+import type { McpToolAllowlistEntry, ReasoningEffort } from './agent';
 import type { MCPAuthMetadata, MCPAuthType } from './mcp';
 
 // ============ EXPORT TYPES ============
@@ -93,7 +93,7 @@ export interface ExportCounts {
 }
 
 /**
- * Complete export package (schema v1.1).
+ * Complete export package (schema v1.3).
  */
 export interface ExportPackage {
 	manifest: ExportManifest;
@@ -138,6 +138,15 @@ export interface AgentExportData {
 	folders: string[];
 	/** Whether file operations require user confirmation (v1.1) */
 	requireFileConfirmation: boolean;
+	/** Agent specialization kind (v1.3). Omitted for standard agents. */
+	kind?: string;
+	/** Whether a Kanban agent auto-analyzes its card reports (v1.3). */
+	autoAnalyzeReports: boolean;
+	/**
+	 * Per-MCP-server tool allowlist (v1.3, R-SEC-4). Entry keys are snake_case.
+	 * Always reset to empty on import (fail-closed authorization boundary).
+	 */
+	mcpToolAllowlist: McpToolAllowlistEntry[];
 	createdAt?: string;
 	updatedAt?: string;
 }
@@ -177,6 +186,10 @@ export interface LLMModelExportData {
 	temperatureDefault: number;
 	isBuiltin: boolean;
 	isReasoning: boolean;
+	/** Whether the model supports vision/image input (v1.3). */
+	supportsVision: boolean;
+	/** Whether the model accepts a forced tool_choice (v1.3, defaults true). */
+	supportsForcedToolChoice: boolean;
 	inputPricePerMtok: number;
 	outputPricePerMtok: number;
 	cacheReadPricePerMtok: number;
@@ -206,6 +219,8 @@ export interface SkillExportData {
 	category: 'system' | 'coding' | 'workflow' | 'analysis' | 'custom';
 	content: string;
 	enabled: boolean;
+	/** Skill specialization kind (v1.3). Omitted for standard skills. */
+	kind?: string;
 	createdAt?: string;
 	updatedAt?: string;
 }
@@ -218,6 +233,10 @@ export interface CustomProviderExportData {
 	displayName: string;
 	baseUrl: string;
 	enabled: boolean;
+	/** Strict-compat toggle: send cache_control blocks (v1.3). */
+	supportsCacheControl?: boolean;
+	/** Strict-compat toggle: send reasoning/reasoning_effort params (v1.3). */
+	supportsReasoningParam?: boolean;
 	createdAt?: string;
 }
 
@@ -338,7 +357,8 @@ export type ImportWarningType =
 	| 'machine_specific'
 	| 'default_applied'
 	| 'builtin_model'
-	| 'mcp_secret_missing';
+	| 'mcp_secret_missing'
+	| 'mcp_allowlist_reset';
 
 /**
  * Structured import warning with actionable context (v1.1).
@@ -412,7 +432,7 @@ export interface ImportError {
 // ============ CONSTANTS ============
 
 /** Current schema version for export packages */
-export const EXPORT_SCHEMA_VERSION = '1.2';
+export const EXPORT_SCHEMA_VERSION = '1.3';
 
 /** Maximum import file size in bytes (10MB) */
 export const MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024;

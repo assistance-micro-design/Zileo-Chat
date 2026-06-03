@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Import/Export Settings Models (Schema v1.1)
+//! Import/Export Settings Models (Schema v1.3)
 //!
 //! Types for exporting and importing configuration entities:
 //! Agents, MCP Servers, Models, Prompts, Skills, Custom Providers.
@@ -37,12 +37,22 @@
 //! - Structured ImportWarning replaces plain string warnings
 //! - Post-import actions in ImportResult
 //! - Cross-entity dependency validation
+//!
+//! # Schema v1.3 Changes (backward compatible with v1.0/1.1/1.2)
+//! - Agent: added `kind`, `auto_analyze_reports`, `mcp_tool_allowlist` (the
+//!   allowlist is FAIL-CLOSED on import — always reset to empty, R-SEC-4)
+//! - Model: added `supports_vision`, `supports_forced_tool_choice` (default true)
+//! - Skill: added `kind`
+//! - Custom provider: added `supports_cache_control`, `supports_reasoning_param`
+//! - Model conflicts detected/overwritten by `(provider, api_name)` (the real
+//!   uniqueness key), not by `name`
+//! - Rename-on-conflict produces charset-safe, length-bounded, unique names
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::models::agent::ReasoningEffort;
+use crate::models::agent::{AgentKind, McpToolAllowlistEntry, ReasoningEffort};
 
 /// Selection of entities to export.
 /// At least one entity must be selected.
@@ -215,6 +225,18 @@ pub struct AgentExportData {
     /// Whether file operations require user confirmation (v1.1)
     #[serde(default = "default_require_file_confirmation")]
     pub require_file_confirmation: bool,
+    /// Agent specialization kind (v1.3). `None` = standard agent; `Some(Kanban)`
+    /// = Kanban pipeline agent. Dropped on round-trip before v1.3, which
+    /// silently downgraded Kanban agents to standard ones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<AgentKind>,
+    /// Whether a Kanban agent auto-analyzes its card reports (v1.3).
+    #[serde(default)]
+    pub auto_analyze_reports: bool,
+    /// Per-MCP-server tool allowlist (v1.3, R-SEC-4). Restores the detached-run
+    /// security scoping that was dropped on round-trip before v1.3.
+    #[serde(default)]
+    pub mcp_tool_allowlist: Vec<McpToolAllowlistEntry>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -222,6 +244,11 @@ pub struct AgentExportData {
 }
 
 fn default_require_file_confirmation() -> bool {
+    true
+}
+
+/// serde default for boolean capability fields that default to `true`.
+fn default_true() -> bool {
     true
 }
 
@@ -286,6 +313,15 @@ pub struct LLMModelExportData {
     pub is_builtin: bool,
     #[serde(default)]
     pub is_reasoning: bool,
+    /// Whether the model supports vision/image input (v1.3). Reset to the
+    /// default (false) on round-trip before v1.3.
+    #[serde(default)]
+    pub supports_vision: bool,
+    /// Whether the model accepts a forced `tool_choice` (v1.3, defaults true).
+    /// Reset to the default on round-trip before v1.3, which broke models whose
+    /// upstream rejects a forced tool call (e.g. deepseek-v4 via RouterLab).
+    #[serde(default = "default_true")]
+    pub supports_forced_tool_choice: bool,
     #[serde(default)]
     pub input_price_per_mtok: f64,
     #[serde(default)]
@@ -326,6 +362,10 @@ pub struct SkillExportData {
     pub category: String,
     pub content: String,
     pub enabled: bool,
+    /// Skill specialization kind (v1.3). `None` = standard; `Some(Kanban)` =
+    /// Kanban skill. Dropped on round-trip before v1.3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<AgentKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -343,6 +383,15 @@ pub struct CustomProviderExportData {
     /// API base URL
     pub base_url: String,
     pub enabled: bool,
+    /// Strict-compat toggle: send `cache_control` blocks (v1.3). `None` =
+    /// OpenRouter-preserving default. Reset on round-trip before v1.3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supports_cache_control: Option<bool>,
+    /// Strict-compat toggle: send `reasoning`/`reasoning_effort` params (v1.3).
+    /// `None` = default. Reset on round-trip before v1.3 (breaks Fireworks-style
+    /// strict providers — ERR_LLM_020).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supports_reasoning_param: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
 }
@@ -525,6 +574,11 @@ pub enum ImportWarningType {
     BuiltinModel,
     /// MCP server has authentication configured but no secret was included (v1.2)
     McpSecretMissing,
+    /// An imported agent's pre-authorized MCP tool allowlist was reset to empty
+    /// for security (v1.3, R-SEC-4). The allowlist is an authorization boundary;
+    /// it is never hydrated from a third-party file, and the `server_id` keys do
+    /// not survive the round-trip anyway.
+    McpAllowlistReset,
 }
 
 /// Import validation result.
@@ -596,10 +650,10 @@ pub struct ImportError {
 }
 
 /// Current schema version for export packages
-pub const EXPORT_SCHEMA_VERSION: &str = "1.2";
+pub const EXPORT_SCHEMA_VERSION: &str = "1.3";
 
 /// Supported schema versions for import (backward compatibility)
-pub const SUPPORTED_SCHEMA_VERSIONS: &[&str] = &["1.0", "1.1", "1.2"];
+pub const SUPPORTED_SCHEMA_VERSIONS: &[&str] = &["1.0", "1.1", "1.2", "1.3"];
 
 /// Application version (read from Cargo.toml at compile time)
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -784,7 +838,7 @@ mod tests {
         );
 
         assert_eq!(package.manifest.version, EXPORT_SCHEMA_VERSION);
-        assert_eq!(package.manifest.version, "1.2");
+        assert_eq!(package.manifest.version, "1.3");
         assert_eq!(package.manifest.app_version, env!("CARGO_PKG_VERSION"));
         assert!(package.manifest.description.is_some());
         assert_eq!(package.manifest.counts.agents, 0);
@@ -865,6 +919,21 @@ mod tests {
     }
 
     #[test]
+    fn test_mcp_allowlist_reset_warning_serialization() {
+        let warning = ImportWarning {
+            warning_type: ImportWarningType::McpAllowlistReset,
+            severity: "high".to_string(),
+            entity: "Agent 'Composer'".to_string(),
+            detail: "3 pre-authorized MCP tools were reset for security on import".to_string(),
+            action: "Re-arm MCP tools manually in Settings > Agents after verifying the servers"
+                .to_string(),
+        };
+        let json = serde_json::to_string(&warning).unwrap();
+        assert!(json.contains("\"warningType\":\"mcp_allowlist_reset\""));
+        assert!(json.contains("\"severity\":\"high\""));
+    }
+
+    #[test]
     fn test_extract_custom_provider_name() {
         assert_eq!(
             extract_custom_provider_name("Custom(routerlab)"),
@@ -905,6 +974,7 @@ mod tests {
         assert!(SUPPORTED_SCHEMA_VERSIONS.contains(&"1.0"));
         assert!(SUPPORTED_SCHEMA_VERSIONS.contains(&"1.1"));
         assert!(SUPPORTED_SCHEMA_VERSIONS.contains(&"1.2"));
+        assert!(SUPPORTED_SCHEMA_VERSIONS.contains(&"1.3"));
         assert!(!SUPPORTED_SCHEMA_VERSIONS.contains(&"2.0"));
     }
 
@@ -974,6 +1044,7 @@ mod tests {
             category: "coding".to_string(),
             content: "# Standards\n...".to_string(),
             enabled: true,
+            kind: None,
             created_at: None,
             updated_at: None,
         };
@@ -991,11 +1062,177 @@ mod tests {
             display_name: "RouterLab".to_string(),
             base_url: "https://api.routerlab.ch/v1".to_string(),
             enabled: true,
+            supports_cache_control: None,
+            supports_reasoning_param: None,
             created_at: None,
         };
         let json = serde_json::to_string(&provider).unwrap();
         assert!(json.contains("\"name\":\"routerlab\""));
         assert!(json.contains("\"displayName\":\"RouterLab\""));
         assert!(json.contains("\"baseUrl\":\"https://api.routerlab.ch/v1\""));
+    }
+
+    // ---- v1.3 round-trip / anti-drift tests ----
+
+    fn sample_agent(kind: Option<AgentKind>) -> AgentExportData {
+        AgentExportData {
+            name: "Composer".to_string(),
+            lifecycle: "permanent".to_string(),
+            llm: LLMConfigExport {
+                provider: "Mistral".to_string(),
+                model: "mistral-small".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+                is_reasoning: false,
+                context_window: None,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            system_prompt: "do things".to_string(),
+            max_tool_iterations: 50,
+            reasoning_effort: None,
+            folders: vec![],
+            require_file_confirmation: true,
+            kind,
+            auto_analyze_reports: true,
+            mcp_tool_allowlist: vec![McpToolAllowlistEntry {
+                server_id: "srv-1".to_string(),
+                tools: vec!["search".to_string()],
+                allow_in_delegated_runs: false,
+            }],
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    #[test]
+    fn test_agent_export_v1_3_serialization() {
+        let json = serde_json::to_string(&sample_agent(Some(AgentKind::Kanban))).unwrap();
+        // top-level fields are camelCase (rename_all on AgentExportData)
+        assert!(json.contains("\"kind\":\"kanban\""));
+        assert!(json.contains("\"autoAnalyzeReports\":true"));
+        assert!(json.contains("\"mcpToolAllowlist\""));
+        // allowlist ENTRY keys stay snake_case (McpToolAllowlistEntry has no
+        // rename_all) — the TS type must match these exact keys.
+        assert!(json.contains("\"server_id\":\"srv-1\""));
+        assert!(json.contains("\"allow_in_delegated_runs\":false"));
+    }
+
+    #[test]
+    fn test_agent_export_kind_none_omitted() {
+        let json = serde_json::to_string(&sample_agent(None)).unwrap();
+        // kind has skip_serializing_if = Option::is_none
+        assert!(!json.contains("\"kind\""));
+    }
+
+    #[test]
+    fn test_llm_model_export_v1_3_serialization() {
+        let model = LLMModelExportData {
+            provider: "Custom(routerlab)".to_string(),
+            name: "deepseek-v4".to_string(),
+            api_name: "deepseek-v4-pro".to_string(),
+            context_window: 131072,
+            max_output_tokens: 8192,
+            temperature_default: 0.6,
+            is_builtin: false,
+            is_reasoning: true,
+            supports_vision: true,
+            supports_forced_tool_choice: false,
+            input_price_per_mtok: 0.0,
+            output_price_per_mtok: 0.0,
+            cache_read_price_per_mtok: 0.0,
+            cache_write_price_per_mtok: 0.0,
+            created_at: None,
+            updated_at: None,
+        };
+        let json = serde_json::to_string(&model).unwrap();
+        assert!(json.contains("\"supportsVision\":true"));
+        assert!(json.contains("\"supportsForcedToolChoice\":false"));
+    }
+
+    #[test]
+    fn test_skill_export_v1_3_kind_serialization() {
+        let skill = SkillExportData {
+            name: "kanban-compose".to_string(),
+            description: "Compose cards".to_string(),
+            category: "workflow".to_string(),
+            content: "...".to_string(),
+            enabled: true,
+            kind: Some(AgentKind::Kanban),
+            created_at: None,
+            updated_at: None,
+        };
+        let json = serde_json::to_string(&skill).unwrap();
+        assert!(json.contains("\"kind\":\"kanban\""));
+    }
+
+    #[test]
+    fn test_v1_2_backward_compat_deserialization() {
+        // A v1.2 export package: no kind / autoAnalyzeReports / mcpToolAllowlist
+        // on the agent, no supports_* on the model, no supports_* on the provider.
+        let v1_2_json = r#"{
+            "manifest": {
+                "version": "1.2",
+                "appVersion": "0.25.0",
+                "exportedAt": "2026-05-01T00:00:00Z",
+                "counts": { "agents": 1, "mcpServers": 0, "models": 1, "prompts": 0, "skills": 1, "customProviders": 1 }
+            },
+            "agents": [{
+                "name": "Legacy",
+                "lifecycle": "permanent",
+                "llm": { "provider": "Mistral", "model": "mistral-small", "temperature": 0.7, "maxTokens": 4096 },
+                "tools": [],
+                "mcpServers": [],
+                "skills": [],
+                "systemPrompt": "test",
+                "maxToolIterations": 50,
+                "folders": [],
+                "requireFileConfirmation": true
+            }],
+            "mcpServers": [],
+            "models": [{
+                "provider": "Mistral",
+                "name": "mistral-small",
+                "apiName": "mistral-small-latest",
+                "contextWindow": 32768,
+                "maxOutputTokens": 4096,
+                "temperatureDefault": 0.7,
+                "isBuiltin": false
+            }],
+            "prompts": [],
+            "skills": [{
+                "name": "old-skill",
+                "description": "d",
+                "category": "custom",
+                "content": "c",
+                "enabled": true
+            }],
+            "customProviders": [{
+                "name": "routerlab",
+                "displayName": "RouterLab",
+                "baseUrl": "https://api.routerlab.ch/v1",
+                "enabled": true
+            }]
+        }"#;
+
+        let package: ExportPackage = serde_json::from_str(v1_2_json).unwrap();
+        assert_eq!(package.manifest.version, "1.2");
+
+        let agent = &package.agents[0];
+        assert!(agent.kind.is_none());
+        assert!(!agent.auto_analyze_reports);
+        assert!(agent.mcp_tool_allowlist.is_empty());
+
+        let model = &package.models[0];
+        assert!(!model.supports_vision); // defaults false
+        assert!(model.supports_forced_tool_choice); // defaults true
+
+        let skill = &package.skills[0];
+        assert!(skill.kind.is_none());
+
+        let provider = &package.custom_providers[0];
+        assert!(provider.supports_cache_control.is_none());
+        assert!(provider.supports_reasoning_param.is_none());
     }
 }

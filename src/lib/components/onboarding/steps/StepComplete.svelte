@@ -20,7 +20,10 @@
 	 * Final step with launch button
 	 */
 	import { i18n } from '$lib/i18n';
+	import { scale } from 'svelte/transition';
+	import { backOut } from 'svelte/easing';
 	import { Button } from '$lib/components/ui';
+	import { motionDuration } from '$lib/utils/motion';
 
 	interface Props {
 		onComplete: () => void;
@@ -30,7 +33,10 @@
 </script>
 
 <div class="step-complete" data-step="complete">
-	<div class="success-icon">
+	<div
+		class="success-icon"
+		in:scale={{ duration: motionDuration(350), start: 0.5, easing: backOut }}
+	>
 		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 			<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
 			<polyline points="22 4 12 14.01 9 11.01"></polyline>

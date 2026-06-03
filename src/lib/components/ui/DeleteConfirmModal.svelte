@@ -49,6 +49,12 @@ Extracted from AgentSettings and PromptSettings.
 		onConfirm: () => void;
 		/** Callback when action is cancelled */
 		onCancel: () => void;
+		/**
+		 * Stack above popover-level overlays. Set when this confirmation is
+		 * opened from within another already-open modal (e.g. the version
+		 * history dialog), otherwise it renders behind it and stays invisible.
+		 */
+		elevated?: boolean;
 	}
 
 	let {
@@ -62,7 +68,8 @@ Extracted from AgentSettings and PromptSettings.
 		variant = 'danger',
 		confirmLabelKey,
 		onConfirm,
-		onCancel
+		onCancel,
+		elevated = false
 	}: Props = $props();
 
 	const defaultConfirmKey = $derived(
@@ -73,7 +80,7 @@ Extracted from AgentSettings and PromptSettings.
 	);
 </script>
 
-<Modal {open} title={$i18n(titleKey)} onclose={onCancel}>
+<Modal {open} {elevated} title={$i18n(titleKey)} onclose={onCancel}>
 	{#snippet body()}
 		<p class="confirm-text">
 			{$i18n(confirmMessageKey)}{#if itemName}

@@ -159,6 +159,9 @@
   --z-index-modal-backdrop: 1040;
   --z-index-modal: 1050;
   --z-index-popover: 1060;
+  /* A modal opened from within a popover-level modal (e.g. the delete
+     confirmation rendered inside VersionsHistoryModal) must stack above it. */
+  --z-index-modal-nested: 1065;
   --z-index-tooltip: 1070;
 
   /* Layout */
@@ -800,6 +803,13 @@ body {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-xl);
+}
+
+/* Elevated backdrop for a modal nested inside another popover-level modal
+   (see the Modal `elevated` prop). Keeps the nested dialog — e.g. a delete
+   confirmation opened from VersionsHistoryModal — above its parent. */
+.modal-backdrop-elevated {
+  z-index: var(--z-index-modal-nested);
 }
 
 .modal {

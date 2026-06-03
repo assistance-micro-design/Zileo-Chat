@@ -106,8 +106,9 @@ Manages API key configuration modal for LLM providers.
 
 		try {
 			// Pass the provider id verbatim (lowercase, e.g. "mistral", "routerlab").
-			// The backend stores keys keyed by this id; capitalizing it here would
-			// silently desync save vs. read on case-sensitive keystores.
+			// The backend canonicalizes built-in providers to their keystore key
+			// (e.g. "Mistral"), so the casing sent here does not have to match the
+			// read sites; custom providers are stored under their id as-is.
 			await tauriInvoke('save_api_key', {
 				provider: provider,
 				apiKey: apiKey

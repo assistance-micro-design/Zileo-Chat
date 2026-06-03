@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Per-entity import operations (schema v1.1).
+//! Per-entity import operations (schema v1.3).
 //!
 //! Each function handles importing a specific entity type with conflict resolution.
 //! Import order: custom_providers -> models -> mcp_servers -> skills -> agents -> prompts
@@ -24,7 +24,8 @@ use crate::models::prompt::Prompt;
 use std::collections::HashMap;
 
 use super::helpers::{
-    persist_imported_entity, resolve_import_entity, ImportAction, ImportTracking,
+    persist_imported_entity, resolve_import_entity, resolve_import_model, ImportAction,
+    ImportTracking,
 };
 
 /// Imports agent entities with conflict resolution.
@@ -49,6 +50,14 @@ pub async fn import_agents(
                 name,
                 is_overwrite,
             } => {
+                // DECISION A1 (R-SEC-4, fail-closed): the MCP tool allowlist is
+                // an authorization boundary. It is NEVER hydrated from a
+                // third-party import file — the imported value is dropped and the
+                // allowlist is forced to empty. The user re-arms it manually
+                // after verifying the servers (a high-severity warning is emitted
+                // at validation time). The `server_id` keys would not survive the
+                // round-trip anyway, so importing them would be both unsafe and
+                // meaningless.
                 let data = sanitize_for_surrealdb(serde_json::json!({
                     "name": name,
                     "lifecycle": agent.lifecycle,
@@ -68,6 +77,9 @@ pub async fn import_agents(
                     "reasoning_effort": agent.reasoning_effort,
                     "folders": agent.folders,
                     "require_file_confirmation": agent.require_file_confirmation,
+                    "kind": agent.kind,
+                    "auto_analyze_reports": agent.auto_analyze_reports,
+                    "mcp_tool_allowlist": [],
                 }));
                 match persist_imported_entity(db, "agent", &id, data, is_overwrite).await {
                     Ok(()) => t.imported.agents += 1,
@@ -238,8 +250,18 @@ pub async fn import_models(
     t: &mut ImportTracking<'_>,
 ) {
     for model in models {
-        match resolve_import_entity(db, "llm_model", "model", &model.name, selected, resolutions)
-            .await
+        // DECISION A5: models are unique on (provider, api_name), NOT name.
+        // Resolve the conflict (and Overwrite target) by that real key so an
+        // Overwrite updates the colliding row instead of failing on the index.
+        match resolve_import_model(
+            db,
+            &model.provider,
+            &model.api_name,
+            &model.name,
+            selected,
+            resolutions,
+        )
+        .await
         {
             ImportAction::NotSelected => continue,
             ImportAction::Skipped => {
@@ -260,6 +282,8 @@ pub async fn import_models(
                     "temperature_default": model.temperature_default,
                     "is_builtin": model.is_builtin,
                     "is_reasoning": model.is_reasoning,
+                    "supports_vision": model.supports_vision,
+                    "supports_forced_tool_choice": model.supports_forced_tool_choice,
                     "input_price_per_mtok": model.input_price_per_mtok,
                     "output_price_per_mtok": model.output_price_per_mtok,
                     "cache_read_price_per_mtok": model.cache_read_price_per_mtok,
@@ -348,6 +372,7 @@ pub async fn import_skills(
                     "category": skill.category,
                     "content": skill.content,
                     "enabled": skill.enabled,
+                    "kind": skill.kind,
                 }));
                 match persist_imported_entity(db, "skill", &id, data, is_overwrite).await {
                     Ok(()) => t.imported.skills += 1,
@@ -397,6 +422,8 @@ pub async fn import_custom_providers(
                     "display_name": provider.display_name,
                     "base_url": provider.base_url,
                     "enabled": provider.enabled,
+                    "supports_cache_control": provider.supports_cache_control,
+                    "supports_reasoning_param": provider.supports_reasoning_param,
                 }));
                 match persist_imported_entity(db, "custom_provider", &id, data, is_overwrite).await
                 {

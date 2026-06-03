@@ -22,7 +22,8 @@
 export { default as StepLanguage } from './StepLanguage.svelte';
 export { default as StepTheme } from './StepTheme.svelte';
 export { default as StepWelcome } from './StepWelcome.svelte';
-export { default as StepValues } from './StepValues.svelte';
+export { default as StepFeatures } from './StepFeatures.svelte';
 export { default as StepApiKey } from './StepApiKey.svelte';
 export { default as StepImport } from './StepImport.svelte';
+export { default as StepGettingStarted } from './StepGettingStarted.svelte';
 export { default as StepComplete } from './StepComplete.svelte';

@@ -19,18 +19,20 @@
 	 * Full-screen onboarding modal container
 	 * Manages step navigation and renders dynamic step components
 	 */
-	import { fade } from 'svelte/transition';
+	import { fly } from 'svelte/transition';
 	import { i18n } from '$lib/i18n';
 	import { onboardingStore, currentStep, isLastStep, canGoBack } from '$lib/stores/onboarding';
 	import { Button } from '$lib/components/ui';
 	import { focusTrap } from '$lib/actions/focusTrap';
+	import { motionDuration } from '$lib/utils/motion';
 	import OnboardingProgress from './OnboardingProgress.svelte';
 	import StepLanguage from './steps/StepLanguage.svelte';
 	import StepTheme from './steps/StepTheme.svelte';
 	import StepWelcome from './steps/StepWelcome.svelte';
-	import StepValues from './steps/StepValues.svelte';
+	import StepFeatures from './steps/StepFeatures.svelte';
 	import StepApiKey from './steps/StepApiKey.svelte';
 	import StepImport from './steps/StepImport.svelte';
+	import StepGettingStarted from './steps/StepGettingStarted.svelte';
 	import StepComplete from './steps/StepComplete.svelte';
 
 	interface Props {
@@ -43,9 +45,10 @@
 		StepLanguage,
 		StepTheme,
 		StepWelcome,
-		StepValues,
+		StepFeatures,
 		StepApiKey,
 		StepImport,
+		StepGettingStarted,
 		StepComplete
 	];
 
@@ -101,7 +104,7 @@
 
 		<div class="onboarding-content">
 			{#key $currentStep}
-				<div class="step-wrapper" in:fade={{ duration: 200 }}>
+				<div class="step-wrapper" in:fly={{ x: 24, duration: motionDuration(280) }}>
 					<CurrentStep onNext={handleNext} onComplete={handleComplete} />
 				</div>
 			{/key}

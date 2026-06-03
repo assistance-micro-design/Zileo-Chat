@@ -189,7 +189,7 @@ Displays in a modal with markdown content editor.
 			value={content}
 			oninput={(e) => (content = e.currentTarget.value)}
 			placeholder={$i18n('skills_form_content_placeholder')}
-			rows={12}
+			rows={20}
 			required
 			disabled={saving}
 		/>

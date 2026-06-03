@@ -57,6 +57,14 @@
 		 */
 		fullscreen?: boolean;
 		/**
+		 * When true, the backdrop stacks above popover-level overlays. Set this
+		 * for a modal rendered from within another already-open modal that was
+		 * itself elevated (e.g. the delete confirmation inside
+		 * VersionsHistoryModal); otherwise the nested dialog renders behind its
+		 * parent and stays invisible.
+		 */
+		elevated?: boolean;
+		/**
 		 * Whether clicking the backdrop closes the modal (default true). Set
 		 * false for fail-safe modals that must not be dismissed without an
 		 * explicit decision (e.g. the human-in-the-loop ValidationModal).
@@ -75,6 +83,7 @@
 		body,
 		footer,
 		fullscreen = false,
+		elevated = false,
 		closeOnBackdrop = true,
 		closeOnEscape = true,
 		showCloseButton = true
@@ -103,7 +112,7 @@
 
 {#if open}
 	<div
-		class="modal-backdrop"
+		class={['modal-backdrop', elevated && 'modal-backdrop-elevated']}
 		role="presentation"
 		onclick={handleBackdropClick}
 		onkeydown={handleKeydown}

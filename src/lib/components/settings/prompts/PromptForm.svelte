@@ -211,7 +211,7 @@ Displays in a modal with variable detection and preview.
 			value={content}
 			oninput={(e) => (content = e.currentTarget.value)}
 			placeholder={$i18n('prompts_form_content_placeholder')}
-			rows={8}
+			rows={18}
 			required
 			disabled={saving}
 		/>

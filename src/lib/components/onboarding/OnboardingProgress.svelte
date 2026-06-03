@@ -19,8 +19,12 @@
 	 * Progress indicator for onboarding wizard
 	 * Shows current step and visual progress bar
 	 */
+	import { untrack } from 'svelte';
 	import { i18n } from '$lib/i18n';
+	import { Tween } from 'svelte/motion';
+	import { cubicOut } from 'svelte/easing';
 	import { TOTAL_STEPS } from '$types/onboarding';
+	import { prefersReducedMotion } from '$lib/utils/motion';
 
 	interface Props {
 		currentStep: number;
@@ -28,7 +32,21 @@
 
 	let { currentStep }: Props = $props();
 
-	const progressPercent = $derived(((currentStep + 1) / TOTAL_STEPS) * 100);
+	const targetPercent = $derived(((currentStep + 1) / TOTAL_STEPS) * 100);
+
+	/**
+	 * Smoothly tweened fill width, seeded with the initial percentage. The
+	 * $effect below keeps it in sync; the duration collapses to 0 under
+	 * reduced-motion so the bar jumps instantly instead of animating.
+	 */
+	const fill = new Tween(
+		untrack(() => targetPercent),
+		{ duration: 350, easing: cubicOut }
+	);
+
+	$effect(() => {
+		fill.set(targetPercent, { duration: prefersReducedMotion() ? 0 : 350 });
+	});
 </script>
 
 <div class="onboarding-progress">
@@ -37,8 +55,14 @@
 			.replace('{current}', String(currentStep + 1))
 			.replace('{total}', String(TOTAL_STEPS))}
 	</div>
-	<div class="progress-bar">
-		<div class="progress-fill" style="width: {progressPercent}%"></div>
+	<div
+		class="progress-bar"
+		role="progressbar"
+		aria-valuemin={0}
+		aria-valuemax={TOTAL_STEPS}
+		aria-valuenow={currentStep + 1}
+	>
+		<div class="progress-fill" style="width: {fill.current}%"></div>
 	</div>
 	<div class="progress-dots">
 		{#each Array(TOTAL_STEPS) as _, i (i)}
@@ -74,7 +98,7 @@
 		height: 100%;
 		background: var(--color-primary);
 		border-radius: var(--border-radius-full);
-		transition: width 0.3s ease;
+		/* Width is driven by the JS Tween, which honors reduced-motion. */
 	}
 
 	.progress-dots {
@@ -100,5 +124,11 @@
 		box-shadow:
 			0 0 0 2px var(--color-bg-primary),
 			0 0 0 4px var(--color-primary);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.dot {
+			transition: none;
+		}
 	}
 </style>

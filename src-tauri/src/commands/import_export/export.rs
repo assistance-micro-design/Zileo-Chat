@@ -14,7 +14,7 @@
 
 //! Export Commands
 //!
-//! Tauri commands for exporting configuration entities (schema v1.1).
+//! Tauri commands for exporting configuration entities (schema v1.3).
 //!
 //! - `prepare_export_preview` - Get preview data for selected entities
 //! - `generate_export_file` - Generate export JSON with sanitization applied
@@ -309,7 +309,7 @@ async fn export_agents(
 ) -> Result<Vec<AgentExportData>, String> {
     let mut agents = Vec::new();
     for agent_id in agent_ids {
-        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, system_prompt, max_tool_iterations, reasoning_effort, folders, require_file_confirmation, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, system_prompt, max_tool_iterations, reasoning_effort, folders, require_file_confirmation, kind, auto_analyze_reports, mcp_tool_allowlist, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(db, query, agent_id, "agent").await? {
             let llm = &row["llm"];
             let extract_string_array = |val: &serde_json::Value| -> Vec<String> {
@@ -344,6 +344,12 @@ async fn export_agents(
                 require_file_confirmation: row["require_file_confirmation"]
                     .as_bool()
                     .unwrap_or(true),
+                kind: row["kind"].as_str().and_then(|s| {
+                    serde_json::from_value(serde_json::Value::String(s.to_string())).ok()
+                }),
+                auto_analyze_reports: row["auto_analyze_reports"].as_bool().unwrap_or(false),
+                mcp_tool_allowlist: serde_json::from_value(row["mcp_tool_allowlist"].clone())
+                    .unwrap_or_default(),
                 created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
                 updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
             });
@@ -421,7 +427,7 @@ async fn export_models(
 ) -> Result<Vec<LLMModelExportData>, String> {
     let mut models = Vec::new();
     for model_id in model_ids {
-        let query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, max_output_tokens, temperature_default, is_builtin, is_reasoning, input_price_per_mtok, output_price_per_mtok, (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, created_at, updated_at FROM llm_model WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, max_output_tokens, temperature_default, is_builtin, is_reasoning, supports_vision, supports_forced_tool_choice, input_price_per_mtok, output_price_per_mtok, (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, created_at, updated_at FROM llm_model WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(db, query, model_id, "model").await? {
             models.push(LLMModelExportData {
                 provider: row["provider"].as_str().unwrap_or("").to_string(),
@@ -432,6 +438,10 @@ async fn export_models(
                 temperature_default: row["temperature_default"].as_f64().unwrap_or(0.7),
                 is_builtin: row["is_builtin"].as_bool().unwrap_or(false),
                 is_reasoning: row["is_reasoning"].as_bool().unwrap_or(false),
+                supports_vision: row["supports_vision"].as_bool().unwrap_or(false),
+                supports_forced_tool_choice: row["supports_forced_tool_choice"]
+                    .as_bool()
+                    .unwrap_or(true),
                 input_price_per_mtok: row["input_price_per_mtok"].as_f64().unwrap_or(0.0),
                 output_price_per_mtok: row["output_price_per_mtok"].as_f64().unwrap_or(0.0),
                 cache_read_price_per_mtok: row["cache_read_price_per_mtok"].as_f64().unwrap_or(0.0),
@@ -477,7 +487,7 @@ async fn export_skills(
 ) -> Result<Vec<SkillExportData>, String> {
     let mut skills = Vec::new();
     for skill_id in skill_ids {
-        let query = "SELECT meta::id(id) AS id, name, description, category, content, enabled, created_at, updated_at FROM skill WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, name, description, category, content, enabled, kind, created_at, updated_at FROM skill WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(db, query, skill_id, "skill").await? {
             skills.push(SkillExportData {
                 name: row["name"].as_str().unwrap_or("").to_string(),
@@ -485,6 +495,9 @@ async fn export_skills(
                 category: row["category"].as_str().unwrap_or("custom").to_string(),
                 content: row["content"].as_str().unwrap_or("").to_string(),
                 enabled: row["enabled"].as_bool().unwrap_or(true),
+                kind: row["kind"].as_str().and_then(|s| {
+                    serde_json::from_value(serde_json::Value::String(s.to_string())).ok()
+                }),
                 created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
                 updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
             });
@@ -501,7 +514,7 @@ async fn export_custom_providers(
 ) -> Result<Vec<CustomProviderExportData>, String> {
     let mut providers = Vec::new();
     for name in provider_names {
-        let query = "SELECT name, display_name, base_url, enabled, created_at FROM custom_provider WHERE name = $name";
+        let query = "SELECT name, display_name, base_url, enabled, supports_cache_control, supports_reasoning_param, created_at FROM custom_provider WHERE name = $name";
         let results: Vec<serde_json::Value> = db
             .db
             .query(query)
@@ -515,6 +528,8 @@ async fn export_custom_providers(
                 display_name: row["display_name"].as_str().unwrap_or("").to_string(),
                 base_url: row["base_url"].as_str().unwrap_or("").to_string(),
                 enabled: row["enabled"].as_bool().unwrap_or(true),
+                supports_cache_control: row["supports_cache_control"].as_bool(),
+                supports_reasoning_param: row["supports_reasoning_param"].as_bool(),
                 created_at: row["created_at"].as_str().map(String::from),
             });
         }

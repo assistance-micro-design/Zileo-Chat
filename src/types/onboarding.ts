@@ -26,9 +26,10 @@ export type OnboardingStep =
 	| 'language'
 	| 'theme'
 	| 'welcome'
-	| 'values'
+	| 'features'
 	| 'api_key'
 	| 'import'
+	| 'getting_started'
 	| 'complete';
 
 /**
@@ -38,9 +39,10 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
 	'language',
 	'theme',
 	'welcome',
-	'values',
+	'features',
 	'api_key',
 	'import',
+	'getting_started',
 	'complete'
 ];
 
@@ -53,12 +55,18 @@ export const TOTAL_STEPS = ONBOARDING_STEPS.length;
  * Onboarding state managed by the store
  */
 export interface OnboardingState {
-	/** Current step index (0-6) */
+	/** Current step index (0-based, up to TOTAL_STEPS - 1) */
 	currentStep: number;
 	/** Whether onboarding has been completed */
 	completed: boolean;
 	/** Whether user skipped to the end */
 	skipped: boolean;
+	/**
+	 * Whether the user successfully imported a configuration during onboarding.
+	 * When true, the "getting started" step is skipped (its content assumes the
+	 * user is starting from scratch with no import).
+	 */
+	importedDuringOnboarding: boolean;
 	/** API key validation result (null = not tested) */
 	apiKeyValid: boolean | null;
 	/** Loading state for async operations */
@@ -74,6 +82,7 @@ export const INITIAL_ONBOARDING_STATE: OnboardingState = {
 	currentStep: 0,
 	completed: false,
 	skipped: false,
+	importedDuringOnboarding: false,
 	apiKeyValid: null,
 	loading: false,
 	error: null

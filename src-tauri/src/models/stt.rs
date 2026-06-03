@@ -21,10 +21,12 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Default Voxtral transcribe-specialized model. Confirmed alive via
-/// `GET /v1/models` on 2026-05-20 — the doc page lists a different ID that
-/// the live API rejects.
-pub const DEFAULT_VOXTRAL_MODEL: &str = "voxtral-mini-transcribe-2507";
+/// Default Voxtral model. The `voxtral-small-latest` alias was confirmed
+/// working on the `/v1/audio/transcriptions` endpoint on 2026-06-03 and is
+/// the more capable variant; it tracks the current small model automatically.
+/// Note: not every doc-listed alias is served by the batch endpoint, so
+/// changing this default requires verifying the new ID against the live API.
+pub const DEFAULT_VOXTRAL_MODEL: &str = "voxtral-small-latest";
 
 /// Maximum allowed `model_id` length (regex-validated upstream).
 pub const MAX_MODEL_ID_LEN: usize = 128;
@@ -136,7 +138,7 @@ pub fn validate_voxtral_model_id(model_id: &str) -> Result<(), String> {
     if lower.contains("realtime") {
         return Err(
             "Realtime Voxtral models cannot be used via the batch endpoint; \
-             try voxtral-mini-transcribe-2507"
+             try voxtral-small-latest"
                 .to_string(),
         );
     }

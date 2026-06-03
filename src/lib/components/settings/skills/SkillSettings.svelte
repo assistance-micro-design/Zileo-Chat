@@ -177,6 +177,7 @@ Provides CRUD operations for skills with list view and form modal.
 	open={$skillFormMode !== null}
 	title={$skillFormMode === 'create' ? $i18n('skills_create') : $i18n('skills_edit')}
 	onclose={handleFormClose}
+	fullscreen
 >
 	{#snippet body()}
 		<SkillForm

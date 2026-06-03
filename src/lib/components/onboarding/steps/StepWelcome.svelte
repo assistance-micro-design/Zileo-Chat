@@ -16,8 +16,8 @@
 
 <script lang="ts">
 	/**
-	 * Step 3: Welcome message
-	 * Introduction to Zileo Chat
+	 * Onboarding step: welcome message
+	 * Warm introduction to Zileo Chat.
 	 */
 	import { i18n } from '$lib/i18n';
 
@@ -35,6 +35,7 @@
 
 	<h1 class="step-title">{$i18n('onboarding_welcome_title')}</h1>
 	<p class="step-description">{$i18n('onboarding_welcome_description')}</p>
+	<p class="step-subtext">{$i18n('onboarding_welcome_subtext')}</p>
 </div>
 
 <style>
@@ -78,6 +79,13 @@
 		font-size: var(--font-size-base);
 		color: var(--color-text-secondary);
 		margin: 0;
-		max-width: 400px;
+		max-width: 460px;
+	}
+
+	.step-subtext {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-tertiary);
+		margin: 0;
+		max-width: 460px;
 	}
 </style>

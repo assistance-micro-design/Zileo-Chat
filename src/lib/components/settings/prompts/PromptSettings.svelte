@@ -167,6 +167,7 @@ Provides CRUD operations for prompts with list view and form modal.
 	open={$promptFormMode !== null}
 	title={$promptFormMode === 'create' ? $i18n('prompts_create') : $i18n('prompts_edit')}
 	onclose={handleFormClose}
+	fullscreen
 >
 	{#snippet body()}
 		<PromptForm

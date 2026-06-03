@@ -219,12 +219,16 @@
 	{deleting}
 	onConfirm={confirmDelete}
 	onCancel={cancelDelete}
+	elevated
 />
 
 <style>
 	/* Stacked above the parent Modal's backdrop (--z-index-modal-backdrop = 1040)
 	   and content (--z-index-modal = 1050) since this dialog is rendered nested
-	   inside an already-open Modal (PromptSettings/SkillSettings). */
+	   inside an already-open Modal (PromptSettings/SkillSettings). The delete
+	   confirmation opened from here is nested one level deeper again, so it uses
+	   the Modal `elevated` prop (--z-index-modal-nested = 1065) to stack above
+	   this backdrop. */
 	.versions-modal-backdrop {
 		position: fixed;
 		inset: 0;

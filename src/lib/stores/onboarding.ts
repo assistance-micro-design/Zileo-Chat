@@ -22,7 +22,51 @@
 
 import { writable, derived } from 'svelte/store';
 import type { OnboardingState } from '$types/onboarding';
-import { TOTAL_STEPS, INITIAL_ONBOARDING_STATE, ONBOARDING_STORAGE_KEY } from '$types/onboarding';
+import {
+	TOTAL_STEPS,
+	INITIAL_ONBOARDING_STATE,
+	ONBOARDING_STEPS,
+	ONBOARDING_STORAGE_KEY
+} from '$types/onboarding';
+
+/** Index of the import step in {@link ONBOARDING_STEPS}. */
+const IMPORT_STEP_INDEX = ONBOARDING_STEPS.indexOf('import');
+/** Index of the getting-started step in {@link ONBOARDING_STEPS}. */
+const GETTING_STARTED_STEP_INDEX = ONBOARDING_STEPS.indexOf('getting_started');
+/** Index of the completion step in {@link ONBOARDING_STEPS}. */
+const COMPLETE_STEP_INDEX = ONBOARDING_STEPS.indexOf('complete');
+
+/**
+ * Computes the next step index, skipping the getting-started step when the user
+ * imported a configuration (its guidance assumes a from-scratch setup).
+ *
+ * @param current - Current step index.
+ * @param imported - Whether a configuration was imported during onboarding.
+ * @returns The next step index, clamped to the last step.
+ */
+export function computeNextStep(current: number, imported: boolean): number {
+	const next = Math.min(current + 1, TOTAL_STEPS - 1);
+	if (imported && next === GETTING_STARTED_STEP_INDEX) {
+		return COMPLETE_STEP_INDEX;
+	}
+	return next;
+}
+
+/**
+ * Computes the previous step index, skipping the getting-started step when the
+ * user imported a configuration so back-navigation mirrors forward-navigation.
+ *
+ * @param current - Current step index.
+ * @param imported - Whether a configuration was imported during onboarding.
+ * @returns The previous step index, clamped to the first step.
+ */
+export function computePrevStep(current: number, imported: boolean): number {
+	const prev = Math.max(current - 1, 0);
+	if (imported && prev === GETTING_STARTED_STEP_INDEX) {
+		return IMPORT_STEP_INDEX;
+	}
+	return prev;
+}
 
 function isLocalStorageAvailable(): boolean {
 	return typeof localStorage !== 'undefined';
@@ -73,23 +117,25 @@ function createOnboardingStore() {
 		},
 
 		/**
-		 * Go to next step
+		 * Go to next step. Skips the getting-started step when the user imported
+		 * a configuration earlier in the flow.
 		 */
 		nextStep: (): void => {
 			update((s) => ({
 				...s,
-				currentStep: Math.min(s.currentStep + 1, TOTAL_STEPS - 1),
+				currentStep: computeNextStep(s.currentStep, s.importedDuringOnboarding),
 				error: null
 			}));
 		},
 
 		/**
-		 * Go to previous step
+		 * Go to previous step. Mirrors {@link nextStep} by skipping the
+		 * getting-started step after a successful import.
 		 */
 		prevStep: (): void => {
 			update((s) => ({
 				...s,
-				currentStep: Math.max(s.currentStep - 1, 0),
+				currentStep: computePrevStep(s.currentStep, s.importedDuringOnboarding),
 				error: null
 			}));
 		},
@@ -136,6 +182,15 @@ function createOnboardingStore() {
 		},
 
 		/**
+		 * Record whether the user imported a configuration during onboarding.
+		 * When true, navigation skips the from-scratch getting-started step.
+		 * @param imported - Whether a configuration was successfully imported
+		 */
+		setImported: (imported: boolean): void => {
+			update((s) => ({ ...s, importedDuringOnboarding: imported }));
+		},
+
+		/**
 		 * Set loading state
 		 * @param loading - Whether an async operation is in progress
 		 */
@@ -174,6 +229,7 @@ export const onboardingSkipped = derived(onboardingStore, ($s) => $s.skipped);
 export const onboardingLoading = derived(onboardingStore, ($s) => $s.loading);
 export const onboardingError = derived(onboardingStore, ($s) => $s.error);
 export const onboardingApiKeyValid = derived(onboardingStore, ($s) => $s.apiKeyValid);
+export const onboardingImported = derived(onboardingStore, ($s) => $s.importedDuringOnboarding);
 
 /**
  * Progress percentage (0-100)

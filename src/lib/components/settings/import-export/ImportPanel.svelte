@@ -287,7 +287,8 @@ Orchestrates the multi-step import process:
 			default_applied: warning.detail.includes('API key')
 				? 'ie_warn_api_keys'
 				: 'ie_warn_defaults_applied',
-			builtin_model: 'ie_warn_builtin_model'
+			builtin_model: 'ie_warn_builtin_model',
+			mcp_allowlist_reset: 'ie_warn_mcp_allowlist_reset'
 		};
 		const key = keyMap[warning.warningType] || '';
 		if (!key) return warning.detail;
@@ -316,7 +317,8 @@ Orchestrates the multi-step import process:
 			default_applied: warning.detail.includes('API key')
 				? 'ie_warn_api_keys_action'
 				: 'ie_warn_defaults_applied_action',
-			builtin_model: 'ie_warn_builtin_model_action'
+			builtin_model: 'ie_warn_builtin_model_action',
+			mcp_allowlist_reset: 'ie_warn_mcp_allowlist_reset_action'
 		};
 		const key = keyMap[warning.warningType] || '';
 		if (!key) return warning.action;
