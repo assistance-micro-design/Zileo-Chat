@@ -349,6 +349,9 @@ async fn main() -> anyhow::Result<()> {
             // MCP network connectivity (LAN opt-in)
             commands::settings_mcp_network::get_mcp_network_settings,
             commands::settings_mcp_network::update_mcp_network_settings,
+            // Kanban settings (configurable compose timeout)
+            commands::settings_kanban::get_kanban_settings,
+            commands::settings_kanban::update_kanban_settings,
         ])
         .setup(|app| {
             let legal_notice = MenuItemBuilder::with_id("legal-notice", "Mentions l\u{00e9}gales")

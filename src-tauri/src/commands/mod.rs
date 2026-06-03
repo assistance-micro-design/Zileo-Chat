@@ -168,6 +168,7 @@ pub mod prompt;
 pub mod prompt_version;
 pub mod scheduler;
 pub mod security;
+pub mod settings_kanban;
 pub mod settings_mcp_network;
 pub mod settings_stt;
 pub mod skill;

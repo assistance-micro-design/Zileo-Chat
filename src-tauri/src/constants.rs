@@ -46,11 +46,22 @@ pub mod compose {
     /// "Générer l'aperçu" button. The in-memory registry is reset at reboot.
     pub const MAX_CONCURRENT_COMPOSE: usize = 4;
 
-    /// Hard wall-clock ceiling (seconds) for a single detached compose run
-    /// (M-3). A compose stuck on a pathological tool-loop holds its slot for the
-    /// whole duration; the timeout frees the slot (via the RAII guard) and emits
-    /// `kanban:compose_failed`, bounding cap saturation.
-    pub const COMPOSE_TIMEOUT_SECS: u64 = 300;
+    /// Default hard wall-clock ceiling (seconds) for a single detached compose
+    /// run (M-3). A compose stuck on a pathological tool-loop holds its slot for
+    /// the whole duration; the timeout frees the slot (via the RAII guard) and
+    /// emits `kanban:compose_failed`, bounding cap saturation.
+    ///
+    /// User-configurable via `settings:kanban` (`compose_timeout_secs`), clamped
+    /// to `[COMPOSE_TIMEOUT_MIN_SECS, COMPOSE_TIMEOUT_MAX_SECS]`. The default is
+    /// generous (10 min) because reasoning models (xhigh) on large contexts can
+    /// legitimately run several minutes before capturing the card.
+    pub const COMPOSE_TIMEOUT_DEFAULT_SECS: u64 = 600;
+
+    /// Lower bound for the user-configurable compose timeout (seconds).
+    pub const COMPOSE_TIMEOUT_MIN_SECS: u64 = 60;
+
+    /// Upper bound for the user-configurable compose timeout (seconds).
+    pub const COMPOSE_TIMEOUT_MAX_SECS: u64 = 1800;
 }
 
 /// Validation flow constants.

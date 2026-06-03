@@ -27,7 +27,7 @@ use crate::agents::execution::tool_loop::{self, PricingCache, ToolLoopContext};
 use crate::commands::agent::hydrate_llm_from_model;
 use crate::commands::kanban_card::create_kanban_card_core;
 use crate::commands::kanban_interaction::persist_interaction;
-use crate::constants::compose::COMPOSE_TIMEOUT_SECS;
+use crate::commands::settings_kanban::{effective_compose_timeout, load_kanban_settings};
 use crate::db::DBClient;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
@@ -313,9 +313,15 @@ async fn run_compose_task(
 ) {
     // M-3: bound the whole compose so a pathological tool-loop cannot pin its
     // slot indefinitely. On timeout the slot is freed by the guard (in the
-    // spawned task) and a `compose_failed` is emitted below.
+    // spawned task) and a `compose_failed` is emitted below. The ceiling is the
+    // user-configurable `settings:kanban.compose_timeout_secs` (read fresh at
+    // each run so a setting change applies without restart). The clamp + the
+    // default-on-error fallback live in `effective_compose_timeout` so the
+    // integration logic is unit-tested by construction (PAT_RUST_015).
+    let timeout_secs = effective_compose_timeout(load_kanban_settings(&db).await);
+
     let outcome = tokio::time::timeout(
-        Duration::from_secs(COMPOSE_TIMEOUT_SECS),
+        Duration::from_secs(timeout_secs),
         compose_card_from_description_core(
             &db,
             &tool_factory,
@@ -331,7 +337,7 @@ async fn run_compose_task(
 
     let composed: Result<KanbanCardCreate, String> = match outcome {
         Ok(r) => r,
-        Err(_) => Err(format!("Compose timed out after {}s", COMPOSE_TIMEOUT_SECS)),
+        Err(_) => Err(format!("Compose timed out after {}s", timeout_secs)),
     };
 
     let card = match composed {

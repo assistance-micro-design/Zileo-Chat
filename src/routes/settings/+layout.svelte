@@ -34,7 +34,8 @@ Each section is now a separate route for better performance and UX.
 		BookMarked,
 		FolderSync,
 		ScrollText,
-		Mic
+		Mic,
+		KanbanSquare
 	} from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
@@ -82,6 +83,7 @@ Each section is now a separate route for better performance and UX.
 	const sectionDefs = [
 		{ id: 'providers', route: '/settings/providers', labelKey: 'settings_providers', icon: Globe },
 		{ id: 'agents', route: '/settings/agents', labelKey: 'settings_agents', icon: Bot },
+		{ id: 'kanban', route: '/settings/kanban', labelKey: 'settings_kanban', icon: KanbanSquare },
 		{ id: 'mcp', route: '/settings/mcp', labelKey: 'settings_mcp_servers', icon: Plug },
 		{ id: 'memory', route: '/settings/memory', labelKey: 'settings_memory', icon: Brain },
 		{
