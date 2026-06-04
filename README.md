@@ -36,8 +36,9 @@ Zileo Chat is a desktop application for orchestrating AI agents through a conver
 
 ### Key Features
 
+- **Guided Onboarding** - 8-step first-launch setup (language, theme, API key, optional config import, getting-started deep links) honoring reduced-motion preferences
 - **Multi-Agent System** - Create and orchestrate multiple AI agents with specialized tools and sub-agent delegation
-- **Kanban Supervisor Board** - 4-column board (`todo / doing / review / done`) with auto-compose, recurrence scheduler, and "Improve prompt" feedback loop driven by a dedicated supervisor agent kind
+- **Kanban Supervisor Board** - 4-column board (`todo / doing / review / done`) with async card auto-compose into a "tasks to validate" zone, recurrence scheduler, and "Improve prompt" feedback loop driven by a dedicated supervisor agent kind
 - **Per-Card Review Chat** - On a card in `review` or `done`, chat in place with the card's supervisor agent to re-run the worker, move the card (validate / send back), or attach a recurrence -- backed by a dedicated hidden workflow that persists across navigation
 - **Prompt & Skill Versioning** - Every prompt/skill update auto-snapshots a version row; restore or compare past versions from the settings UI
 - **Real-time Streaming** - Token-by-token response display with usage metrics and prompt caching
@@ -48,7 +49,7 @@ Zileo Chat is a desktop application for orchestrating AI agents through a conver
 - **Custom Providers** - Add any OpenAI-compatible LLM endpoint alongside built-in Mistral and Ollama
 - **Reasoning Effort** - Granular thinking control (low/medium/high, plus `xhigh` "Think Max" for DeepSeek / GPT-5.x / Grok / Claude Opus families) on supported models
 - **Background Workflows** - Run multiple workflows concurrently with progress tracking
-- **MCP Protocol** - Extend agents with Model Context Protocol servers
+- **MCP Protocol** - Extend agents with Model Context Protocol servers, hardened with a Docker spawn guard, HTTP SSRF protection (opt-in private-network access), and a per-agent tool allowlist gating unattended runs
 - **Bilingual UI** - English and French interface
 
 ---

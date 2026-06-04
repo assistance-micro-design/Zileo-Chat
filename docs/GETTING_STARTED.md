@@ -145,27 +145,35 @@ npm run tauri:dev
 
 ### 2. Onboarding Assistant
 
-On first launch, a guided assistant helps with initial configuration:
+On first launch, a guided 8-step assistant helps with initial configuration:
 1. **Language**: Select English or French
 2. **Theme**: Light or Dark
-3. **Provider**: Configure an API key (Mistral, Ollama, or any OpenAI-compatible provider)
-4. **Import**: Optionally import an existing configuration
+3. **Welcome**: Quick intro
+4. **Features**: Overview of agents, Kanban, memory, and voice dictation
+5. **API key**: Configure a provider key (Mistral, Ollama, or any OpenAI-compatible provider) — auto-saved on blur
+6. **Import**: Optionally import an existing configuration (runs a real import, reports partial results)
+7. **Getting started**: Actionable deep links into Settings (skipped after a successful import)
+8. **Complete**: Finish
+
+The flow is animated and honors `prefers-reduced-motion`.
 
 ### 3. Advanced Configuration
 
-**Settings Page** (10 sections):
+**Settings Page** (12 sections):
 
 | Section | Description |
 |---------|-------------|
 | **Providers** | Configure Mistral, Ollama, or OpenAI-compatible custom providers (API keys + models) |
 | **Agents** | Create your first agent (no default agents) |
-| **MCP Servers** | Configure MCP servers (Docker/NPX/UVX) |
+| **MCP Servers** | Configure MCP servers (Docker/NPX/UVX) + opt-in private-network (LAN) access |
+| **Kanban** | Tune the Kanban board (detached compose timeout) |
 | **Skills** | Manage skill documents assignable to agents |
 | **Memory** | Configure embeddings + manage memories |
-| **Validation** | Human-in-the-loop parameters |
+| **Validation** | Human-in-the-loop parameters + per-agent MCP tool authorizations |
 | **Audit Log** | Validation audit log: filters, stats, manual purge, CSV export |
 | **Prompts** | Prompt library |
-| **Import/Export** | Backup and restore configuration (schema v1.2) |
+| **Import/Export** | Backup and restore configuration (schema v1.3) |
+| **Speech-to-Text** | Push-to-talk voice dictation settings |
 | **Theme** | Light/Dark theme selection |
 
 All API keys are configured via the UI and stored securely (Tauri secure storage + OS keyring).

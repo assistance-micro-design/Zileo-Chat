@@ -42,10 +42,10 @@ Agent CRUD and configuration management.
 
 | Command | Description |
 |---------|-------------|
-| `list_agents` | List all agents with summary (no system_prompt) |
+| `list_agents` | List all agents with summary (no system_prompt). `AgentSummary` carries `has_file_manager` and `has_mcp_auto_approval` (derived, read-only) so the UI can flag agents with a FileManager or ≥1 genuinely armed MCP tool. |
 | `get_agent_config` | Get full agent configuration |
 | `create_agent` | Create agent with LLM, tools, skills, MCP servers config |
-| `update_agent` | Partial update of agent configuration |
+| `update_agent` | Partial tri-state update of agent configuration. Also the single entry point for the security authorizations edited from `settings/validation`: `mcp_tool_allowlist` (per-agent MCP allowlist, R-SEC-4) and `require_file_confirmation`. A field absent from the payload keeps the stored value (merge), so editing an agent's name never silently disarms its allowlist. |
 | `delete_agent` | Delete agent from DB and registry |
 
 ### Skill (`commands/skill.rs`)
@@ -113,7 +113,7 @@ Human-in-the-loop validation for agent operations.
 
 ### Validation Audit (`commands/validation_audit.rs`)
 
-Append-only audit log for validation decisions (decided_by user / auto / timeout).
+Append-only audit log for validation decisions. `decided_by` ∈ {user, auto, timeout, policy, pre_approved} and `decision` ∈ {approved, rejected, skipped, timeout, blocked} — `blocked` / `policy` record a fail-closed MCP allowlist refusal in a detached run (R-SEC-11), `pre_approved` a `*Manager` write executed under Auto. All are filterable from the Audit Log page.
 
 | Command | Description |
 |---------|-------------|
@@ -298,7 +298,7 @@ Secure API key storage (AES-256-GCM via SecureKeyStore). Stored secrets are neve
 
 ### Import/Export (`commands/import_export/`)
 
-Configuration import/export (schema v1.0, v1.1, and v1.2).
+Configuration import/export (schema v1.0 → v1.3, backward compatible). v1.3 additionally round-trips `agent.kind`, `auto_analyze_reports`, the model `supports_vision` / `supports_forced_tool_choice` flags, `skill.kind`, and the custom-provider strict toggles; the MCP tool allowlist is reset fail-closed on import (R-SEC-4) and imported MCP servers are re-validated through the SSRF screen.
 
 | Command | Description |
 |---------|-------------|
@@ -370,6 +370,8 @@ Auto-compose path driven by a Kanban-kind agent.
 | Command | Description |
 |---------|-------------|
 | `compose_card_from_description` | Params: `kanban_agent_id`, `description`, `locale`. Take a free-text description, dispatch it to the configured Kanban agent with `ListAgentsTool` + `SubmitComposedCardTool` auto-injected, run the tool loop (forced tool call on the opening turn) until `SubmitComposedCardTool` is called, then persist the composed card and return its id. The `locale` is injected into the task context so the card is composed in the UI language (empty → tool-loop default). Uses the Kanban agent's own LLM config (provider, model, reasoning effort). |
+| `start_compose_card` | Detached variant: kicks off the same compose tool loop on a background task and materialises the result as a `status = 'proposed'` card in the validation zone (instead of blocking the caller). Bounded by the configurable `settings:kanban.compose_timeout_secs` wall-clock (read fresh per run). Emits `kanban:compose_failed` on error. |
+| `approve_proposed_card` | Flip a `proposed` card to `ready` so the scheduler can run it. Rejects a non-`proposed` card and a second approval (idempotency guard). Rejection of a proposed card is a plain `delete_kanban_card`. |
 
 ### Kanban Analyzer (`commands/kanban_analyzer.rs`)
 
@@ -424,8 +426,11 @@ Background tokio loop driving the Kanban board.
 | Command | Description |
 |---------|-------------|
 | `card_id_for_workflow` | Reverse lookup: given a `workflow_id`, return the linked `kanban_card_id` if any. Used by the `workflow_complete` listener to transition the card from `doing` to `review` and optionally trigger the analyzer. |
+| `get_max_concurrent_workflows` | Return the backend promotion budget (the single source of truth for the board concurrency cap). Read by `kanban-runtime` so the board badge and Kanban worker runs never recopy a literal — Kanban runs are governed solely by this cap and never block a `/agent` slot. |
 
 The scheduler itself is not a Tauri command — it is a tokio task spawned at app startup that ticks every 60s. Four responsibilities per tick: (1) reclaim orphaned `doing` cards (no `workflow_id` past a grace window) back to `ready` / `todo` so lost concurrency slots are freed (`reclaim_orphaned_doing_cards_core`); (2) pull `ready` cards into `doing` through `WorkflowExecutorService`, gated by `select_cards_to_promote_core` which uses an atomic `WHERE status = 'ready'` flip to prevent double-promotion; (3) evaluate `kanban_schedule` rows whose `next_run_at <= now()` and `enabled = true`, clone the template card into a fresh `ready` card unless `skip_if_pending` is true and a sibling card is already in flight; (4) purge `done` cards older than 3 days that are NOT the template of any enabled schedule, cascading their `kanban_card_interaction` rows but preserving the underlying `workflow`. Emits `kanban:cards_purged` when purges happen.
+
+A boot-time recovery (`recover_stuck_doing_cards_core`) reconciles cards left in `doing` by a crash or restart past `STUCK_DOING_GRACE_SECS`: a card with a persisted `role='assistant'` message is finalized to `review` (the boot auto-analyze catch-up handles it — never re-running a paid LLM call), one with no assistant message is reset to `ready` / `todo`.
 
 ### Speech-to-Text (`commands/stt.rs` + `commands/settings_stt.rs`)
 
@@ -437,6 +442,24 @@ Push-to-talk voice dictation via Mistral Voxtral. The provider-agnostic core (`l
 | `get_stt_settings` | Return the current `STTSettings` (defaults if absent). |
 | `update_stt_settings` | Merge an `UpdateSTTSettingsRequest` into the current settings and persist. Validates: enable toggle, model id allowlist, context-bias trim + drop-empties + 10 × 200-char cap + control-char rejection, ISO 639-1 language allowlist. Language is a tri-state `Option<Option<String>>` (absent = keep, `null` = clear to auto, `Some(code)` = set explicit) via the shared `deserialize_explicit_option` helper. |
 | `reset_stt_settings` | Replace stored settings with defaults. |
+
+### Kanban Settings (`commands/settings_kanban.rs`)
+
+Kanban tuning persisted as a `settings:kanban` JSON blob (STT-style, no dedicated schema). Bound to the **Settings > Kanban** page.
+
+| Command | Description |
+|---------|-------------|
+| `get_kanban_settings` | Return the current `KanbanSettings` (defaults if absent), clamped defensively on read. |
+| `update_kanban_settings` | Merge an update and persist. Currently `compose_timeout_secs` (default 600, clamp 60-1800) — the wall-clock ceiling for a detached card compose run, read fresh per run (hot, no restart). |
+
+### MCP Network Settings (`commands/settings_mcp_network.rs`)
+
+MCP HTTP connectivity persisted as a `settings:mcp_network` JSON blob. Bound to the network section of the **Settings > MCP** page.
+
+| Command | Description |
+|---------|-------------|
+| `get_mcp_network_settings` | Return the current `McpNetworkSettings`. |
+| `update_mcp_network_settings` | Persist-before-set: write the blob, then refresh the process-global fail-secure snapshot the SSRF resolver reads. Currently `allow_private_network` (default `false`) — opt-in to reach MCP HTTP servers on private / LAN ranges; cloud-metadata / link-local / reserved targets stay blocked regardless. |
 
 ---
 
@@ -508,9 +531,10 @@ Types are manually synchronized between frontend and backend.
 
 | Type | Location | Description |
 |------|----------|-------------|
-| `ExportConfig` | `$types/import-export` | Exported configuration (schema v1.0/v1.1/v1.2) |
+| `ExportConfig` | `$types/import-export` | Exported configuration (schema v1.0 → v1.3) |
 | `ImportResult` | `$types/import-export` | Import result with warnings and post-actions |
 | `ImportWarning` | `$types/import-export` | Structured warning (type, severity, entity, action) |
+| `ImportWarningType` | `$types/import-export` | Typed warning discriminant kept in sync with the Rust enum (`MissingModel` / `MissingMcpServer` / `MissingSkill` / `MissingProvider` / `ApiKeyRequired` / …), each mapping 1:1 to an i18n key (no English-text parsing in the UI) |
 
 ---
 

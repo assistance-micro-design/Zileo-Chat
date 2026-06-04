@@ -225,6 +225,21 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 - Tool caching: 1h TTL, invalidated on errors
 - ID lookup table: O(1) server operations via id_to_name HashMap
 
+### Q30: MCP Security Hardening (audit remediation)
+
+**Decision**: Treat MCP servers as a hostile surface and defend every entry point — HTTP egress, container spawn, import, and unattended tool calls — with deny-by-default gates.
+
+**Rationale**:
+- **HTTP SSRF defense** (`mcp/ssrf.rs`): the MCP HTTP client cannot be pointed at the host's internal network. A custom `reqwest::dns::Resolve` refuses the whole resolved set if any address is loopback / link-local / private / reserved / multicast / cloud-metadata, decapsulating mapped/6to4/Teredo/NAT64 forms; redirects are limited (3 hops) and screened (no cross-host, no non-global literal IP, no `https→http` downgrade); `.no_proxy()` is forced; URL userinfo is redacted from logs. Private/LAN access is an explicit, off-by-default opt-in (`settings:mcp_network.allow_private_network`) that unblocks only `IpClass::Private` — metadata endpoints stay blocked unconditionally.
+- **Docker spawn guard** (`mcp/docker_guard.rs`): a deny-by-default `validate_docker_spawn_args` at the `build_command` choke-point refuses container-escape flags (`--privileged`, `--device`, `--cap-add`, host namespaces, `--gpus`, `--env-file`, `--volumes-from`, `--cidfile`/`--pidfile`, `--sysctl`, `--cgroup-parent`, `--group-add`, …) and validates mount sources (system-prefix blocklist + canonicalize). It runs on boot/create/update/import paths.
+- **Import re-validation**: imported MCP configs are mapped to a `Config` and re-run through the full validator + SSRF screen + Docker guard (strictest policy), so a malicious export cannot smuggle an internal-network or privileged server onto the machine. Rejected entries are skipped and reported per-batch.
+- **Unattended-run authorization gate** (R-SEC-4): an MCP tool auto-called in a detached run (Kanban analyze/compose, `RerunWorker`) executes only if armed in the agent's `mcp_tool_allowlist`. The gate is fail-closed, sits above the validation mode (Auto cannot bypass it), is transitive to sub-agents, and is delegation-scoped (`allow_in_delegated_runs`, default strict) to close the cross-agent confused-deputy. Refusals are journaled (`blocked`/`policy`).
+- **Run-level budgets**: a per-run MCP call cap (1000) and result-byte budget (cumulative 50 MiB, per-result 10 MiB) bound a compromised or looping server before it can flood the run context; both measure the real serialized sink size (result + error) and never fail the security gate open.
+
+**Consequences**:
+- Cloud MCP servers and Docker-toolkit servers work unchanged; only abusive configurations are refused, always with a logged, user-visible reason.
+- Reaching a genuinely-local HTTP MCP server now requires flipping the private-network toggle (a deliberate, visible action), and arming a tool for unattended use requires an explicit allowlist entry on the validation page.
+
 ---
 
 ## 7. Features and Testing
@@ -324,23 +339,25 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 - 798-line monolithic page was unmaintainable
 - Route-based enables code splitting, browser history, shareable URLs
 
-**Routes**: `/settings/providers`, `/settings/agents`, `/settings/mcp`, `/settings/memory`, `/settings/validation`, `/settings/audit-log`, `/settings/prompts`, `/settings/skills`, `/settings/import-export`, `/settings/theme`.
+**Routes**: `/settings/providers`, `/settings/agents`, `/settings/mcp`, `/settings/kanban`, `/settings/memory`, `/settings/validation`, `/settings/audit-log`, `/settings/prompts`, `/settings/skills`, `/settings/import-export`, `/settings/speech-to-text`, `/settings/theme`.
 
 ---
 
 ## 11. Import/Export
 
-### Q27: Import/Export Schema v1.2
+### Q27: Import/Export Schema v1.3
 
-**Decision**: Versioned schema (v1.0 and v1.1 backward compatible, v1.2 current) with 6 entity types.
+**Decision**: Versioned schema (v1.0 → v1.2 backward compatible, v1.3 current) with 6 entity types.
 
 **Rationale**:
 - Schema v1.1 adds skills and custom providers to the original 4 entity types
 - Schema v1.2 adds MCP HTTP auth metadata (`auth_type`, `auth_metadata`, `extra_headers`); secrets remain in OS keychain and are never exported
+- Schema v1.3 round-trips the newer per-entity flags: `agent.kind`, `auto_analyze_reports`, the model `supports_vision` / `supports_forced_tool_choice` toggles, `skill.kind`, and the custom-provider strict toggles. Model conflicts are detected by `(provider, api_name)` with a charset-safe, length-bounded unique rename
 - Import order enforces dependency resolution: custom_providers -> models -> mcp_servers -> skills -> agents -> prompts
 - Cross-entity references by NAME (not UUID) so orphan refs are safe (user creates missing entity later)
-- API keys and MCP auth secrets never exported (OS keyring) with structured ImportWarning for user guidance
-- `SUPPORTED_SCHEMA_VERSIONS = ["1.0", "1.1", "1.2"]` for backward compatibility
+- API keys and MCP auth secrets never exported (OS keyring) with structured, **typed** `ImportWarning` variants (one i18n key per variant, no English-text parsing in the UI) for user guidance
+- The MCP tool allowlist is reset fail-closed on import (R-SEC-4), and imported MCP servers are re-validated through the SSRF/Docker screen — local/LAN HTTP servers export fine but are refused on re-import and flagged up front in the export preview
+- `SUPPORTED_SCHEMA_VERSIONS = ["1.0", "1.1", "1.2", "1.3"]` for backward compatibility
 - postImportActions in ImportResult for actionable post-import checklist
 
 ---
@@ -405,11 +422,11 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 | Security | Production-ready v1, OS keystore + AES-256, tracing, anyhow + thiserror |
 | Providers | Mistral + Ollama + Custom (OpenAI-compatible), user choice, multi-layer resilience |
 | Tools | Built-in (9 tools) + MCP, ToolDefinition summary/description split, TaskBridge scoping |
-| MCP | User-configured, no pre-integrated servers, circuit breaker + on-demand tool refresh |
+| MCP | User-configured, no pre-integrated servers, circuit breaker + on-demand tool refresh; deny-by-default security hardening (HTTP SSRF defense + opt-in LAN, Docker spawn guard, import re-validation, fail-closed unattended-run allowlist, per-run budgets) |
 | Testing | Critical paths, 1000+ tests, GitHub Actions CI |
 | Deployment | Linux first, manual updates v1, auto-updates v1.5 |
 | Frontend | CRUD factory stores, Svelte 5 runes (completed), route-based settings |
-| Import/Export | Schema v1.2, 6 entity types, cross-ref by name, no API key/MCP secret export |
+| Import/Export | Schema v1.3, 6 entity types, cross-ref by name, no API key/MCP secret export, typed import warnings, fail-closed MCP allowlist reset |
 | Kanban | Typed agent kind enforcing strict separation (Kanban agents own a supervisor toolkit, not delegatable), eager version snapshots on every prompt/skill update with last-one delete safeguard |
 
 **Technical documentation**: `docs/DATABASE_SCHEMA.md`, `docs/API_REFERENCE.md`, `docs/TECH_STACK.md`.

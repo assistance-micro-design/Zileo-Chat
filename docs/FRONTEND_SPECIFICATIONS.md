@@ -6,7 +6,7 @@
 
 ## Overview
 
-The application has two main pages accessible via a floating top menu: **Settings** (configuration) and **Agent** (workflow execution). Both use a sidebar + content layout.
+The application has three main surfaces accessible via a floating top menu: **Kanban** (the supervisor task board, and the default landing page — `/` redirects there), **Agent** (workflow execution), and **Settings** (configuration). All use a sidebar/panel + content layout.
 
 ### Workflow Interaction Flow
 
@@ -34,13 +34,14 @@ Route-based architecture with code splitting per section. The settings layout pr
 | `/settings` | (redirect) | Redirects to `/settings/providers` |
 | `/settings/providers` | Providers | LLM provider list (Mistral, Ollama, custom OpenAI-compatible), API keys, connection test, enable/disable toggle |
 | `/settings/agents` | Agents | Agent CRUD (permanent + temporary), filtering by name/type/usage, search bar |
-| `/settings/mcp` | MCP Servers | MCP server list, connection settings (stdio/docker/HTTP/SSE), status monitoring, capability/tool listing, logs |
+| `/settings/mcp` | MCP Servers | MCP server list, connection settings (stdio/docker/HTTP), status monitoring, capability/tool listing, logs, plus a **network** section with the off-by-default private-network (LAN) access toggle |
+| `/settings/kanban` | Kanban | Kanban tuning: the bounded compose timeout (60-1800 s) for detached card auto-compose |
 | `/settings/memory` | Memory | Embedding model selection (per provider), chunking settings, memory CRUD table with semantic search, manual memory creation, bulk export/import/purge, statistics |
-| `/settings/validation` | Validation | Validation mode (Auto/Manual/Selective), granular toggles per operation type (tools, sub-agents, MCP, file ops, DB ops), risk threshold overrides, audit settings (timeout, retention) |
+| `/settings/validation` | Validation | Validation mode (Auto/Manual/Selective), granular toggles per operation type (tools, sub-agents, MCP, file ops, DB ops), risk threshold overrides, audit settings (timeout, retention), plus an **Agent authorizations** section (per-agent MCP tool allowlist for unattended runs + `require_file_confirmation`) |
 | `/settings/audit-log` | Audit Log | Validation audit log: list with filters (tool, decision, risk, date), summary stats, manual purge, CSV export |
 | `/settings/prompts` | Prompts | Prompt library with name/description/category/content/variables, duplicate/export/versioning |
 | `/settings/skills` | Skills | Skill document CRUD |
-| `/settings/import-export` | Import/Export | Data portability (schema v1.2, 6 entity types) |
+| `/settings/import-export` | Import/Export | Data portability (schema v1.3, 6 entity types), typed per-entity import warnings, non-reimportable local/LAN MCP servers flagged in the export preview |
 | `/settings/theme` | Theme | Light/Dark/Auto theme, color scheme, font settings, live preview |
 | `/settings/speech-to-text` | Voice Dictation | Push-to-talk dictation: enable toggle, Voxtral model id (validated against allowlist), context-bias hints (10 × 200c max), language override (auto / explicit ISO 639-1), `Ctrl+Shift+Space` hotkey hint |
 
@@ -58,7 +59,7 @@ Settings-specific components live under `src/lib/components/settings/`:
 | `memory/` | MemorySettings, MemoryList, MemoryForm | Memory management with embedding config and CRUD |
 | `prompts/` | PromptSettings, PromptList, PromptForm | Prompt library management |
 | `skills/` | SkillSettings, SkillList, SkillForm | Skill document management |
-| `validation/` | ValidationSettings, ValidationInfoCard | Validation mode configuration with dynamic tool/server badges, timeout + audit retention controls |
+| `validation/` | ValidationSettings, ValidationInfoCard, AgentAuthorizations, AgentMcpAllowlist | Validation mode configuration with dynamic tool/server badges, timeout + audit retention controls, plus the per-agent **Agent authorizations** editor (collapsible per-server MCP tool allowlist with auto-approve-all + `allow_in_delegated_runs`, `require_file_confirmation` toggle, revocation of preserved entries) |
 | `audit-log/` | AuditLogFilters, AuditLogList, AuditLogRow, AuditLogStats | Validation audit log explorer with filters, paginated list, summary stats |
 | `import-export/` | ImportExportSettings, ExportPanel, ImportPanel, EntitySelector, ExportPreview, ImportPreview, ConflictResolver, MCPFieldEditor, MCPEnvEditor | Full import/export workflow with conflict resolution |
 
@@ -100,11 +101,11 @@ See `src/lib/components/ui/MicButton.svelte`, `src/lib/stores/sttStore.svelte.ts
 
 ### Validation System (Human-in-the-Loop)
 
-When validation is required, the workflow pauses and displays a modal showing the operation type, details, and risk level. Users can approve, reject, or approve all pending validations.
+When validation is required, the workflow pauses and displays a modal showing the operation type, details, and risk level. Users can approve, reject, or approve all pending validations. The modal is mounted **globally** via `GlobalValidationModal` at the root layout (not page-local), so a validation requested from any route — including an attended Kanban card-supervisor chat — actually renders instead of timing out silently. It is non-dismissible (no backdrop/Esc close, no Cancel button): it closes only on an explicit Approve/Reject or a backend resolution, and an IPC error keeps it open for retry rather than failing open.
 
 Keyboard shortcuts: `Ctrl+Enter` (approve), `Ctrl+Shift+Enter` (approve all), `Esc` (reject).
 
-See `src/lib/components/workflow/ValidationModal.svelte`
+See `src/lib/components/workflow/GlobalValidationModal.svelte` and `ValidationModal.svelte`
 
 ### Token Display
 
@@ -150,10 +151,10 @@ See `src/routes/kanban/+page.svelte`, `src/routes/kanban/+page.ts`, and `src/lib
 
 ### Card Creator
 
-Tab switch between two modes (split into siblings rather than a single conditional component to keep state isolated):
+A single root-mounted creator driven by `cardCreatorStore`, reachable from the global `FloatingMenu` on any route ("New task" → quick create + `goto('/kanban')`). Tab switch between two modes (split into siblings rather than a single conditional component to keep state isolated):
 
-- **Auto** (`KanbanCardCreatorAuto.svelte`) — free-text description. Posts to `compose_card_from_description`. The configured Kanban agent picks the target agent, fills variables, and submits via `SubmitComposedCardTool`. The resulting composed card lands in `todo`.
-- **Manual** (`KanbanCardCreatorManual.svelte`) — explicit agent + prompt picker (or inline prompt), variables form, optional folder constraint. Posts to `create_kanban_card`.
+- **Auto** (`KanbanCardCreatorAuto.svelte`) — free-text description. Starts a **detached** compose run (`start_compose_card`): the configured Kanban agent picks the target agent, fills variables, and submits via `SubmitComposedCardTool`. The generated card lands as `status='proposed'` in a **"tasks to validate"** zone where the user approves (`approve_proposed_card` → `ready`) or rejects it before the scheduler runs it. Bounded by the configurable compose timeout. State lives on `kanban-compose`.
+- **Manual** (`KanbanCardCreatorManual.svelte`) — explicit agent + prompt picker (or inline prompt), variables form, optional folder constraint. Posts to `create_kanban_card`. Lands directly in `todo`.
 
 ### Board
 
@@ -185,7 +186,7 @@ See `src/lib/components/kanban/` and `src/lib/components/settings/versions/`.
 | Manual | 1 | Single workflow at a time |
 | Selective | 1 | Single workflow at a time |
 
-Enforcement is done in both frontend (`backgroundWorkflowsStore.canStart()`) and backend. Warning toast shown when limit is reached. Background workflows fire toast notifications for completion and user questions.
+Enforcement is done in both frontend (`backgroundWorkflowsStore.canStart()`) and backend. Warning toast shown when limit is reached. Background workflows fire toast notifications for completion and user questions. Kanban worker runs bypass the interactive `canStart` gate and register as `backendInitiated`: they are governed solely by the backend promotion budget (`get_max_concurrent_workflows`, surfaced via `kanban-runtime`) and never consume an `/agent` slot — the `/agent` path is unchanged.
 
 See `WORKFLOW_ORCHESTRATION.md` for full architecture.
 
@@ -215,7 +216,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `mcp/` | 3 | MCPServerCard, MCPServerForm, MCPServerTester |
 | `llm/` | 4 | ConnectionTester, ModelCard, ModelForm, ProviderCard |
 | `settings/` | 37 | See Settings Components table above (incl. `audit-log/` and enriched `validation/`) |
-| `onboarding/` | 9 | OnboardingModal, OnboardingProgress, steps: Welcome, Language, Theme, ApiKey, Values, Import, Complete |
+| `onboarding/` | 10 | OnboardingModal, OnboardingProgress, and `steps/` for the 8-step flow: Language, Theme, Welcome, Features, ApiKey, Import, GettingStarted, Complete |
 
 ## 7. Stores
 
@@ -226,6 +227,9 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `background-workflows` | Concurrent background workflow dispatch (canStartNew, runningWorkflowIds, questionPendingIds) | `src/lib/stores/background-workflows.ts` |
 | `execution-blocks` | Execution block state for chat display | `src/lib/stores/execution-blocks.ts` |
 | `folders` | Workflow folder management | `src/lib/stores/folders.ts` |
+| `card-creator` | Root-mounted Kanban "New task" creator state (open/mode/lazy option lists), driven from the global FloatingMenu | `src/lib/stores/card-creator.ts` |
+| `kanban-compose` | Detached card auto-compose lifecycle + the "tasks to validate" (`proposed`) zone | `src/lib/stores/kanban-compose.ts` |
+| `kanban-runtime` | Backend promotion budget (`get_max_concurrent_workflows`) surfaced to the board badge and worker runs | `src/lib/stores/kanban-runtime.ts` |
 | `llm` | LLM provider/model state + custom provider CRUD (pure functions) | `src/lib/stores/llm/` |
 | `locale` | i18n language management | `src/lib/stores/locale.ts` |
 | `mcp` | MCP server state (pure functions) | `src/lib/stores/mcp/` |
@@ -275,7 +279,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 9. Utilities and Services
 
-### Utilities (`src/lib/utils/`, 22 modules)
+### Utilities (`src/lib/utils/`, 23 modules)
 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|
@@ -299,6 +303,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `audio-capture.ts` | `pickSupportedMime()`, `startRecording()`, `stopRecording()`, `cancelRecording()`, `blobToBase64()`, `AudioCaptureError`, `SUPPORTED_AUDIO_MIMES` | Push-to-talk capture wrapper around `MediaRecorder` + `getUserMedia`. Codec probe chain, typed error kinds, chunked base64 encoding (Node fallback for jsdom). MIN 250 ms, MAX 25 MiB. |
 | `dom-insert.ts` | `captureActiveField()`, `insertTextIntoField()` | Programmatic text insertion into the focused editable field. `setRangeText` + synthetic `InputEvent` dispatch so Svelte 5 `bind:value` syncs. Selection range clamped against current value length. |
 | `stt-validation.ts` | `validateVoxtralModelId()` | Frontend mirror of the backend Voxtral model id allowlist (renders inline validation without an extra round-trip; backend remains source of truth at persistence). |
+| `motion.ts` | Reduced-motion helpers | Honors `prefers-reduced-motion` for the animated onboarding flow (gates transitions/animations so they degrade gracefully). |
 | `index.ts` | Re-exports | Barrel file |
 
 ### Actions (`src/lib/actions/`, 1 module)

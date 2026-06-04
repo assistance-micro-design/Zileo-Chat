@@ -114,11 +114,13 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 **HTTP & Network**:
 
 - **reqwest**: 0.12 (features: rustls-tls, json, stream, multipart — `multipart` added for Voxtral STT batch upload)
+- **url**: 2.5 (typed host extraction `url::Host::{Ipv4,Ipv6}` for the MCP HTTP SSRF guard; declared direct, already transitive via reqwest)
 
 **Security**:
 
 - **keyring**: 3.6 (OS keychain: apple-native, windows-native, sync-secret-service)
 - **aes-gcm**: 0.10 (AES-256 encryption)
+- **MCP egress hardening**: SSRF resolver + Docker spawn guard + per-agent unattended-run tool allowlist (see `ARCHITECTURE_DECISIONS.md` Q30)
 
 **Platform-conditional**:
 
