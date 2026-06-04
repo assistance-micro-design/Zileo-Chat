@@ -72,6 +72,20 @@ pub struct AppState {
     /// the RAII [`ComposeSlotGuard`] can release a slot from `Drop` without an
     /// `.await`. In-memory only — reset to empty at reboot.
     pub compose_inflight: Arc<StdMutex<HashSet<String>>>,
+    /// Latched signal flipped to `true` once the deferred boot init (MCP
+    /// connect, providers, embedding) has finished. Boot tasks that need those
+    /// services (card promotion, catch-up analyze) wait on a subscription
+    /// before running, instead of racing the init now that the window — and
+    /// thus these spawns — come up before the services are ready.
+    pub services_ready: tokio::sync::watch::Sender<bool>,
+    /// Flipped to `true` once the UI-critical services (providers, embedding)
+    /// are ready — before MCP, which keeps connecting in the background. The
+    /// frontend reads this (via `boot_ready_state`) to dismiss the splash even
+    /// if it attached its `boot_ready` listener after the event already fired.
+    pub ui_ready: Arc<std::sync::atomic::AtomicBool>,
+    /// Handle to the deferred boot-init task, parked so a quit during the
+    /// splash can `abort()` it before MCP shutdown runs.
+    pub boot_task_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 /// Pure concurrency gate: can a new compose slot be reserved given the current
@@ -181,6 +195,13 @@ impl AppState {
         // In-flight compose registry starts empty (reset at every reboot).
         let compose_inflight = Arc::new(StdMutex::new(HashSet::new()));
 
+        // Services start un-ready; the deferred boot task flips these once the
+        // matching init completes (`ui_ready` after providers/embedding,
+        // `services_ready` after MCP also connected).
+        let (services_ready, _) = tokio::sync::watch::channel(false);
+        let ui_ready = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let boot_task_handle = Arc::new(Mutex::new(None));
+
         Ok(Self {
             db,
             registry,
@@ -197,6 +218,9 @@ impl AppState {
             kanban_scheduler_handle,
             kanban_scheduler_shutdown,
             compose_inflight,
+            services_ready,
+            ui_ready,
+            boot_task_handle,
         })
     }
 

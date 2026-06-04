@@ -1699,5 +1699,13 @@
 	"errors.stt.no_focused_field": "Cliquez d'abord dans un champ texte.",
 	"errors.stt.disabled": "La dictee vocale est desactivee dans les Parametres.",
 	"errors.stt.transcription_failed": "Echec de la transcription Voxtral.",
-	"errors.stt.no_api_key": "La cle API Mistral n'est pas configuree."
+	"errors.stt.no_api_key": "La cle API Mistral n'est pas configuree.",
+	"splash_app_name": "Zileo Chat",
+	"splash_step_loading": "Chargement...",
+	"splash_item_mcp": "MCP",
+	"splash_item_providers": "Fournisseurs",
+	"splash_item_embedding": "Embedding",
+	"splash_item_models": "Modèles",
+	"splash_item_memory": "Mémoire",
+	"splash_item_agents": "Agents"
 }

@@ -29,3 +29,4 @@ export * from './events';
 export * from './window';
 export * from './dialog';
 export * from './opener';
+export * from './app';

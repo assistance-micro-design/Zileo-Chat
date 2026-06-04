@@ -140,7 +140,7 @@ Vector chunks linked to a parent `memory` via record link. Created by the recurs
 | embedding | array\<float\> | | Vector (HNSW 1024D, COSINE) |
 | created_at | datetime | time::now() | |
 
-**Indexes**: `memory_chunk_vec_idx` (embedding, HNSW 1024D COSINE), `memory_chunk_parent_idx` (memory_id)
+**Indexes**: `memory_chunk_vec_idx` (embedding, HNSW 1024D COSINE -- defined with `IF NOT EXISTS` so the graph is built once and kept across restarts; to change its definition, ship a guarded `REMOVE INDEX IF EXISTS ...; DEFINE INDEX ...` migration), `memory_chunk_parent_idx` (memory_id)
 
 **Cascade semantics**: chunks MUST be deleted before their parent. The chunk DELETE WHERE clause must use a subquery (`memory_id IN (SELECT VALUE id FROM memory WHERE ...)`) — a record-link traversal (`memory_id.expires_at < ...`) silently matches zero rows in SurrealDB 2.6 (ERR_SURREAL_013).
 
@@ -666,6 +666,17 @@ Supports KNN search returning top_k chunks with cosine similarity score. The sea
 - **Audit trail**: `validation_request` + `validation_audit` + `mcp_call_log` + `tool_execution`
 
 ---
+
+## Schema Initialization at Boot
+
+`initialize_schema` in `src-tauri/src/db/client.rs` applies `SCHEMA_SQL` (defined in `src-tauri/src/db/schema.rs`) with a fingerprint gate to avoid paying the full re-apply cost on every launch:
+
+1. A stable text fingerprint of `SCHEMA_SQL` is computed at boot and compared against a hash stored in a `schema_meta:current` record.
+2. If the fingerprint matches the stored value the schema is skipped entirely -- this is the normal path on a populated database.
+3. If the fingerprint differs (a schema edit was shipped) the full `SCHEMA_SQL` is applied statement by statement. Errors are surfaced per-statement; if any statement fails the fingerprint is not stored, so the schema re-applies on the next boot instead of being frozen in a half-applied state.
+4. After a clean apply the new fingerprint is written to `schema_meta:current`.
+
+The HNSW index on `memory_chunk` is declared `IF NOT EXISTS` (not `OVERWRITE`) because rebuilding the vector graph from stored embeddings takes roughly 10 seconds once the table is populated. B-tree indexes under `OVERWRITE` rebuild in a few seconds. Both costs were previously paid unconditionally on every startup. The fingerprint gate eliminates them entirely on unchanged schema runs.
 
 ## Source of Truth
 

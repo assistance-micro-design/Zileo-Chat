@@ -1698,5 +1698,13 @@
 	"errors.stt.no_focused_field": "Click a text field first.",
 	"errors.stt.disabled": "Voice dictation is disabled in Settings.",
 	"errors.stt.transcription_failed": "Voxtral transcription failed.",
-	"errors.stt.no_api_key": "Mistral API key is not configured."
+	"errors.stt.no_api_key": "Mistral API key is not configured.",
+	"splash_app_name": "Zileo Chat",
+	"splash_step_loading": "Loading...",
+	"splash_item_mcp": "MCP",
+	"splash_item_providers": "Providers",
+	"splash_item_embedding": "Embedding",
+	"splash_item_models": "Models",
+	"splash_item_memory": "Memory",
+	"splash_item_agents": "Agents"
 }

@@ -87,6 +87,9 @@ async fn setup_test_state_for_orchestrator() -> (AppState, TempDir) {
         kanban_scheduler_handle: Arc::new(tokio::sync::Mutex::new(None)),
         kanban_scheduler_shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         compose_inflight: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+        services_ready: tokio::sync::watch::channel(true).0,
+        ui_ready: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        boot_task_handle: Arc::new(tokio::sync::Mutex::new(None)),
     };
 
     (state, temp_dir)

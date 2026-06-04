@@ -720,6 +720,10 @@ pub mod events {
     /// without a human review (Auto/permissive mode). Opportunistic toast — the
     /// authoritative trace is the persisted `PreApproved` audit entry.
     pub const MANAGER_WRITE_NOTICE: &str = "manager_write_notice";
+    /// Startup reached the point where the UI-critical services (providers,
+    /// embedding) are ready and the splash screen can hand over to the app. MCP
+    /// may still be connecting in the background. Payload is empty.
+    pub const BOOT_READY: &str = "boot_ready";
 }
 
 #[cfg(test)]

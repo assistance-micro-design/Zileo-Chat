@@ -413,6 +413,31 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 
 ---
 
+### Q31: Deferred Initialization and Startup Splash
+
+**Decision**: Create the application window immediately and defer all heavy initialization (MCP connections, provider loading, embedding service) to after the window is visible. Show a splash screen during the startup phase; dismiss it once UI-critical services are ready.
+
+**Rationale**:
+- The previous sequence opened the database, applied the schema, connected MCP servers, loaded providers, and started the embedding service before creating the window. On a populated database the HNSW index rebuild alone took ~10 s, leaving the user staring at a blank screen with no feedback.
+- Showing the window first makes the startup feel immediate. A splash screen provides an accurate visual signal: the application is loading, it has not crashed, and the user can see the version without opening Settings.
+- The schema fingerprint gate (see "Schema Initialization at Boot" in `docs/DATABASE_SCHEMA.md`) removes most of the historical schema cost for unchanged schema runs, so the remaining deferred work is genuinely lighter.
+- MCP server connections are inherently I/O-bound and were already running asynchronously; moving them fully post-window means they do not block the splash dismissal either.
+
+**Implementation** (`src-tauri/src/main.rs`, `src-tauri/src/state.rs`, `src-tauri/src/commands/boot.rs`):
+- `AppState.ui_ready` (`AtomicBool`) is set to `true` by the main task once providers and the embedding service have initialized.
+- The window is created before the deferred init task is spawned.
+- `boot_ready_state` (a synchronous Tauri command) exposes the flag to the frontend. The frontend polls it on mount to handle the race where the `boot_ready` event fires before the layout listener attaches.
+- The splash is dismissed by `+layout.svelte` via the `booting` reactive variable, driven by `boot_ready_state` polling and the `boot_ready` event.
+
+**Security property preserved**: the MCP network settings snapshot (process-global, fail-secure) is seeded into the SSRF guard synchronously at startup, before the window is created and before any MCP connection attempt. The deferred work runs after that snapshot is in place.
+
+**Consequences**:
+- Cold startup: window visible in ~0.7 s, app usable in ~0.9 s (providers ready), vs. ~13.5 s blank window previously.
+- The splash is a thin Svelte component (`SplashScreen.svelte`) with no reactive store dependency; it cannot be interacted with while displayed.
+- `getAppVersion` (`src/lib/tauri/app.ts`) is a new thin wrapper around the Tauri `app` plugin used only by the splash to display the running version. No hardcoded version string in the frontend.
+
+---
+
 ## Summary of Decisions
 
 | Area | Key Decision |

@@ -133,7 +133,13 @@ DEFINE FIELD OVERWRITE content ON memory_chunk TYPE string;
 DEFINE FIELD OVERWRITE embedding ON memory_chunk TYPE option<array<float>>;
 DEFINE FIELD OVERWRITE created_at ON memory_chunk TYPE datetime DEFAULT time::now();
 
-DEFINE INDEX OVERWRITE memory_chunk_vec_idx ON memory_chunk FIELDS embedding HNSW DIMENSION 1024 DIST COSINE;
+-- IF NOT EXISTS (not OVERWRITE): rebuilding this HNSW vector index re-reads every
+-- stored chunk embedding and rebuilds the whole graph on each boot (~10s once the
+-- store is populated). The embeddings are already persisted, so the index is built
+-- once and kept across restarts. To change its definition (dimension / distance),
+-- ship a guarded `REMOVE INDEX IF EXISTS ...; DEFINE INDEX ...` migration instead of
+-- editing this line, because IF NOT EXISTS will not re-apply a changed body.
+DEFINE INDEX IF NOT EXISTS memory_chunk_vec_idx ON memory_chunk FIELDS embedding HNSW DIMENSION 1024 DIST COSINE;
 DEFINE INDEX OVERWRITE memory_chunk_parent_idx ON memory_chunk FIELDS memory_id;
 
 -- Table: validation_request

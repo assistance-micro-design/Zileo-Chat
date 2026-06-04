@@ -44,24 +44,85 @@ impl DBClient {
         Ok(Self { db })
     }
 
-    /// Initializes the database schema
+    /// Initializes the database schema, re-applying it only when it changed.
+    ///
+    /// Re-running `SCHEMA_SQL` rebuilds every index on populated tables, which
+    /// costs seconds once the store holds real data (vector and B-tree indexes
+    /// are rebuilt from scratch). To avoid paying that on every launch, a stable
+    /// fingerprint of the schema text is stored in a small `schema_meta` record
+    /// and compared on boot; an unchanged schema is skipped entirely. Editing
+    /// `SCHEMA_SQL` changes the fingerprint and forces a one-time re-apply.
+    ///
+    /// # Returns
+    /// `true` when the schema was (re)applied, `false` when it was already
+    /// current and the apply was skipped.
+    ///
+    /// # Errors
+    /// When reading the stored fingerprint or applying the schema fails.
     #[instrument(name = "db_initialize_schema", skip(self))]
-    pub async fn initialize_schema(&self) -> Result<()> {
+    pub async fn initialize_schema(&self) -> Result<bool> {
         use super::schema::SCHEMA_SQL;
 
-        info!("Initializing database schema");
+        let fingerprint = schema_fingerprint(SCHEMA_SQL);
 
-        self.db.query(SCHEMA_SQL).await.map_err(|e| {
+        // `schema_meta` holds a single record remembering the last-applied
+        // fingerprint. Selecting a named field (never `*`/`id`) sidesteps the
+        // SDK's Thing-enum deserialization issues and is a cheap point lookup.
+        let stored: Vec<SchemaMetaRow> = self
+            .db
+            .query("SELECT hash FROM schema_meta:current")
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to read stored schema fingerprint");
+                e
+            })?
+            .take(0)
+            .map_err(|e| {
+                error!(error = %e, "Failed to deserialize stored schema fingerprint");
+                e
+            })?;
+
+        if stored.first().map(|r| r.hash.as_str()) == Some(fingerprint.as_str()) {
+            info!("Database schema already current; skipping re-apply");
+            return Ok(false);
+        }
+
+        info!("Applying database schema (first run or definition changed)");
+        let response = self.db.query(SCHEMA_SQL).await.map_err(|e| {
             error!(error = %e, "Failed to initialize schema");
             e
         })?;
 
-        // Note: MCP HTTP migration (command field ASSERT with 'http') is handled
-        // in SCHEMA_SQL via DEFINE FIELD OVERWRITE (PAT_DB_003 compliant).
-        // The guarded migration in commands/migration.rs handles existing databases.
+        // SCHEMA_SQL is a single multi-statement query: a transport-level success
+        // does not mean every DEFINE succeeded. Surface per-statement errors and
+        // skip caching the fingerprint when any failed, so the schema is
+        // re-applied (and re-logged) on the next boot instead of being frozen in
+        // a half-applied state. Non-fatal: the app still boots best-effort.
+        if let Err(e) = response.check() {
+            error!(
+                error = %e,
+                "Schema apply reported a statement error; not caching the fingerprint so it re-applies next boot"
+            );
+            return Ok(true);
+        }
+
+        // MCP HTTP command-field migration is handled inside SCHEMA_SQL via
+        // idempotent field redefinition; the guarded migration in
+        // commands/migration.rs covers databases created before that change.
+
+        // Cache the fingerprint only after a clean apply so the next boot can
+        // skip the expensive re-apply.
+        self.db
+            .query("UPSERT schema_meta:current SET hash = $hash")
+            .bind(("hash", fingerprint))
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to persist schema fingerprint");
+                e
+            })?;
 
         info!("Database schema initialized successfully");
-        Ok(())
+        Ok(true)
     }
 
     /// Executes a query and returns the results as JSON Value first,
@@ -356,6 +417,28 @@ impl DBClient {
     }
 }
 
+/// Row shape for reading the stored schema fingerprint from `schema_meta`.
+#[derive(serde::Deserialize)]
+struct SchemaMetaRow {
+    hash: String,
+}
+
+/// Computes a stable fingerprint of the schema text.
+///
+/// Any edit to `SCHEMA_SQL` changes the fingerprint, which forces a one-time
+/// re-apply on the next boot. The same input always yields the same output
+/// within and across runs, so an unchanged schema is reliably detected.
+///
+/// Note: `DefaultHasher` is not guaranteed stable across Rust toolchains, so a
+/// compiler upgrade may change the fingerprint and trigger one extra re-apply.
+/// That is harmless — every schema statement is idempotent.
+fn schema_fingerprint(sql: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    sql.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,6 +471,50 @@ mod tests {
             .expect("DB creation failed");
         let result = db.initialize_schema().await;
         assert!(result.is_ok(), "Schema initialization should succeed");
+    }
+
+    #[test]
+    fn schema_fingerprint_is_stable_and_sensitive() {
+        let a = schema_fingerprint("DEFINE TABLE x SCHEMAFULL;");
+        assert_eq!(
+            a,
+            schema_fingerprint("DEFINE TABLE x SCHEMAFULL;"),
+            "same schema text must yield the same fingerprint"
+        );
+        assert_ne!(
+            a,
+            schema_fingerprint("DEFINE TABLE y SCHEMAFULL;"),
+            "a changed schema must yield a different fingerprint"
+        );
+    }
+
+    #[tokio::test]
+    async fn schema_reapply_is_skipped_when_unchanged() {
+        let temp_dir = test_tempdir();
+        let db_path = temp_dir.path().join("schema_gate_db");
+        let db_path_str = db_path.to_str().unwrap();
+
+        let db = DBClient::new(db_path_str)
+            .await
+            .expect("DB creation failed");
+
+        // First boot applies the schema and records its fingerprint.
+        let applied = db
+            .initialize_schema()
+            .await
+            .expect("first schema init failed");
+        assert!(applied, "first run should apply the schema");
+
+        // Second boot with identical schema text must skip the expensive
+        // re-apply (the whole point of the fingerprint gate).
+        let applied_again = db
+            .initialize_schema()
+            .await
+            .expect("second schema init failed");
+        assert!(
+            !applied_again,
+            "an unchanged schema must be skipped on the next boot"
+        );
     }
 
     #[tokio::test]

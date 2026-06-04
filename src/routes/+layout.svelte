@@ -17,7 +17,13 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { tauriListen, type TauriUnlistenFn } from '$lib/tauri';
+	import {
+		tauriListen,
+		tauriInvoke,
+		getAppVersion,
+		isTauriRuntime,
+		type TauriUnlistenFn
+	} from '$lib/tauri';
 	import '../styles/global.css';
 	import { theme } from '$lib/stores/theme';
 	import { localeStore } from '$lib/stores/locale';
@@ -27,6 +33,7 @@
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import LegalModal from '$lib/components/legal/LegalModal.svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
+	import SplashScreen from '$lib/components/SplashScreen.svelte';
 	import { UserQuestionModal, GlobalValidationModal } from '$lib/components/workflow';
 	import KanbanCardCreator from '$lib/components/kanban/KanbanCardCreator.svelte';
 	import { sttSettingsStore } from '$lib/stores/sttSettings';
@@ -106,7 +113,78 @@
 		risk_level: string;
 	}
 
+	// Startup splash. The window now appears before the backend finishes its
+	// deferred boot init, so this overlay covers the app — blocking interaction —
+	// until the UI-critical services (providers, embedding) are ready; MCP keeps
+	// connecting in the background. Outside the Tauri runtime there is no backend
+	// to signal readiness, so it never shows.
+	let booting = $state(isTauriRuntime());
+	let appVersion = $state('');
+	let unlistenBootReady: TauriUnlistenFn | null = null;
+	let bootSafetyTimer: ReturnType<typeof setTimeout> | null = null;
+	let bootMinTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Fail-safe: never trap the user on the splash if `boot_ready` is missed.
+	const BOOT_SPLASH_TIMEOUT_MS = 20000;
+	// Keep the splash up at least this long so the reveal feels intentional and
+	// the loading ticker is visible, even when the backend is ready almost
+	// instantly (provider/embedding init is sub-second).
+	const BOOT_SPLASH_MIN_MS = 900;
+	const splashStart = Date.now();
+
+	/** Dismiss the splash, but not before the minimum display time has elapsed. */
+	function requestDismiss(): void {
+		if (!booting || bootMinTimer) {
+			return;
+		}
+		const remaining = BOOT_SPLASH_MIN_MS - (Date.now() - splashStart);
+		if (remaining <= 0) {
+			finishDismiss();
+		} else {
+			bootMinTimer = setTimeout(finishDismiss, remaining);
+		}
+	}
+
+	function finishDismiss(): void {
+		booting = false;
+		if (bootSafetyTimer) {
+			clearTimeout(bootSafetyTimer);
+			bootSafetyTimer = null;
+		}
+		if (bootMinTimer) {
+			clearTimeout(bootMinTimer);
+			bootMinTimer = null;
+		}
+	}
+
 	onMount(async () => {
+		// Wire the splash first so the ready signal is not missed. The window can
+		// come up after the backend already reported readiness, so also query the
+		// current state to cover that race.
+		if (isTauriRuntime()) {
+			void getAppVersion()
+				.then((version) => {
+					appVersion = version;
+				})
+				.catch(() => {
+					/* version is decorative; ignore failures */
+				});
+
+			unlistenBootReady = await tauriListen('boot_ready', () => {
+				requestDismiss();
+			});
+
+			try {
+				if (await tauriInvoke<boolean>('boot_ready_state')) {
+					requestDismiss();
+				}
+			} catch {
+				/* the event or the safety timer will dismiss the splash */
+			}
+
+			bootSafetyTimer = setTimeout(finishDismiss, BOOT_SPLASH_TIMEOUT_MS);
+		}
+
 		theme.init();
 		localeStore.init();
 
@@ -199,6 +277,13 @@
 		unlistenLegal?.();
 		unlistenPrivacy?.();
 		unlistenManagerWrite?.();
+		unlistenBootReady?.();
+		if (bootSafetyTimer) {
+			clearTimeout(bootSafetyTimer);
+		}
+		if (bootMinTimer) {
+			clearTimeout(bootMinTimer);
+		}
 		backgroundWorkflowsStore.destroy();
 		kanbanEventsStore.destroy();
 		composingStore.destroy();
@@ -212,6 +297,10 @@
 <svelte:head>
 	<!-- Fonts self-hosted in /static/fonts/ (no external CDN dependency) -->
 </svelte:head>
+
+{#if booting}
+	<SplashScreen version={appVersion} />
+{/if}
 
 {#if showOnboarding}
 	<OnboardingModal onComplete={handleOnboardingComplete} />

@@ -111,40 +111,11 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to initialize secure keystore: {}", e))?;
     tracing::info!("Secure keystore initialized");
 
-    // Seed the MCP network connectivity snapshot BEFORE any MCP auto-connect.
-    // `load_from_db()` below may connect HTTP servers, and `connect()` reads the
-    // process-global snapshot; if a LAN server is enabled, the snapshot must
-    // already reflect the user's opt-in or the first-boot connect would be
-    // refused by the strict default. Best-effort: a failure leaves the secure
-    // default (allow_private_network=false).
-    match commands::settings_mcp_network::load_mcp_network_settings(&app_state.db).await {
-        Ok(settings) => {
-            crate::mcp::network_settings::set_network_settings(settings);
-            tracing::info!(
-                allow_private_network = settings.allow_private_network,
-                "MCP network settings seeded from database"
-            );
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "Failed to seed MCP network settings; using secure default");
-        }
-    }
-
-    // Run MCP loading, provider init, and embedding init in parallel.
-    // MCP is fully independent. Providers and embedding both need keystore
-    // (already initialized above) but are independent of each other.
-    let (mcp_result, _, _) = tokio::join!(
-        app_state.mcp_manager.load_from_db(),
-        app_state.initialize_providers_from_config(&keystore),
-        app_state.initialize_embedding_from_config(&keystore),
-    );
-
-    if let Err(e) = mcp_result {
-        tracing::warn!(error = %e, "Failed to load MCP servers from database");
-    } else {
-        let count = app_state.mcp_manager.connected_count().await;
-        tracing::info!(count = count, "MCP servers loaded from database");
-    }
+    // MCP connect, provider init and embedding init are deferred to a task in
+    // the setup hook (the "deferred boot init" block) so the window and its
+    // splash screen appear immediately instead of blocking on these network
+    // round-trips. The security-critical ordering (seed the MCP network
+    // snapshot BEFORE any auto-connect) is preserved inside that task.
 
     // Run Tauri application
     let app = tauri::Builder::default()
@@ -153,6 +124,8 @@ async fn main() -> anyhow::Result<()> {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            // Startup lifecycle
+            commands::boot::boot_ready_state,
             // Workflow commands
             commands::workflow::create_workflow,
             commands::workflow::load_workflows,
@@ -456,6 +429,81 @@ async fn main() -> anyhow::Result<()> {
                 tracing::info!("App handle set in AppState for event emission");
             }
 
+            // Deferred boot init: initialize providers and embedding, then
+            // connect MCP servers, AFTER the window exists so the splash screen
+            // shows immediately. Emits `boot_ready` once the UI-critical services
+            // (providers, embedding) are up so the splash can hand over, flips
+            // `ui_ready` for the race-safe frontend query, and finally flips
+            // `services_ready` once MCP is connected so the boot tasks that need
+            // it (card promotion, catch-up analyze) run only then. Spawned with
+            // tokio so the handle can be parked and aborted on a quit mid-boot.
+            {
+                use crate::models::streaming::events::BOOT_READY;
+                let boot_app_handle = app.handle().clone();
+                let boot_handle = tokio::spawn(async move {
+                    let state = boot_app_handle.state::<AppState>();
+                    let keystore = boot_app_handle.state::<commands::SecureKeyStore>();
+
+                    // Seed the MCP network connectivity snapshot BEFORE any MCP
+                    // auto-connect: `connect()` reads the process-global snapshot,
+                    // so a LAN server the user enabled would be refused by the
+                    // strict default if the snapshot were not seeded first.
+                    // Best-effort: a failure leaves the secure default.
+                    match commands::settings_mcp_network::load_mcp_network_settings(&state.db).await
+                    {
+                        Ok(settings) => {
+                            crate::mcp::network_settings::set_network_settings(settings);
+                            tracing::info!(
+                                allow_private_network = settings.allow_private_network,
+                                "MCP network settings seeded from database"
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Failed to seed MCP network settings; using secure default");
+                        }
+                    }
+
+                    // Providers + embedding gate the splash: UI-critical and fast
+                    // (config + client setup, no network). They are independent of
+                    // each other and both need the keystore.
+                    tokio::join!(
+                        state.initialize_providers_from_config(keystore.inner()),
+                        state.initialize_embedding_from_config(keystore.inner()),
+                    );
+
+                    // UI is usable: dismiss the splash. `ui_ready` covers the race
+                    // where the frontend attaches its listener after this fires.
+                    state
+                        .ui_ready
+                        .store(true, std::sync::atomic::Ordering::Release);
+                    let _ = boot_app_handle.emit(BOOT_READY, ());
+
+                    // Connect MCP servers (the slow part: network / process spawns).
+                    // Awaited in THIS task — not a detached child — so aborting the
+                    // boot task on a quit during the splash also cancels an in-flight
+                    // connect, and Drop on the server handle kills any spawned child.
+                    // The seed above ran first, so the strict ordering still holds.
+                    if let Err(e) = state.mcp_manager.load_from_db().await {
+                        tracing::warn!(error = %e, "Failed to load MCP servers from database");
+                    } else {
+                        let count = state.mcp_manager.connected_count().await;
+                        tracing::info!(count = count, "MCP servers loaded from database");
+                    }
+
+                    // MCP connected: unblock the boot tasks that need it (card
+                    // promotion, catch-up analyze).
+                    let _ = state.services_ready.send(true);
+                });
+
+                // Park the handle so a quit during the splash can abort the
+                // in-flight init before MCP shutdown runs.
+                let boot_slot = state.inner().boot_task_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    *boot_slot.lock().await = Some(boot_handle);
+                });
+                tracing::info!("Deferred boot init task spawned");
+            }
+
             // Spawn the Kanban scheduler.
             // The shutdown flag is polled on every tick; cleanup in
             // RunEvent::ExitRequested flips it so the loop exits cleanly.
@@ -487,7 +535,17 @@ async fn main() -> anyhow::Result<()> {
             {
                 let db = state.inner().db.clone();
                 let app_handle = app.handle().clone();
+                let mut ready_rx = state.inner().services_ready.subscribe();
                 tauri::async_runtime::spawn(async move {
+                    // Wait until the deferred boot init connected providers/MCP
+                    // before promoting a card: promotion starts a workflow that
+                    // needs them, and the window (hence this spawn) now comes up
+                    // before the services are ready.
+                    while !*ready_rx.borrow() {
+                        if ready_rx.changed().await.is_err() {
+                            break;
+                        }
+                    }
                     match commands::scheduler::recover_stuck_doing_cards_core(
                         &db,
                         commands::scheduler::STUCK_DOING_GRACE_SECS,
@@ -646,7 +704,15 @@ async fn main() -> anyhow::Result<()> {
                 let tool_factory = state.inner().tool_factory.clone();
                 let mcp_manager = state.inner().mcp_manager.clone();
                 let app_handle = app.handle().clone();
+                let mut ready_rx = state.inner().services_ready.subscribe();
                 tauri::async_runtime::spawn(async move {
+                    // Wait until providers/MCP are initialized: each analysis
+                    // fires a full LLM tool loop that needs them.
+                    while !*ready_rx.borrow() {
+                        if ready_rx.changed().await.is_err() {
+                            break;
+                        }
+                    }
                     match commands::kanban_analyzer::catchup_unanalyzed_review_cards_core(
                         &db,
                         &tool_factory,
@@ -818,6 +884,14 @@ async fn main() -> anyhow::Result<()> {
             app_state
                 .kanban_scheduler_shutdown
                 .store(true, std::sync::atomic::Ordering::Release);
+
+            // Abort an in-flight deferred boot init so MCP shutdown does not race
+            // a half-connected server (the window can be closed during the splash).
+            if let Ok(mut guard) = app_state.boot_task_handle.try_lock() {
+                if let Some(handle) = guard.take() {
+                    handle.abort();
+                }
+            }
 
             let mcp_manager = app_state.mcp_manager.clone();
             let shutdown_done = shutdown_done.clone();
