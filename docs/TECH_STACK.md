@@ -1,12 +1,12 @@
 # Tech Stack: Svelte + Rust + SurrealDB
 
-> **Current project versions: 19 May 2026**
+> **Current project versions: 4 June 2026**
 > Production versions used in the project (tested compatibility).
 
 ## Stack Overview
 
 ```
-Frontend  : SvelteKit 2.55.0 | Svelte 5.55.7
+Frontend  : SvelteKit 2.63.0 | Svelte 5.55.7
 Backend   : Rust 1.93.0 + Tauri 2
 Database  : SurrealDB ~2.6 (kv-rocksdb, no protocol-http)
 Desktop   : Tauri (cross-platform)
@@ -20,23 +20,23 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 **Core Framework**:
 
 - **svelte**: 5.55.7
-- **@sveltejs/kit**: ^2.55.0
+- **@sveltejs/kit**: ^2.61.0
 - **@sveltejs/adapter-static**: ^3.0.0
 - **@sveltejs/vite-plugin-svelte**: ^6.2.4
-- **vite**: ^7.3.2
+- **vite**: ^7.3.3
 
 **TypeScript**:
 
 - **typescript**: ^6.0.3
-- **svelte-check**: ^4.4.4
+- **svelte-check**: ^4.4.8
 - Strict-mode flags enabled in `tsconfig.json`: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`
 
 **Tauri Integration**:
 
 - **@tauri-apps/api**: ^2.11.0
-- **@tauri-apps/cli**: ^2.10.1
-- **@tauri-apps/plugin-dialog**: ^2.7.0
-- **@tauri-apps/plugin-opener**: ^2.5.3
+- **@tauri-apps/cli**: ^2.11.1
+- **@tauri-apps/plugin-dialog**: ^2.7.1
+- **@tauri-apps/plugin-opener**: ^2.5.4
 
 **UI Components**:
 
@@ -44,22 +44,22 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 **Content Processing**:
 
-- **dompurify**: ^3.4.1 (HTML sanitization)
+- **dompurify**: ^3.4.2 (HTML sanitization)
 - **marked**: ^18.0.3 (Markdown rendering)
 
 **Testing**:
 
-- **vitest**: ^4.0.15 (unit tests)
+- **vitest**: ^4.1.5 (unit tests)
 - **@playwright/test**: ^1.60.0 (E2E tests)
 - **jsdom**: ^27.4.0 (DOM testing)
 
 **Linting**:
 
-- **eslint**: ^9.0.0
-- **eslint-plugin-svelte**: ^3.14.0
-- **@eslint/js**: ^9.39.1
-- **typescript-eslint**: ^8.53.1
-- **globals**: ^17.4.0
+- **eslint**: ^10.4.0
+- **eslint-plugin-svelte**: ^3.17.1
+- **@eslint/js**: ^9.39.4
+- **typescript-eslint**: ^8.59.4
+- **globals**: ^17.6.0
 - ESLint enforces `no-console: error` and `@typescript-eslint/no-explicit-any: error` (build-breaking)
 
 ### Backend (Cargo.toml)
@@ -104,12 +104,12 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 **Utilities**:
 
-- **uuid**: 1.20 (features: v4, serde)
+- **uuid**: 1.23 (features: v4, serde)
 - **chrono**: 0.4.43 (features: serde)
 - **regex**: 1.10
 - **globset**: 0.4 (glob pattern matching for FileManagerTool)
 - **base64**: 0.22 (base64 encoding/decoding)
-- **rand**: 0.9 (jittered retry backoff in `llm/retry.rs`)
+- **rand**: 0.10 (jittered retry backoff in `llm/retry.rs`)
 
 **HTTP & Network**:
 
@@ -257,6 +257,12 @@ src-tauri/target/release/bundle/
 
 - `maxWorkers` replaces `maxThreads` / `maxForks`
 - `projects` replaces `workspace`
+
+**ESLint 10** (from ESLint 9):
+
+- Flat config (`eslint.config.js`) is the only supported format; this project already used it, so the bump was a no-op for our config.
+- Drops Node < 20.19 / < 22.12 (already our minimum).
+- `@eslint/js` stays on its 9.x line and remains compatible as the recommended-config provider.
 
 ## Resources
 

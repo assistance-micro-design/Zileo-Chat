@@ -4,7 +4,7 @@ Multi-agent desktop application with conversational interface.
 
 ## Tech Stack
 
-**Frontend**: SvelteKit 2.55.0 + Svelte 5.55.7 + Vite 7.3.2
+**Frontend**: SvelteKit 2.63.0 + Svelte 5.55.7 + Vite 7.3.3
 **Backend**: Rust 1.93.0 + Tauri 2
 **Database**: SurrealDB ~2.6
 **LLM Providers**: Mistral + Ollama + OpenAI-compatible (custom)
