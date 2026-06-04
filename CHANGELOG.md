@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-06-04
+
 ### Added
 
 - **Startup splash screen and immediate window creation** (`src/lib/components/SplashScreen.svelte`, `src-tauri/src/commands/boot.rs`, `src-tauri/src/main.rs`, `src-tauri/src/state.rs`, `src/lib/tauri/app.ts`, `src/routes/+layout.svelte`, `src/messages/{en,fr}.json`) -- the application window now opens immediately instead of staying blank for several seconds while heavy services initialize. A splash screen fills the window during startup: it displays the application name, a scrolling subsystem progress indicator, the version number (bottom right), and a link to `assistance-micro-design.fr` (bottom left). It fades out once the UI-critical services (providers, embedding) finish initializing; MCP server connections continue in the background and do not block the transition. A new `boot_ready_state` Tauri command (`commands/boot.rs`) lets the frontend poll the ready flag reliably, covering the race where the `boot_ready` event fires before the listener is attached. A new `getAppVersion` wrapper in `src/lib/tauri/app.ts` reads the version at runtime so the splash stays up to date without hardcoding. The deferred-initialization order preserves the existing security property: the MCP network settings snapshot is seeded into the process-global guard before any MCP connection attempt.
@@ -1394,7 +1396,8 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.27.0
 [0.26.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.26.0
 [0.25.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.25.0
 [0.24.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.24.0
