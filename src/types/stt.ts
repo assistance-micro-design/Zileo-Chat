@@ -64,4 +64,4 @@ export const STT_SUPPORTED_LANGUAGES = [
 export type STTLanguageCode = (typeof STT_SUPPORTED_LANGUAGES)[number];
 
 /** Default Voxtral model (kept in sync with the Rust default). */
-export const DEFAULT_VOXTRAL_MODEL_ID = 'voxtral-small-latest';
+export const DEFAULT_VOXTRAL_MODEL_ID = 'voxtral-mini-latest';

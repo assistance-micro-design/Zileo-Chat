@@ -1654,7 +1654,7 @@
 	"stt.enabled_label": "Activer la dictee vocale",
 	"stt.enabled_help": "Affiche le bouton microphone flottant sur toutes les pages. Necessite une cle API Mistral.",
 	"stt.model_id_label": "ID du modele Voxtral",
-	"stt.model_id_help": "Saisissez l'identifiant exact du modele Voxtral (sensible a la casse). Defaut : voxtral-small-latest.",
+	"stt.model_id_help": "Saisissez l'identifiant exact du modele Voxtral (sensible a la casse). Defaut : voxtral-mini-latest.",
 	"stt.see_models_link": "Consulter les modeles Voxtral disponibles",
 	"stt.language_label": "Langue parlee",
 	"stt.language_help": "Forcer une langue de transcription. Le mode auto utilise la langue de l'interface de l'application.",

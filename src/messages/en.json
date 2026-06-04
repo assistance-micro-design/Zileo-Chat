@@ -1653,7 +1653,7 @@
 	"stt.enabled_label": "Enable voice dictation",
 	"stt.enabled_help": "Show the floating microphone button on every page. Requires a Mistral API key.",
 	"stt.model_id_label": "Voxtral model ID",
-	"stt.model_id_help": "Enter the exact Voxtral model identifier (case-sensitive). Defaults to voxtral-small-latest.",
+	"stt.model_id_help": "Enter the exact Voxtral model identifier (case-sensitive). Defaults to voxtral-mini-latest.",
 	"stt.see_models_link": "Browse available Voxtral models",
 	"stt.language_label": "Spoken language",
 	"stt.language_help": "Choose a language to bias transcription. Auto-detect falls back to the app's interface language.",
