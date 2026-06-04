@@ -39,13 +39,13 @@ anyhow = "1.0"
 thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
-uuid = { version = "1.20", features = ["v4", "serde"] }
+uuid = { version = "1.23", features = ["v4", "serde"] }
 chrono = { version = "0.4.43", features = ["serde"] }
 async-trait = "0.1"
 regex = "1.10"
 globset = "0.4"
 # Used to add jitter to retry backoff and avoid thundering-herd on transient LLM errors.
-rand = "0.9"
+rand = "0.10"
 
 # Async utilities for cancellation tokens
 tokio-util = { version = "0.7", features = ["rt"] }
