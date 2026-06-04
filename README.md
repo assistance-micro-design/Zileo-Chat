@@ -154,7 +154,7 @@ npm run tauri:build
 
 | Layer    | Technology                                 |
 | -------- | ------------------------------------------ |
-| Frontend | SvelteKit 2.59 + Svelte 5.55               |
+| Frontend | SvelteKit 2.63 + Svelte 5.55               |
 | Backend  | Rust + Tauri 2.11                          |
 | Database | SurrealDB 2.6 (embedded)                   |
 | LLM      | Direct HTTP (Mistral/Ollama/OpenAI-compat) |
