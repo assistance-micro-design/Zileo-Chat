@@ -28,6 +28,7 @@ Multi-step process: entity selection, options, preview, and export.
 	import { Button, Card, Badge, StatusIndicator } from '$lib/components/ui';
 	import EntitySelector from './EntitySelector.svelte';
 	import ExportPreview from './ExportPreview.svelte';
+	import { isLocalOrPrivateHttpServer } from './mcp-export.helpers';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { downloadBrowserFile } from '$lib/utils/browser-download';
@@ -103,6 +104,19 @@ Multi-step process: entity selection, options, preview, and export.
 			selectedSkills.length +
 			selectedCustomProviders.length >
 			0
+	);
+
+	/**
+	 * Names of HTTP MCP servers whose URL targets a loopback/private address.
+	 * These export fine but are refused on re-import (SSRF defense), so we flag
+	 * them in the preview. Keyed by name (the import/export identity).
+	 */
+	const nonReimportableMcp = $derived(
+		new Set(
+			mcpServers
+				.filter((server) => isLocalOrPrivateHttpServer(server.command, server.args))
+				.map((server) => server.name)
+		)
 	);
 
 	/**
@@ -461,6 +475,7 @@ Multi-step process: entity selection, options, preview, and export.
 						<ExportPreview
 							preview={exportPreview}
 							{mcpSanitization}
+							{nonReimportableMcp}
 							onMcpSanitizationChange={handleMcpSanitizationChange}
 						/>
 					</div>

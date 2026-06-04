@@ -132,13 +132,26 @@ fn validate_imported_mcp_server(
     // id/name/args/env + Docker spawn guard.
     let validated = validate_mcp_server_config(&config)?;
 
-    // SSRF screen for HTTP servers, IMPORT mode (loopback blocked).
+    // SSRF screen for HTTP servers, IMPORT mode (loopback + private blocked).
+    // A locally-hosted MCP server (localhost / LAN) works at runtime but is
+    // deliberately refused on import: an import file can come from an untrusted
+    // third party, and re-pointing a server at the local machine / LAN is an
+    // SSRF vector. We surface an explicit, actionable message instead of the
+    // raw screening error so the user knows the server must be re-created by
+    // hand in Settings > MCP.
     if validated.command == MCPDeploymentMethod::Http {
         let url = validated
             .args
             .first()
             .ok_or_else(|| "HTTP MCP server requires a URL in args[0]".to_string())?;
-        screen_request_url(url, ScreenPolicy::IMPORT)?;
+        screen_request_url(url, ScreenPolicy::IMPORT).map_err(|e| {
+            format!(
+                "HTTP MCP server '{}' points at a local or private address ({}) and cannot be \
+                 imported for security reasons. Re-create it manually in Settings > MCP after \
+                 import.",
+                name, e
+            )
+        })?;
     }
 
     // Extra-header invariants (charset + Authorization conflict).
@@ -470,12 +483,18 @@ mod tests {
 
     #[test]
     fn import_http_localhost_rejected() {
-        assert!(validate(&export("http", &["http://localhost:8080/"])).is_err());
+        let err = validate(&export("http", &["http://localhost:8080/"]))
+            .expect_err("localhost HTTP MCP server must be rejected on import");
+        // F1: the message must be actionable, not the raw SSRF screen error.
+        assert!(err.contains("local or private address"), "got: {err}");
+        assert!(err.contains("Settings > MCP"), "got: {err}");
     }
 
     #[test]
     fn import_http_private_rejected() {
-        assert!(validate(&export("http", &["http://10.0.0.1/"])).is_err());
+        let err = validate(&export("http", &["http://10.0.0.1/"]))
+            .expect_err("private-LAN HTTP MCP server must be rejected on import");
+        assert!(err.contains("local or private address"), "got: {err}");
     }
 
     #[test]

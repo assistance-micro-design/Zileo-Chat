@@ -561,15 +561,31 @@ pub struct ImportWarning {
 }
 
 /// Category of import warning.
+///
+/// Each variant maps 1:1 to a dedicated i18n key on the frontend, so the UI
+/// never has to inspect the (English) `detail`/`action` text to localize a
+/// warning. The missing-dependency cases are split per referenced entity kind
+/// for the same reason (a single `MissingDependency` would force the UI to
+/// parse the message to know whether a model, MCP server, skill or provider is
+/// missing).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ImportWarningType {
-    /// A referenced entity (skill, model, MCP, provider) not found
-    MissingDependency,
+    /// A referenced model was not found in the package or the database.
+    MissingModel,
+    /// A referenced MCP server was not found.
+    MissingMcpServer,
+    /// A referenced skill was not found.
+    MissingSkill,
+    /// A referenced custom provider was not found.
+    MissingProvider,
     /// Folder paths are machine-specific
     MachineSpecific,
     /// Fields defaulted due to v1.0 schema (is_reasoning, context_window)
     DefaultApplied,
+    /// Custom provider(s) imported: API keys are never exported and must be
+    /// re-entered after import.
+    ApiKeyRequired,
     /// Builtin model reimport
     BuiltinModel,
     /// MCP server has authentication configured but no secret was included (v1.2)
@@ -897,14 +913,14 @@ mod tests {
     #[test]
     fn test_import_warning_serialization() {
         let warning = ImportWarning {
-            warning_type: ImportWarningType::MissingDependency,
+            warning_type: ImportWarningType::MissingSkill,
             severity: "high".to_string(),
             entity: "Agent 'CodeReviewer'".to_string(),
             detail: "skill 'python-bp' not found".to_string(),
             action: "Create the skill after import".to_string(),
         };
         let json = serde_json::to_string(&warning).unwrap();
-        assert!(json.contains("\"warningType\":\"missing_dependency\""));
+        assert!(json.contains("\"warningType\":\"missing_skill\""));
         assert!(json.contains("\"severity\":\"high\""));
 
         let warning2 = ImportWarning {

@@ -593,6 +593,8 @@
 	"ie_warn_builtin_model_action": "Review model settings after import if behavior differs",
 	"ie_warn_mcp_allowlist_reset": "MCP tool permissions were reset for security",
 	"ie_warn_mcp_allowlist_reset_action": "Re-grant the MCP tools each agent may use in Settings > Agents",
+	"ie_warn_mcp_secret_missing": "An MCP server uses authentication but its secret was not exported",
+	"ie_warn_mcp_secret_missing_action": "Re-enter the authentication secret in Settings > MCP after import",
 	"ie_select_all": "Select All",
 	"ie_deselect_all": "Deselect All",
 	"ie_no_available": "No {type} available",
@@ -656,6 +658,7 @@
 	"ie_mcp_clear_extra_headers": "Strip extra HTTP headers from export",
 	"ie_mcp_secret_required_badge": "Secret required",
 	"ie_mcp_secret_missing_post_import": "Re-enter the auth secret in MCP settings",
+	"ie_mcp_local_not_reimportable": "This HTTP server points at a local or private (LAN) address. For security it cannot be re-imported automatically — the recipient will have to re-create it in Settings > MCP.",
 
 	"ie_x_of_y_filled": "{filled} of {total} filled",
 	"ie_required_filled": "Required filled",
@@ -1443,6 +1446,10 @@
 	"onboarding_import_continue": "Continue",
 	"onboarding_import_skip": "Skip this step",
 	"onboarding_import_success_title": "Configuration imported",
+	"onboarding_import_partial_title": "Imported with some issues",
+	"onboarding_import_nothing": "Nothing was imported from this file.",
+	"onboarding_import_warnings_title": "Please review after import:",
+	"onboarding_import_errors_title": "Some items could not be imported:",
 	"onboarding_import_secrets_notice": "For security, provider API keys and MCP server secrets are not included in imports. Set your API keys in Settings > Providers, and your MCP server secrets in Settings > MCP.",
 	"onboarding_import_use_settings": "This file could not be imported automatically. Open Settings > Import/Export to review it and resolve any conflicts.",
 

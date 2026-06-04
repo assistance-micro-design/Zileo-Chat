@@ -537,7 +537,7 @@ async fn validate_cross_dependencies(
             && !name_exists_in_db(db, "llm_model", &agent.llm.model).await
         {
             warnings.push(ImportWarning {
-                warning_type: ImportWarningType::MissingDependency,
+                warning_type: ImportWarningType::MissingModel,
                 severity: "high".to_string(),
                 entity: entity.clone(),
                 detail: format!(
@@ -555,7 +555,7 @@ async fn validate_cross_dependencies(
                 && !name_exists_in_db(db, "mcp_server", mcp).await
             {
                 warnings.push(ImportWarning {
-                    warning_type: ImportWarningType::MissingDependency,
+                    warning_type: ImportWarningType::MissingMcpServer,
                     severity: "medium".to_string(),
                     entity: entity.clone(),
                     detail: format!("MCP server '{}' not found", mcp),
@@ -572,7 +572,7 @@ async fn validate_cross_dependencies(
                 && !name_exists_in_db(db, "skill", skill).await
             {
                 warnings.push(ImportWarning {
-                    warning_type: ImportWarningType::MissingDependency,
+                    warning_type: ImportWarningType::MissingSkill,
                     severity: "medium".to_string(),
                     entity: entity.clone(),
                     detail: format!("skill '{}' not found", skill),
@@ -589,7 +589,7 @@ async fn validate_cross_dependencies(
                 && !name_exists_in_db(db, "custom_provider", &custom_name).await
             {
                 warnings.push(ImportWarning {
-                    warning_type: ImportWarningType::MissingDependency,
+                    warning_type: ImportWarningType::MissingProvider,
                     severity: "high".to_string(),
                     entity: entity.clone(),
                     detail: format!("custom provider '{}' not found", custom_name),
@@ -622,7 +622,7 @@ async fn validate_cross_dependencies(
                 && !name_exists_in_db(db, "custom_provider", &custom_name).await
             {
                 warnings.push(ImportWarning {
-                    warning_type: ImportWarningType::MissingDependency,
+                    warning_type: ImportWarningType::MissingProvider,
                     severity: "high".to_string(),
                     entity: format!("Model '{}'", model.name),
                     detail: format!("custom provider '{}' not found", custom_name),
@@ -636,7 +636,7 @@ async fn validate_cross_dependencies(
     // Custom providers in package: warn about API keys (never exported)
     if !package.custom_providers.is_empty() {
         warnings.push(ImportWarning {
-            warning_type: ImportWarningType::DefaultApplied,
+            warning_type: ImportWarningType::ApiKeyRequired,
             severity: "medium".to_string(),
             entity: format!("{} custom provider(s)", package.custom_providers.len()),
             detail: "API keys are never exported for security reasons".to_string(),

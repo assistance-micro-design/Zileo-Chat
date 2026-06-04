@@ -36,11 +36,18 @@ Uses ExportEntitySection for collapsible entity sections.
 		preview: ExportPreviewData;
 		/** MCP sanitization configuration per server */
 		mcpSanitization: Record<string, MCPSanitizationConfig>;
+		/** Names of HTTP MCP servers that will be refused on re-import (local/LAN). */
+		nonReimportableMcp?: Set<string>;
 		/** Callback when MCP sanitization changes */
 		onMcpSanitizationChange: (serverId: string, config: MCPSanitizationConfig) => void;
 	}
 
-	let { preview, mcpSanitization, onMcpSanitizationChange }: Props = $props();
+	let {
+		preview,
+		mcpSanitization,
+		nonReimportableMcp = new Set(),
+		onMcpSanitizationChange
+	}: Props = $props();
 
 	/** Total entity count */
 	const totalCount = $derived(
@@ -131,6 +138,12 @@ Uses ExportEntitySection for collapsible entity sections.
 									{/if}
 								</div>
 							</div>
+
+							{#if nonReimportableMcp.has(server.name)}
+								<p class="mcp-local-warning" role="note">
+									{$i18n('ie_mcp_local_not_reimportable')}
+								</p>
+							{/if}
 
 							{#if sanitization && (envKeys.length > 0 || server.authType !== undefined || (server.extraHeaderKeys && server.extraHeaderKeys.length > 0))}
 								<MCPFieldEditor
@@ -323,6 +336,15 @@ Uses ExportEntitySection for collapsible entity sections.
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
+	}
+
+	.mcp-local-warning {
+		margin: 0;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: var(--font-size-xs);
+		color: var(--color-warning, #92400e);
+		background: var(--color-warning-bg, #fef3c7);
+		border-radius: var(--border-radius-sm);
 	}
 
 	.mcp-item {

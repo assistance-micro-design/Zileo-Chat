@@ -34,15 +34,20 @@
 	import { onboardingStore } from '$lib/stores/onboarding';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { motionDuration } from '$lib/utils/motion';
-	import { createSelectionFromValidation } from '$lib/components/settings/import-export/ImportPanel.helpers';
+	import {
+		createSelectionFromValidation,
+		resolveWarningAction,
+		resolveWarningDetail
+	} from '$lib/components/settings/import-export/ImportPanel.helpers';
 	import type {
 		ConfigImportResult,
 		ImportValidation,
+		ImportWarning,
 		ConflictResolution,
 		MCPAdditions
 	} from '$types/import-export';
 	import { MAX_IMPORT_FILE_SIZE } from '$types/import-export';
-	import { Upload, CircleCheckBig } from '@lucide/svelte';
+	import { Upload, CircleCheckBig, TriangleAlert, CircleAlert } from '@lucide/svelte';
 
 	interface Props {
 		onNext: () => void;
@@ -55,6 +60,8 @@
 	/** True when the file cannot be imported here and the user must use Settings. */
 	let needsFullImporter = $state(false);
 	let result = $state<ConfigImportResult | null>(null);
+	/** Non-blocking warnings carried from validation, surfaced after import. */
+	let warnings = $state<ImportWarning[]>([]);
 	let fileInput: HTMLInputElement | null = $state(null);
 
 	/** Total entities imported, used to gate the success summary. */
@@ -88,6 +95,7 @@
 		error = null;
 		needsFullImporter = false;
 		result = null;
+		warnings = [];
 
 		if (file.size > MAX_IMPORT_FILE_SIZE) {
 			error = $i18n('ie_file_too_large').replace(
@@ -115,6 +123,11 @@
 				return;
 			}
 
+			// Carry non-blocking warnings (e.g. MCP allowlist reset, missing
+			// dependencies) so they can be surfaced after the import instead of
+			// being silently swallowed.
+			warnings = validation.warnings;
+
 			const selection = createSelectionFromValidation(validation);
 			const resolutions: Record<string, ConflictResolution> = {};
 			const mcpAdditions: Record<string, MCPAdditions> = {};
@@ -126,9 +139,10 @@
 				mcpAdditions
 			});
 
-			// Flag a successful import so navigation skips the getting-started
-			// step (its guidance assumes a from-scratch setup with no import).
-			if (result.success) {
+			// Flag the import so navigation skips the getting-started step (its
+			// guidance assumes a from-scratch setup). A partial import (some
+			// entities in, some per-entity errors) still counts as imported.
+			if (totalImported > 0) {
 				onboardingStore.setImported(true);
 			}
 		} catch (e) {
@@ -156,46 +170,7 @@
 		aria-hidden="true"
 	/>
 
-	{#if result && result.success && totalImported > 0}
-		{@const imported = result.imported}
-		<Card>
-			{#snippet body()}
-				<div class="import-result">
-					<span
-						class="result-icon-wrapper"
-						transition:scale={{ duration: motionDuration(300), start: 0.6 }}
-					>
-						<CircleCheckBig size={40} class="result-icon" />
-					</span>
-					<h2 class="result-title">{$i18n('onboarding_import_success_title')}</h2>
-					<div class="result-counts">
-						{#if imported.agents > 0}
-							<Badge variant="success">{imported.agents} {$i18n('ie_entity_agents')}</Badge>
-						{/if}
-						{#if imported.models > 0}
-							<Badge variant="success">{imported.models} {$i18n('ie_entity_models')}</Badge>
-						{/if}
-						{#if imported.mcpServers > 0}
-							<Badge variant="success">{imported.mcpServers} {$i18n('ie_entity_mcp_servers')}</Badge
-							>
-						{/if}
-						{#if imported.prompts > 0}
-							<Badge variant="success">{imported.prompts} {$i18n('ie_entity_prompts')}</Badge>
-						{/if}
-						{#if imported.skills > 0}
-							<Badge variant="success">{imported.skills} {$i18n('ie_entity_skills')}</Badge>
-						{/if}
-						{#if imported.customProviders > 0}
-							<Badge variant="success"
-								>{imported.customProviders} {$i18n('ie_entity_custom_providers')}</Badge
-							>
-						{/if}
-					</div>
-					<p class="result-secrets">{$i18n('onboarding_import_secrets_notice')}</p>
-				</div>
-			{/snippet}
-		</Card>
-	{:else if needsFullImporter}
+	{#if needsFullImporter}
 		<div class="import-notice import-notice-warning" role="status">
 			{$i18n('onboarding_import_use_settings')}
 		</div>
@@ -203,18 +178,107 @@
 		<div class="import-notice import-notice-error" role="alert">
 			{error}
 		</div>
+	{:else if result}
+		{@const imported = result.imported}
+		{@const hasErrors = result.errors.length > 0}
+		{#if totalImported > 0}
+			<Card>
+				{#snippet body()}
+					<div class="import-result">
+						<span
+							class="result-icon-wrapper"
+							class:partial={hasErrors}
+							transition:scale={{ duration: motionDuration(300), start: 0.6 }}
+						>
+							{#if hasErrors}
+								<TriangleAlert size={40} class="result-icon" />
+							{:else}
+								<CircleCheckBig size={40} class="result-icon" />
+							{/if}
+						</span>
+						<h2 class="result-title">
+							{hasErrors
+								? $i18n('onboarding_import_partial_title')
+								: $i18n('onboarding_import_success_title')}
+						</h2>
+						<div class="result-counts">
+							{#if imported.agents > 0}
+								<Badge variant="success">{imported.agents} {$i18n('ie_entity_agents')}</Badge>
+							{/if}
+							{#if imported.models > 0}
+								<Badge variant="success">{imported.models} {$i18n('ie_entity_models')}</Badge>
+							{/if}
+							{#if imported.mcpServers > 0}
+								<Badge variant="success"
+									>{imported.mcpServers} {$i18n('ie_entity_mcp_servers')}</Badge
+								>
+							{/if}
+							{#if imported.prompts > 0}
+								<Badge variant="success">{imported.prompts} {$i18n('ie_entity_prompts')}</Badge>
+							{/if}
+							{#if imported.skills > 0}
+								<Badge variant="success">{imported.skills} {$i18n('ie_entity_skills')}</Badge>
+							{/if}
+							{#if imported.customProviders > 0}
+								<Badge variant="success"
+									>{imported.customProviders} {$i18n('ie_entity_custom_providers')}</Badge
+								>
+							{/if}
+						</div>
+						<p class="result-secrets">{$i18n('onboarding_import_secrets_notice')}</p>
+					</div>
+				{/snippet}
+			</Card>
+		{:else}
+			<div class="import-notice import-notice-warning" role="status">
+				{$i18n('onboarding_import_nothing')}
+			</div>
+		{/if}
+
+		{#if warnings.length > 0}
+			<div class="import-messages import-messages-warning" role="status">
+				<p class="messages-title">{$i18n('onboarding_import_warnings_title')}</p>
+				<ul class="messages-list">
+					{#each warnings as warning, i (i)}
+						<li>
+							<TriangleAlert size={14} aria-hidden="true" />
+							<span
+								>{resolveWarningDetail(warning, $i18n)} — {resolveWarningAction(
+									warning,
+									$i18n
+								)}</span
+							>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
+
+		{#if hasErrors}
+			<div class="import-messages import-messages-error" role="alert">
+				<p class="messages-title">{$i18n('onboarding_import_errors_title')}</p>
+				<ul class="messages-list">
+					{#each result.errors as err, i (i)}
+						<li>
+							<CircleAlert size={14} aria-hidden="true" />
+							<span>{err.entityId}: {err.error}</span>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 	{/if}
 
 	<div class="import-options">
-		{#if !result || !result.success}
+		{#if !result || totalImported === 0}
 			<Button variant="primary" onclick={handleBrowse} disabled={loading}>
 				<Upload size={16} aria-hidden="true" />
 				<span>{loading ? $i18n('common_loading') : $i18n('onboarding_import_choose_file')}</span>
 			</Button>
 		{/if}
 
-		<Button variant={result && result.success ? 'primary' : 'ghost'} onclick={handleSkip}>
-			{result && result.success
+		<Button variant={result && totalImported > 0 ? 'primary' : 'ghost'} onclick={handleSkip}>
+			{result && totalImported > 0
 				? $i18n('onboarding_import_continue')
 				: $i18n('onboarding_import_skip')}
 		</Button>
@@ -298,6 +362,54 @@
 	.import-notice-error {
 		background: var(--color-error-bg, #fee2e2);
 		color: var(--color-error, #dc2626);
+	}
+
+	.result-icon-wrapper.partial {
+		color: var(--color-warning, #92400e);
+	}
+
+	.import-messages {
+		width: 100%;
+		max-width: 460px;
+		padding: var(--spacing-sm) var(--spacing-md);
+		border-radius: var(--border-radius-md);
+		font-size: var(--font-size-sm);
+	}
+
+	.import-messages-warning {
+		background: var(--color-warning-bg, #fef3c7);
+		color: var(--color-warning, #92400e);
+	}
+
+	.import-messages-error {
+		background: var(--color-error-bg, #fee2e2);
+		color: var(--color-error, #dc2626);
+	}
+
+	.messages-title {
+		margin: 0 0 var(--spacing-xs);
+		font-weight: var(--font-weight-semibold);
+	}
+
+	.messages-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.messages-list li {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--spacing-xs);
+		line-height: 1.4;
+	}
+
+	.messages-list li :global(svg) {
+		flex-shrink: 0;
+		margin-top: 2px;
 	}
 
 	.import-options {

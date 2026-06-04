@@ -53,7 +53,9 @@ Orchestrates the multi-step import process:
 		createSelectionFromValidation,
 		filterConflictsForSelection,
 		filterMissingMcpEnvForSelection,
-		hasImportSelection
+		hasImportSelection,
+		resolveWarningAction,
+		resolveWarningDetail
 	} from './ImportPanel.helpers';
 	import { Upload, CircleCheckBig, CircleAlert } from '@lucide/svelte';
 
@@ -269,60 +271,16 @@ Orchestrates the multi-step import process:
 	}
 
 	/**
-	 * Resolve warning detail/action using i18n keys based on warningType.
-	 * Falls back to raw backend strings if no i18n key matches.
+	 * Resolve warning detail/action localized text. The mapping is keyed purely
+	 * on `warningType` (see ImportPanel.helpers) so it never inspects the English
+	 * backend text; falls back to the raw backend string for unknown types.
 	 */
 	function getWarningDetail(warning: ImportWarning): string {
-		const keyMap: Record<string, string> = {
-			missing_dependency: warning.detail.includes('model')
-				? 'ie_warn_missing_model'
-				: warning.detail.includes('MCP')
-					? 'ie_warn_missing_mcp'
-					: warning.detail.includes('skill')
-						? 'ie_warn_missing_skill'
-						: warning.detail.includes('provider')
-							? 'ie_warn_missing_provider'
-							: '',
-			machine_specific: 'ie_warn_folders',
-			default_applied: warning.detail.includes('API key')
-				? 'ie_warn_api_keys'
-				: 'ie_warn_defaults_applied',
-			builtin_model: 'ie_warn_builtin_model',
-			mcp_allowlist_reset: 'ie_warn_mcp_allowlist_reset'
-		};
-		const key = keyMap[warning.warningType] || '';
-		if (!key) return warning.detail;
-
-		// Extract name from detail for interpolation (e.g., "model 'mistral-small' not found")
-		const nameMatch = warning.detail.match(/'([^']+)'/);
-		const countMatch = warning.detail.match(/^(\d+)/);
-		let translated = $i18n(key);
-		if (nameMatch?.[1]) translated = translated.replace('{name}', nameMatch[1]);
-		if (countMatch?.[1]) translated = translated.replace('{count}', countMatch[1]);
-		return translated;
+		return resolveWarningDetail(warning, $i18n);
 	}
 
 	function getWarningAction(warning: ImportWarning): string {
-		const keyMap: Record<string, string> = {
-			missing_dependency: warning.detail.includes('model')
-				? 'ie_warn_missing_model_action'
-				: warning.detail.includes('MCP')
-					? 'ie_warn_missing_mcp_action'
-					: warning.detail.includes('skill')
-						? 'ie_warn_missing_skill_action'
-						: warning.detail.includes('provider')
-							? 'ie_warn_missing_provider_action'
-							: '',
-			machine_specific: 'ie_warn_folders_action',
-			default_applied: warning.detail.includes('API key')
-				? 'ie_warn_api_keys_action'
-				: 'ie_warn_defaults_applied_action',
-			builtin_model: 'ie_warn_builtin_model_action',
-			mcp_allowlist_reset: 'ie_warn_mcp_allowlist_reset_action'
-		};
-		const key = keyMap[warning.warningType] || '';
-		if (!key) return warning.action;
-		return $i18n(key);
+		return resolveWarningAction(warning, $i18n);
 	}
 
 	/**

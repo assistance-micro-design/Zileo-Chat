@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { ImportConflict, ImportSelection, ImportValidation } from '$types/import-export';
+import type {
+	ImportConflict,
+	ImportSelection,
+	ImportValidation,
+	ImportWarning,
+	ImportWarningType
+} from '$types/import-export';
 import {
 	areConflictsResolved,
 	areRequiredMcpEnvVarsFilled,
@@ -10,7 +16,12 @@ import {
 	filterMissingMcpEnvForSelection,
 	getConflictKey,
 	hasImportSelection,
-	isSensitiveEnvKey
+	interpolateWarningTemplate,
+	isSensitiveEnvKey,
+	resolveWarningAction,
+	resolveWarningDetail,
+	warningActionKey,
+	warningDetailKey
 } from '../ImportPanel.helpers';
 
 function selection(overrides: Partial<ImportSelection> = {}): ImportSelection {
@@ -138,5 +149,63 @@ describe('ImportPanel helpers', () => {
 				{ mcpA: { addEnv: { API_KEY: 'secret' }, addArgs: [] } }
 			)
 		).toBe(true);
+	});
+
+	describe('warning i18n resolution', () => {
+		function warning(
+			warningType: ImportWarningType,
+			detail = '',
+			action = 'raw action'
+		): ImportWarning {
+			return { warningType, severity: 'high', entity: 'e', detail, action };
+		}
+
+		it('maps every warning type to a dedicated detail + action key', () => {
+			const types: ImportWarningType[] = [
+				'missing_model',
+				'missing_mcp_server',
+				'missing_skill',
+				'missing_provider',
+				'machine_specific',
+				'default_applied',
+				'api_key_required',
+				'builtin_model',
+				'mcp_secret_missing',
+				'mcp_allowlist_reset'
+			];
+			for (const type of types) {
+				expect(warningDetailKey(type), `detail key for ${type}`).not.toBe('');
+				expect(warningActionKey(type), `action key for ${type}`).not.toBe('');
+			}
+		});
+
+		it('wires the mcp_secret_missing warning (regression: was English-only)', () => {
+			expect(warningDetailKey('mcp_secret_missing')).toBe('ie_warn_mcp_secret_missing');
+			expect(warningActionKey('mcp_secret_missing')).toBe('ie_warn_mcp_secret_missing_action');
+		});
+
+		it('interpolates {name} and {count} from the backend detail, language-independent', () => {
+			expect(
+				interpolateWarningTemplate("Modele '{name}' introuvable", "model 'gpt' not found")
+			).toBe("Modele 'gpt' introuvable");
+			expect(
+				interpolateWarningTemplate('{count} dossiers', '3 folder path(s) are machine-specific')
+			).toBe('3 dossiers');
+		});
+
+		it('resolves localized detail/action via the translate function, not the English text', () => {
+			const translate = (key: string) => `T:${key}`;
+			// A French-locale detail must still resolve by type, not by substring.
+			const w = warning('missing_model', "Modele 'gpt-5' introuvable", 'Ajoutez le modele');
+			expect(resolveWarningDetail(w, translate)).toBe('T:ie_warn_missing_model');
+			expect(resolveWarningAction(w, translate)).toBe('T:ie_warn_missing_model_action');
+		});
+
+		it('falls back to raw backend strings for an unknown warning type', () => {
+			const w = warning('totally_unknown' as ImportWarningType, 'raw detail', 'raw action');
+			const translate = (key: string) => `T:${key}`;
+			expect(resolveWarningDetail(w, translate)).toBe('raw detail');
+			expect(resolveWarningAction(w, translate)).toBe('raw action');
+		});
 	});
 });

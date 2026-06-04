@@ -351,11 +351,21 @@ export interface MCPAdditions {
 
 // ============ IMPORT WARNING (v1.1) ============
 
-/** Category of import warning. */
+/**
+ * Category of import warning.
+ *
+ * Each value maps 1:1 to a dedicated i18n key, so the UI never inspects the
+ * (English) backend `detail`/`action` text to localize a warning. Must stay in
+ * sync with the Rust `ImportWarningType` enum (`models/import_export.rs`).
+ */
 export type ImportWarningType =
-	| 'missing_dependency'
+	| 'missing_model'
+	| 'missing_mcp_server'
+	| 'missing_skill'
+	| 'missing_provider'
 	| 'machine_specific'
 	| 'default_applied'
+	| 'api_key_required'
 	| 'builtin_model'
 	| 'mcp_secret_missing'
 	| 'mcp_allowlist_reset';
