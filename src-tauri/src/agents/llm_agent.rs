@@ -132,10 +132,10 @@ impl Agent for LLMAgent {
         // DETACHED parent (a delegate/parallel target, or a freshly-spawned
         // sub-agent of a detached worker re-run): such tasks carry
         // `is_detached: true` in their context (stamped by the spawning tool),
-        // so the R-SEC-4 MCP allowlist gate applies transitively instead of
+        // so the MCP allowlist gate applies transitively instead of
         // falling through to the interactive modal that no human can answer.
         let is_detached = task.is_detached();
-        // R1: a delegated/parallel sub-agent of a detached parent is additionally
+        // A delegated/parallel sub-agent of a detached parent is additionally
         // gated on the per-entry `allow_in_delegated_runs` flag (spawned
         // sub-agents are not — `is_delegated()` excludes `is_sub_agent`).
         let is_delegated = task.is_delegated();

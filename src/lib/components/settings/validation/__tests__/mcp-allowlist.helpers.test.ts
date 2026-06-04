@@ -21,7 +21,7 @@ function entry(
 	return { server_id, tools, allow_in_delegated_runs };
 }
 
-describe('buildMcpToolAllowlist (R1 payload from arming state)', () => {
+describe('buildMcpToolAllowlist (payload from arming state)', () => {
 	it('builds entries with sorted tools and the per-server delegation flag', () => {
 		const armed: McpArmingState = {
 			'srv-1': { tools: ['read', 'list'], allowInDelegatedRuns: true }

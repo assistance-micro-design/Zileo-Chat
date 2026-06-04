@@ -166,7 +166,7 @@ describe('kanbanCardsByColumn', () => {
 		expect(groups.done).toEqual([]);
 	});
 
-	// B2: a `proposed` card is stored with column='todo' but belongs to the
+	// A `proposed` card is stored with column='todo' but belongs to the
 	// dedicated validation zone, NOT the board — the board grouping must skip it.
 	it('excludes proposed cards from the board grouping', async () => {
 		vi.mocked(tauriInvoke).mockResolvedValueOnce([
@@ -180,7 +180,7 @@ describe('kanbanCardsByColumn', () => {
 		expect(groups.todo.some((c) => c.status === 'proposed')).toBe(false);
 	});
 
-	// B2 counterpart: the raw `kanbanCards` list MUST keep proposed cards so the
+	// Counterpart: the raw `kanbanCards` list MUST keep proposed cards so the
 	// validation zone can derive `proposedCards` from it.
 	it('keeps proposed cards in the raw kanbanCards list', async () => {
 		vi.mocked(tauriInvoke).mockResolvedValueOnce([

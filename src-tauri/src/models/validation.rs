@@ -341,7 +341,7 @@ pub struct PartialAuditConfig {
 ///
 /// `Skipped` is used when `TimeoutBehavior::Skip` is configured and the
 /// validation timed out without an explicit user decision. `Blocked` is a
-/// policy refusal with no human in the loop: the R-SEC-4 detached MCP gate
+/// policy refusal with no human in the loop: the detached MCP gate
 /// refused a tool that was not armed in the agent's allowlist (paired with
 /// `DecidedBy::Policy`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -377,7 +377,7 @@ pub enum DecidedBy {
     /// Decision came from a timeout (per timeout_behavior).
     Timeout,
     /// Enforced by a security policy with no human in the loop (e.g. the
-    /// R-SEC-4 detached MCP allowlist gate refusing an unarmed tool).
+    /// detached MCP allowlist gate refusing an unarmed tool).
     Policy,
     /// Executed without a human review because the active validation mode is
     /// permissive for this risk (e.g. Auto + `always_confirm_high` OFF) — a

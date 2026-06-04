@@ -41,7 +41,7 @@ impl Task {
     /// the standard attended `/agent` path.
     ///
     /// This is the per-execution detached signal that
-    /// `LLMAgent::execute_with_mcp` threads into the tool loop so the R-SEC-4
+    /// `LLMAgent::execute_with_mcp` threads into the tool loop so the
     /// MCP allowlist gate applies transitively: a sub-agent of a detached run
     /// is itself detached, even though the registered agent's own context was
     /// created attended. Carried on the task (not the agent) because the same
@@ -61,7 +61,7 @@ impl Task {
     /// (set by the respective tools). Deliberately EXCLUDES `is_sub_agent`
     /// (Spawn): a spawned sub-agent clones the parent's allowlist (same
     /// privilege, no confused-deputy), so it is gated like a direct detached
-    /// run, not subject to the per-entry `allow_in_delegated_runs` flag (R1).
+    /// run, not subject to the per-entry `allow_in_delegated_runs` flag.
     ///
     /// Combined with [`Task::is_detached`] at the MCP allowlist gate: a tool
     /// armed for an agent is auto-approved in a delegated detached run ONLY if
@@ -85,7 +85,7 @@ impl Task {
 /// detached parent is itself detached. Without it the sub-agent's MCP calls
 /// would hit the interactive validation modal with no human present →
 /// stall-until-timeout (helper present) or fail-OPEN (helper absent), which is
-/// exactly the R-SEC-4 threat the per-agent allowlist gate closes.
+/// exactly the threat the per-agent allowlist gate closes.
 ///
 /// No-op when `context` is not a JSON object (the value then resolves to the
 /// safe `false` via [`Task::is_detached`]).
@@ -363,7 +363,7 @@ mod tests {
     fn stamp_detached_round_trips_through_task_is_detached() {
         // The write seam (sub-agent task builders: spawn / delegate / parallel)
         // and the read seam (LLMAgent::execute_with_mcp) must agree: a context
-        // stamped detached resolves detached, so the R-SEC-4 MCP allowlist gate
+        // stamped detached resolves detached, so the MCP allowlist gate
         // applies transitively to a sub-agent of a detached parent.
         let mut ctx = json!({"is_sub_agent": true, "workflow_id": "wf"});
         stamp_detached(&mut ctx, true);
@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn is_delegated_covers_delegate_and_parallel_but_not_spawn() {
-        // Delegate / Parallel sub-agents ARE delegated runs (R1 flag applies).
+        // Delegate / Parallel sub-agents ARE delegated runs (delegation flag applies).
         assert!(task_with(json!({"is_delegation": true})).is_delegated());
         assert!(task_with(json!({"is_parallel_task": true})).is_delegated());
         // A SPAWNED sub-agent is NOT delegated: it clones the parent's allowlist

@@ -18,11 +18,11 @@
 AgentAuthorizations — per-agent unattended-run authorizations, edited on the
 Settings → Validation page (NOT in AgentForm). For the selected agent it edits:
   - require_file_confirmation (destructive file-op confirmation), and
-  - the MCP auto-approval allowlist for detached runs (R-SEC-4 / R1).
+  - the MCP auto-approval allowlist for detached runs.
 
 Seeds imperatively from get_agent_config on selection (AgentSummary does not
 carry these fields) — no reactive $effect that could clobber edits
-(ERR_SVELTE_012). Save is EXPLICIT (disarming is sensitive): a single
+Save is EXPLICIT (disarming is sensitive): a single
 update_agent carries the rebuilt allowlist + the confirmation flag; omitted
 fields keep their existing value (tri-state PATCH). Entries of stopped/absent
 MCP servers are preserved verbatim by the allowlist helpers.

@@ -440,7 +440,7 @@ async fn test_hydrate_llm_from_model_provider_match_is_case_insensitive() {
 /// Seeds an agent row whose `mcp_tool_allowlist` is bound as JSON exactly the
 /// way `create_agent` (commands/agent/mod.rs) binds `$mcp_tool_allowlist`. This
 /// exercises the real SCHEMAFULL persistence path so a dropped sub-key
-/// (ERR_SURREAL_001) would surface here.
+/// would surface here.
 async fn seed_agent_with_allowlist(
     db: &DBClient,
     allowlist: &[crate::models::agent::McpToolAllowlistEntry],
@@ -492,10 +492,10 @@ async fn load_allowlist(
     serde_json::from_value(val).expect("allowlist deserializes into typed entries")
 }
 
-/// R-SEC-4 (test10 persistence): the per-agent `mcp_tool_allowlist`
+/// Persistence: the per-agent `mcp_tool_allowlist`
 /// (`array<object>` with `server_id` + `tools` sub-fields) must survive a live
-/// SCHEMAFULL write -> read round-trip WITHOUT dropping its sub-keys
-/// (ERR_SURREAL_001), and an update must replace it coherently.
+/// SCHEMAFULL write -> read round-trip WITHOUT dropping its sub-keys,
+/// and an update must replace it coherently.
 #[tokio::test]
 async fn mcp_tool_allowlist_survives_db_round_trip_and_update() {
     use crate::models::agent::McpToolAllowlistEntry;
@@ -505,7 +505,7 @@ async fn mcp_tool_allowlist_survives_db_round_trip_and_update() {
         McpToolAllowlistEntry {
             server_id: "srv-a".to_string(),
             tools: vec!["read".to_string(), "list".to_string()],
-            // R1: explicitly armed for delegated runs.
+            // Explicitly armed for delegated runs.
             allow_in_delegated_runs: true,
         },
         McpToolAllowlistEntry {
@@ -520,7 +520,7 @@ async fn mcp_tool_allowlist_survives_db_round_trip_and_update() {
     assert_eq!(
         back.len(),
         2,
-        "ERR_SURREAL_001: no allowlist entry may be dropped on a SCHEMAFULL round-trip"
+        "no allowlist entry may be dropped on a SCHEMAFULL round-trip"
     );
     assert_eq!(back[0].server_id, "srv-a");
     assert_eq!(
@@ -530,7 +530,7 @@ async fn mcp_tool_allowlist_survives_db_round_trip_and_update() {
     );
     assert!(
         back[0].allow_in_delegated_runs,
-        "R1: the `allow_in_delegated_runs` sub-field must survive the round-trip (ERR_SURREAL_001)"
+        "the `allow_in_delegated_runs` sub-field must survive the round-trip"
     );
     assert_eq!(back[1].server_id, "srv-b");
     assert_eq!(back[1].tools, vec!["exec"]);
@@ -564,11 +564,11 @@ async fn mcp_tool_allowlist_survives_db_round_trip_and_update() {
     assert_eq!(after[0].tools, vec!["write"]);
 }
 
-/// R1 backward-compat: an allowlist entry persisted BEFORE the
+/// Backward-compat: an allowlist entry persisted BEFORE the
 /// `allow_in_delegated_runs` field existed (the sub-key is simply absent in the
 /// stored object) must reload as `false` (strict). The serde default is the
 /// safety net — `DEFINE FIELD ... DEFAULT false` does not backfill existing
-/// rows (ERR_SURREAL_011), so a legacy entry's object has no such key.
+/// rows, so a legacy entry's object has no such key.
 #[tokio::test]
 async fn legacy_allowlist_entry_without_delegation_flag_reloads_as_strict() {
     let (state, _db_guard) = setup_test_state().await;
@@ -609,9 +609,9 @@ async fn legacy_allowlist_entry_without_delegation_flag_reloads_as_strict() {
 
 /// REGRESSION (startup agent load): a legacy agent row written BEFORE the
 /// `mcp_tool_allowlist` column existed returns the field as explicit `null` on
-/// a SCHEMAFULL SELECT (the `DEFAULT []` does not backfill — ERR_SURREAL_011).
-/// `#[serde(default)]` alone does NOT intercept an explicit null
-/// (ERR_SERDE_005/006), so `serde_json::from_value::<AgentConfig>` (main.rs:637)
+/// a SCHEMAFULL SELECT (the `DEFAULT []` does not backfill).
+/// `#[serde(default)]` alone does NOT intercept an explicit null,
+/// so `serde_json::from_value::<AgentConfig>` (main.rs:637)
 /// fails and the agent is DROPPED on startup → the entire agent list vanishes
 /// from the UI. The null-tolerant deserializer must map null → empty Vec.
 #[test]

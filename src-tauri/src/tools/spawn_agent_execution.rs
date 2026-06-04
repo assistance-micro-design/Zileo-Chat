@@ -270,7 +270,7 @@ impl SpawnAgentTool {
             reasoning_effort: parent_config.reasoning_effort.clone(),
             kind: None,
             auto_analyze_reports: false,
-            // R-SEC-4: a sub-agent inherits the parent's MCP allowlist, exactly
+            // A sub-agent inherits the parent's MCP allowlist, exactly
             // as it inherits the parent's `mcp_servers`, tools and skills. When
             // the parent runs DETACHED the sub-agent task is stamped detached
             // (below), so the gate consults THIS armed set: the sub-agent can
@@ -351,7 +351,7 @@ impl SpawnAgentTool {
             "is_sub_agent": true,
             "message_id": Uuid::new_v4().to_string(),
         });
-        // R-SEC-4: inherit the parent's detached status so the sub-agent's MCP
+        // Inherit the parent's detached status so the sub-agent's MCP
         // calls are gated by the allowlist (above) instead of an unanswerable
         // validation modal.
         crate::agents::core::agent::stamp_detached(&mut context, self.is_detached);

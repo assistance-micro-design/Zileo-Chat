@@ -50,7 +50,7 @@ pub async fn import_agents(
                 name,
                 is_overwrite,
             } => {
-                // DECISION A1 (R-SEC-4, fail-closed): the MCP tool allowlist is
+                // Fail-closed: the MCP tool allowlist is
                 // an authorization boundary. It is NEVER hydrated from a
                 // third-party import file — the imported value is dropped and the
                 // allowlist is forced to empty. The user re-arms it manually
@@ -95,7 +95,7 @@ pub async fn import_agents(
 }
 
 /// Maps an exported MCP server to an [`MCPServerConfig`] and runs the full
-/// validation gate before persistence (R-SEC-2).
+/// validation gate before persistence.
 ///
 /// Covers: id/name/args/env validation + the Docker spawn guard (via
 /// `validate_mcp_server_config`), the SSRF screen in **import** mode
@@ -193,7 +193,7 @@ pub async fn import_mcp_servers(
                     }
                 }
 
-                // R-SEC-2: validate the (mapped) server before persisting; an
+                // Validate the (mapped) server before persisting; an
                 // invalid entry is reported and skipped, never persisted, and
                 // does not abort the rest of the batch.
                 let validated = match validate_imported_mcp_server(server, &id, &name, env) {
@@ -263,7 +263,7 @@ pub async fn import_models(
     t: &mut ImportTracking<'_>,
 ) {
     for model in models {
-        // DECISION A5: models are unique on (provider, api_name), NOT name.
+        // Models are unique on (provider, api_name), NOT name.
         // Resolve the conflict (and Overwrite target) by that real key so an
         // Overwrite updates the colliding row instead of failing on the index.
         match resolve_import_model(
@@ -479,7 +479,7 @@ mod tests {
         validate_imported_mcp_server(server, "mcp-import-1", "Imported", server.env.clone())
     }
 
-    // ---- R-SEC-2: SSRF screen in import mode (loopback blocked) ----
+    // ---- SSRF screen in import mode (loopback blocked) ----
 
     #[test]
     fn import_http_localhost_rejected() {
@@ -507,7 +507,7 @@ mod tests {
         assert!(validate(&export("http", &["https://api.example.com/"])).is_ok());
     }
 
-    // ---- R-SEC-2: Docker spawn guard applies early at import ----
+    // ---- Docker spawn guard applies early at import ----
 
     #[test]
     fn import_docker_malicious_mount_rejected() {

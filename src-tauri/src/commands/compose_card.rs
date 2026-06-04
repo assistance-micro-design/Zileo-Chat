@@ -14,7 +14,7 @@
 //!
 //! The agent's own `tools`, `mcp_servers` and `skills` are honoured (it can
 //! call PromptManager, Skills, etc. — those writes are governed by
-//! `manager_write_gate`, see SEC_AGENT_001). The flow is now ASYNC and detached:
+//! `manager_write_gate`). The flow is now ASYNC and detached:
 //! `start_compose_card` reserves a global slot (cap `MAX_CONCURRENT_COMPOSE`) and
 //! spawns a task that runs the tool-loop, persists the result as a `proposed`
 //! card (via `create_kanban_card_core`, M-2) and emits `kanban:compose_ready` /
@@ -120,9 +120,9 @@ pub async fn compose_card_from_description_core(
         provider_manager,
         tool_factory: Some(tool_factory),
         agent_context: None,
-        // Compose-card runs unattended: enforce the MCP tool allowlist (R-SEC-4).
+        // Compose-card runs unattended: enforce the MCP tool allowlist.
         is_detached: true,
-        // Direct detached run, not a delegate → R1 delegation flag N/A.
+        // Direct detached run, not a delegate → delegation flag N/A.
         is_delegated: false,
     };
     let report = tool_loop::execute_with_tools(
@@ -317,7 +317,7 @@ async fn run_compose_task(
     // user-configurable `settings:kanban.compose_timeout_secs` (read fresh at
     // each run so a setting change applies without restart). The clamp + the
     // default-on-error fallback live in `effective_compose_timeout` so the
-    // integration logic is unit-tested by construction (PAT_RUST_015).
+    // integration logic is unit-tested by construction.
     let timeout_secs = effective_compose_timeout(load_kanban_settings(&db).await);
 
     let outcome = tokio::time::timeout(
@@ -447,8 +447,8 @@ pub async fn start_compose_card(
 /// AFTER`) — never a pre-SELECT then UPDATE (TOCTOU). Zero rows (already
 /// validated / rejected / not proposed) returns a clear error, not a false
 /// success. `column` stays `todo`, so the scheduler promotes it like any ready
-/// card. Extracted (`_core`, PAT_RUST_015) so the transition + guard are testable
-/// without an `AppHandle`; the command wrapper adds the immediate promotion (B3).
+/// card. Extracted (`_core`) so the transition + guard are testable
+/// without an `AppHandle`; the command wrapper adds the immediate promotion.
 pub async fn approve_proposed_card_core(
     db: &DBClient,
     card_id: &str,
@@ -456,7 +456,7 @@ pub async fn approve_proposed_card_core(
     let validated_id = validate_uuid_field(card_id, "card_id")?;
     // RETURN a JSON-safe projection (`meta::id(id)`), NOT `RETURN AFTER` — the
     // raw record `id` is a Thing enum that `query_json` cannot serialise
-    // (ERR_SURREAL_002). The full updated row is re-read via get_kanban_card_core.
+    // The full updated row is re-read via get_kanban_card_core.
     let q = format!(
         "UPDATE kanban_card:`{}` SET status = 'ready', updated_at = time::now() \
          WHERE status = 'proposed' RETURN meta::id(id) AS id",
@@ -476,7 +476,7 @@ pub async fn approve_proposed_card_core(
 }
 
 /// Tauri command — validates a generated (`proposed`) card, promoting it into the
-/// scheduler queue. B3: kicks `start_next_pending_card_core` so a validated card
+/// scheduler queue. Kicks `start_next_pending_card_core` so a validated card
 /// is promoted immediately instead of waiting for the next scheduler tick.
 #[tauri::command]
 #[instrument(name = "approve_proposed_card", skip(state), fields(card_id = %card_id))]
@@ -486,7 +486,7 @@ pub async fn approve_proposed_card(
 ) -> Result<crate::models::KanbanCard, String> {
     let card = approve_proposed_card_core(&state.db, &card_id).await?;
 
-    // B3: promote immediately (parity with create_kanban_card). Best-effort —
+    // Promote immediately (parity with create_kanban_card). Best-effort —
     // the scheduler tick would otherwise pick it up within 60s.
     let app_handle_opt = state.app_handle.read().ok().and_then(|g| g.clone());
     if let Some(handle) = app_handle_opt {

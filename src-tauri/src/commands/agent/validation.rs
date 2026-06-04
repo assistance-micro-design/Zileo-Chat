@@ -261,7 +261,7 @@ pub fn merge_agent_config(
     let auto_analyze_reports = update
         .auto_analyze_reports
         .unwrap_or(existing.auto_analyze_reports);
-    // R-SEC-4: absent = keep existing allowlist, present = replace it.
+    // Absent = keep existing allowlist, present = replace it.
     let mcp_tool_allowlist = match &update.mcp_tool_allowlist {
         Some(a) => a.clone(),
         None => existing.mcp_tool_allowlist.clone(),
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn test_merge_keeps_existing_mcp_tool_allowlist_when_update_absent() {
-        // R-SEC-4 (test10 merge): an update that omits `mcp_tool_allowlist`
+        // Merge: an update that omits `mcp_tool_allowlist`
         // (outer None) must PRESERVE the existing armed allowlist — otherwise a
         // partial edit (e.g. renaming the agent) would silently disarm every
         // detached MCP tool the user had approved.
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_merge_replaces_mcp_tool_allowlist_when_update_present() {
-        // R-SEC-4 (test10 merge): a present `mcp_tool_allowlist` REPLACES the
+        // Merge: a present `mcp_tool_allowlist` REPLACES the
         // existing one wholesale. `Some([])` is an explicit disarm (clear all),
         // distinct from the absent case above.
         use crate::models::agent::McpToolAllowlistEntry;

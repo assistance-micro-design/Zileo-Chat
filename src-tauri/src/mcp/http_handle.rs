@@ -217,7 +217,7 @@ static MCP_CLIENT_PRIVATE: LazyLock<Client> = LazyLock::new(|| build_mcp_client(
 
 /// Builds a hardened MCP HTTP client.
 ///
-/// R-SEC-1/R-SEC-3: dedicated MCP client (LLM providers use their own in
+/// Dedicated MCP client (LLM providers use their own in
 /// `llm/http.rs`). `.no_proxy()` guarantees the custom DNS resolver sees the
 /// real target IP (D1: a proxy would hide it) — the LAN opt-in does NOT touch
 /// the proxy posture. `dns_resolver` classifies every resolved address;
@@ -438,7 +438,7 @@ impl MCPHttpHandle {
             );
         }
 
-        // R-SEC-1/R-SEC-3: validate the scheme and screen a literal-IP host
+        // Validate the scheme and screen a literal-IP host
         // before connecting (hyper never invokes the DNS resolver for a literal
         // IP). Runtime/manual policy allows loopback; the LAN opt-in adds
         // private ranges. Imports block both upstream (ScreenPolicy::IMPORT).
@@ -449,11 +449,11 @@ impl MCPHttpHandle {
             }
         })?;
 
-        // R-SEC-7: refuse to send credentials over plaintext HTTP to a
+        // Refuse to send credentials over plaintext HTTP to a
         // non-local host; warn for the acceptable cases. `has_auth` must count
         // BOTH `auth_type` and any credential-bearing `extra_headers`, otherwise
         // an `Authorization`/`X-API-Key` slipped in via extra headers would
-        // bypass the plaintext-credential refusal (§10.4).
+        // bypass the plaintext-credential refusal.
         let extra_headers = config.extra_headers.clone().unwrap_or_default();
         let has_auth = config
             .auth_type

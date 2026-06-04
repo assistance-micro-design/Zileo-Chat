@@ -40,7 +40,7 @@
 //!
 //! # Schema v1.3 Changes (backward compatible with v1.0/1.1/1.2)
 //! - Agent: added `kind`, `auto_analyze_reports`, `mcp_tool_allowlist` (the
-//!   allowlist is FAIL-CLOSED on import — always reset to empty, R-SEC-4)
+//!   allowlist is FAIL-CLOSED on import — always reset to empty)
 //! - Model: added `supports_vision`, `supports_forced_tool_choice` (default true)
 //! - Skill: added `kind`
 //! - Custom provider: added `supports_cache_control`, `supports_reasoning_param`
@@ -233,7 +233,7 @@ pub struct AgentExportData {
     /// Whether a Kanban agent auto-analyzes its card reports (v1.3).
     #[serde(default)]
     pub auto_analyze_reports: bool,
-    /// Per-MCP-server tool allowlist (v1.3, R-SEC-4). Restores the detached-run
+    /// Per-MCP-server tool allowlist (v1.3). Restores the detached-run
     /// security scoping that was dropped on round-trip before v1.3.
     #[serde(default)]
     pub mcp_tool_allowlist: Vec<McpToolAllowlistEntry>,
@@ -389,7 +389,7 @@ pub struct CustomProviderExportData {
     pub supports_cache_control: Option<bool>,
     /// Strict-compat toggle: send `reasoning`/`reasoning_effort` params (v1.3).
     /// `None` = default. Reset on round-trip before v1.3 (breaks Fireworks-style
-    /// strict providers — ERR_LLM_020).
+    /// strict providers).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supports_reasoning_param: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -591,7 +591,7 @@ pub enum ImportWarningType {
     /// MCP server has authentication configured but no secret was included (v1.2)
     McpSecretMissing,
     /// An imported agent's pre-authorized MCP tool allowlist was reset to empty
-    /// for security (v1.3, R-SEC-4). The allowlist is an authorization boundary;
+    /// for security (v1.3). The allowlist is an authorization boundary;
     /// it is never hydrated from a third-party file, and the `server_id` keys do
     /// not survive the round-trip anyway.
     McpAllowlistReset,

@@ -602,7 +602,7 @@ async fn template_has_pending_instance(
     if title.is_empty() || ka.is_empty() || ta.is_empty() {
         return Ok(false);
     }
-    // Exclude `proposed` cards (B1): a generated card awaiting validation is
+    // Exclude `proposed` cards: a generated card awaiting validation is
     // stored with `column='todo'` but is NOT a real pending instance — counting
     // it would make `skip_if_pending` skip the recurrence spawn while the user
     // has not yet validated anything, silently dropping the scheduled run.
@@ -995,7 +995,7 @@ mod tests {
         );
     }
 
-    /// B1: a `proposed` clone (generated, awaiting validation, stored
+    /// A `proposed` clone (generated, awaiting validation, stored
     /// `column='todo'`) must NOT be counted as a pending instance, otherwise
     /// `skip_if_pending` would skip the recurrence spawn while nothing real is in
     /// flight. A genuine `ready` clone, by contrast, MUST still count.

@@ -16,7 +16,7 @@
 
 <!--
 AgentMcpAllowlist — arms per-(server, tool) MCP auto-approval for UNATTENDED
-(detached) runs (R-SEC-4 / R1).
+(detached) runs.
 
 Used by AgentAuthorizations.svelte on the Settings → Validation page (per-agent
 authorizations live there, NOT in AgentForm). i18n keys use the
@@ -24,7 +24,7 @@ authorizations live there, NOT in AgentForm). i18n keys use the
 
 Fully CONTROLLED: the arming state is derived from the `value` prop (the current
 `mcp_tool_allowlist`), never held as internal seeded $state — so there is no
-stale-seed reactivity bug (ERR_SVELTE_012). The parent seeds `value` from
+stale-seed reactivity bug. The parent seeds `value` from
 `agent.mcp_tool_allowlist`; this component only emits the rebuilt allowlist on a
 user toggle, so an open+save without interaction reproduces the existing
 allowlist identically (anti-involuntary-disarm).

@@ -233,7 +233,7 @@ impl MCPServerHandle {
 
         let (cmd, args) = match config.command {
             MCPDeploymentMethod::Docker => {
-                // R-SEC-6 (LOT 1a): the spawn choke-point — refuse a docker
+                // The spawn choke-point — refuse a docker
                 // invocation that would break container isolation. Covers
                 // boot/create/update/import and any legacy persisted config by
                 // construction (a refused config never starts; never
@@ -792,7 +792,7 @@ mod tests {
 
     #[test]
     fn test_build_command_docker_rejects_unsafe_mount() {
-        // R-SEC-6: the docker guard runs at this choke-point. A host-root bind
+        // The docker guard runs at this choke-point. A host-root bind
         // mount must make build_command fail (so the server never spawns).
         let mut config = create_test_config();
         config.args = vec![

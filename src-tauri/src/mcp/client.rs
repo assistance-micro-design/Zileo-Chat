@@ -491,7 +491,7 @@ mod tests {
         assert!(msg.contains("second line"));
     }
 
-    // ---- R-SEC-6 (LOT 1a): boot path refuses a malicious docker config ----
+    // ---- Boot path refuses a malicious docker config ----
 
     #[tokio::test]
     async fn test_connect_rejects_malicious_docker_mount_at_spawn() {

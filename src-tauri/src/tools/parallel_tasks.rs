@@ -308,7 +308,7 @@ pub struct ParallelTasksTool {
     pub(crate) parent_message_id: Option<String>,
     /// Whether the spawning (parent) tool loop runs detached. Propagated to
     /// each parallel task so a parallel sub-agent of a detached run is itself
-    /// detached and its MCP calls hit the R-SEC-4 allowlist gate instead of the
+    /// detached and its MCP calls hit the allowlist gate instead of the
     /// interactive modal no human can answer. Pulled from
     /// `AgentToolContext::is_detached`.
     pub(crate) is_detached: bool,

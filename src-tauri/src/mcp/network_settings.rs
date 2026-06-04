@@ -27,7 +27,7 @@
 //!
 //! This module owns process-global **mutable** state. `cargo test` runs the
 //! tests of a binary on multiple threads in parallel, and the project has **no**
-//! `serial_test` dependency (and must not add one — see `.claude/rules/tdd.md`).
+//! `serial_test` dependency (and must not add one).
 //! Therefore:
 //!
 //! - Any test that **mutates** the global (`set_network_settings`) OR that

@@ -38,19 +38,19 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 // ===========================================================================
-// B0 — *Manager write governance: pure classification + decision.
+// *Manager write governance: pure classification + decision.
 //
 // These replace the old `ReadOnlyToolGuard`/`harden_detached_writes` blanket
-// refusal (K6.1 lifted): a *Manager content write is no longer refused in a
+// refusal: a *Manager content write is no longer refused in a
 // detached run, it transits the EXISTING validation flow classified by risk.
 // The decision is concentrated in `manager_write_gate` (in `execute_function_call`)
 // — the single enforcement point — so a tool-wrapper backstop (which would
 // refuse the very Auto-execute path it is meant to allow, since the gate calls
-// the wrapped tool) is unnecessary. The fail-closed guarantees B4 asked of the
+// the wrapped tool) is unnecessary. The fail-closed guarantees asked of the
 // backstop (refuse a validation-required detached write, refuse when no helper
 // can enforce) are encoded in `manager_write_action` below and consumed by the
 // gate, which is armed by the explicit `is_detached` flag (NOT `context.is_none()`
-// — so `rerun_worker`, detached WITH a context, is covered, §4.4).
+// — so `rerun_worker`, detached WITH a context, is covered).
 // ===========================================================================
 
 /// Source-single sets of write operations per *Manager tool. The classification
@@ -128,19 +128,19 @@ pub(crate) enum ManagerWriteAction {
 /// Why a *Manager write was refused. Each maps to a stable, secret-free message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ManagerWriteRefusal {
-    /// The agent does not own the targeted resource (scope §4.2(A)).
+    /// The agent does not own the targeted resource (ownership scope).
     Scope,
-    /// The per-run write cap was reached (§4.3).
+    /// The per-run write cap was reached.
     Volume,
     /// Validation is required but the run is unattended (detached) — no human
-    /// can answer the modal, so the detached policy applies directly (§2/B2).
+    /// can answer the modal, so the detached policy applies directly.
     Detached,
     /// Validation is required, the run is attended, but no validation helper is
-    /// available to enforce it — fail closed (B4 `RefuseNoHelper`).
+    /// available to enforce it — fail closed.
     NoHelper,
 }
 
-/// The SINGLE *Manager-write decision (B0). Pure: consumed by the gate (B1/B2)
+/// The SINGLE *Manager-write decision. Pure: consumed by the gate
 /// and exercised in isolation by the unit tests.
 ///
 /// Order matters: scope and volume are hard invariants checked first (a refusal
@@ -168,11 +168,11 @@ pub(crate) fn manager_write_action(
     // Validation IS required from here on.
     if is_detached {
         // No human to answer: apply the detached policy directly (refuse+audit),
-        // never block the poll on a modal nobody can see (§2/B2, DoS-boot fix).
+        // never block the poll on a modal nobody can see (DoS-boot fix).
         return ManagerWriteAction::Refuse(ManagerWriteRefusal::Detached);
     }
     if !has_helper {
-        // Attended but nothing can drive the modal → fail closed (B4).
+        // Attended but nothing can drive the modal → fail closed.
         return ManagerWriteAction::Refuse(ManagerWriteRefusal::NoHelper);
     }
     ManagerWriteAction::Validate
@@ -267,7 +267,7 @@ pub(crate) async fn create_local_tools(
     }
 
     // Kanban agents are confined: they orchestrate cards but must NEVER act as
-    // a delegation caller (PAT_KANBAN_STRICT_SEPARATION — they are already
+    // a delegation caller (they are already
     // excluded as a callee in delegate_task_execution). Strip the three
     // sub-agent tools defensively in case one was persisted on the config, and
     // force the basic-tools branch below so `create_tools_with_context` (which
@@ -300,8 +300,8 @@ pub(crate) async fn create_local_tools(
             }
         }
     } else {
-        // B(-1): the *Manager tools (prompt / skill / workflow) are reserved to
-        // Kanban supervisors (PAT_KANBAN_STRICT_SEPARATION). Strip them
+        // The *Manager tools (prompt / skill / workflow) are reserved to
+        // Kanban supervisors. Strip them
         // defensively for a non-Kanban agent so they never appear in the tool
         // set — the tools ALSO self-gate at execution (`ensure_kanban`), so this
         // is defense-in-depth, not the sole guard. Without it a user could
@@ -344,11 +344,11 @@ pub(crate) async fn create_local_tools(
         }
     };
 
-    // K6.1 lifted: a detached run NO LONGER wraps the *Manager tools read-only.
+    // A detached run NO LONGER wraps the *Manager tools read-only.
     // Write governance is now enforced centrally by `manager_write_gate` in
     // `execute_function_call`, armed by the explicit `is_detached` flag (which,
     // unlike the old `context.is_none()` wrapper trigger, also covers
-    // `rerun_worker` — detached WITH a context, §4.4). A detached content write
+    // `rerun_worker` — detached WITH a context). A detached content write
     // either passes per the user's validation settings (audited `PreApproved`)
     // or is refused there.
     tools
@@ -398,32 +398,32 @@ pub(crate) struct FunctionCallContext<'a> {
     pub workflow_id: &'a str,
     pub validation_helper: Option<&'a ValidationHelper>,
     pub require_file_confirmation: bool,
-    /// True for an unattended (detached) run — enables the R-SEC-4 MCP gate.
+    /// True for an unattended (detached) run — enables the detached MCP gate.
     pub is_detached: bool,
     /// True when this detached run is a DELEGATED sub-agent (DelegateTask /
     /// ParallelTasks), as opposed to a direct detached run or a spawned
     /// sub-agent. In a delegated run the allowlist gate additionally requires
-    /// the matching entry's `allow_in_delegated_runs` flag (R1).
+    /// the matching entry's `allow_in_delegated_runs` flag.
     pub is_delegated: bool,
     /// Per-(server_id, tool) allowlist consulted by the detached MCP gate.
     pub mcp_tool_allowlist: &'a [crate::models::agent::McpToolAllowlistEntry],
     /// The calling agent's skill-name allowlist (`config.skills`). Consulted by
-    /// the *Manager write gate to decide ownership (scope §4.2(A)): a skill
+    /// the *Manager write gate to decide ownership: a skill
     /// content update/restore is only "owned" when the skill's name is in this
     /// list. Empty for agents with no skills.
     pub agent_skills: &'a [String],
 }
 
-/// Pure R-SEC-4 decision: is `(server_id, tool)` armed in the agent's detached
+/// Pure decision: is `(server_id, tool)` armed in the agent's detached
 /// allowlist? Keyed by the immutable `server_id` (never the display name).
 /// `server_id == None` (the server name could not be resolved to an id) is
 /// fail-closed → `false`. An empty allowlist arms nothing.
 ///
-/// R1 — `is_delegated`: when this detached run is a DELEGATED sub-agent
+/// Delegated runs (`is_delegated`): when this detached run is a DELEGATED sub-agent
 /// (DelegateTask / ParallelTasks), the matching entry must ALSO set
 /// `allow_in_delegated_runs`. A DIRECT detached run (rerun-primary / analyze /
 /// compose) or a SPAWNED sub-agent (`is_delegated == false`) ignores the flag,
-/// preserving the pre-R1 behavior. This closes the UNION confused-deputy where
+/// preserving the non-delegated behavior. This closes the UNION confused-deputy where
 /// a detached worker delegates to a standard agent whose own allowlist arms
 /// tools the worker should not be able to trigger.
 fn is_mcp_tool_armed(
@@ -441,7 +441,7 @@ fn is_mcp_tool_armed(
     })
 }
 
-/// R-SEC-10 pure decision: may another MCP call proceed in this run?
+/// Pure decision: may another MCP call proceed in this run?
 ///
 /// `calls_so_far` is the number of MCP calls already attempted in the run
 /// (EXCLUDING the one about to be made), and `bytes_so_far` is the cumulative
@@ -472,7 +472,7 @@ fn mcp_run_budget_check(calls_so_far: usize, bytes_so_far: usize) -> Result<(), 
     Ok(())
 }
 
-/// R-SEC-10.1: total bytes a tool result actually pushes to the run's sinks —
+/// Total bytes a tool result actually pushes to the run's sinks —
 /// the serialized `result.result` PLUS the `result.error` string.
 ///
 /// BOTH fields reach the LLM tool message (`result_to_string` emits
@@ -487,7 +487,7 @@ pub(crate) fn result_sink_byte_len(serialized_result: &str, error: Option<&str>)
     serialized_result.len() + error.map_or(0, str::len)
 }
 
-/// R-SEC-10.1 pure decision: must a just-returned MCP result be replaced for
+/// Pure decision: must a just-returned MCP result be replaced for
 /// exceeding the per-result size cap?
 ///
 /// Returns `Some(refusal_message)` when an MCP result's sink byte size
@@ -498,7 +498,7 @@ pub(crate) fn result_sink_byte_len(serialized_result: &str, error: Option<&str>)
 /// Returns `None` (pass through unchanged) for a local-tool result (user-trusted,
 /// out of scope) or a result within the cap.
 ///
-/// SUCCESS-AGNOSTIC by design: under the R-SEC-10 threat model a compromised MCP
+/// SUCCESS-AGNOSTIC by design: under this threat model a compromised MCP
 /// server controls its JSON-RPC response size on BOTH paths, so a giant ERROR
 /// payload (`success == false`, carried in `result.error`) is just as dangerous
 /// as a giant success payload and is capped identically. Replacing a giant error
@@ -521,7 +521,7 @@ pub(crate) fn mcp_oversized_result_refusal(
     }
 }
 
-/// R-SEC-10 pure accounting: bytes a just-returned tool result contributes to the
+/// Pure accounting: bytes a just-returned tool result contributes to the
 /// cumulative per-run MCP byte budget.
 ///
 /// Counts EVERY MCP result — success AND error — because a compromised server
@@ -539,7 +539,7 @@ pub(crate) fn mcp_result_budget_charge(is_mcp_tool: bool, result_byte_len: usize
     }
 }
 
-/// Scope decision §4.2(A): does the calling agent OWN the resource a *Manager
+/// Scope decision: does the calling agent OWN the resource a *Manager
 /// write targets? Coupling the auto-improvement to the agent's own scope cuts
 /// cross-agent skill poisoning while leaving genuine self-improvement open.
 ///
@@ -548,7 +548,7 @@ pub(crate) fn mcp_result_budget_charge(is_mcp_tool: bool, result_byte_len: usize
 ///   An unresolved / not-owned skill is NOT owned (fail-closed → Scope refusal;
 ///   the inner tool would `NotFound` anyway).
 /// - Everything else (create_skill = new content; prompt writes = no ownership,
-///   risk accepted §13-MF-2; workflow organization = not agent-scoped;
+///   risk accepted; workflow organization = not agent-scoped;
 ///   grant/revoke = bounded by the same-kind guard + Critical risk, recoverable
 ///   in AgentForm) is owned by construction.
 async fn manager_owns_target(
@@ -586,7 +586,7 @@ async fn manager_owns_target(
 /// `preview` is neutralized (bidi/control stripped, then truncated) and clearly
 /// labeled untrusted on the frontend. The whole object is run through
 /// `sanitize_for_surrealdb` BEFORE `create_and_wait_validation` because
-/// `db.create` does NOT sanitize (ERR_SURREAL_006: a `\0` would panic).
+/// `db.create` does NOT sanitize (a `\0` would panic).
 fn build_manager_validation_details(tool_id: &str, operation: &str, args: &Value) -> Value {
     // Pick the most informative free-text arg for the preview, if present.
     let preview_src = ["content", "new_name", "name", "skill_name", "edit_summary"]
@@ -646,14 +646,14 @@ fn manager_refusal_message(reason: ManagerWriteRefusal, tool_id: &str, op: &str)
     }
 }
 
-/// B1/B2/B4 — the SINGLE *Manager-write enforcement point. Returns `Some(result)`
+/// The SINGLE *Manager-write enforcement point. Returns `Some(result)`
 /// when `call` is a *Manager WRITE op (fully handled here: executed + audited,
 /// validated, or refused); returns `None` when it is not a *Manager write (a
 /// read or a non-*Manager tool) so the caller proceeds with the normal flow.
 ///
 /// Centralizes what the old read-only wrapper backstop did, but governed by the
 /// user's EXISTING validation settings instead of a blanket refusal — armed by
-/// the explicit `ctx.is_detached` (covers `rerun_worker`, §4.4).
+/// the explicit `ctx.is_detached` (covers `rerun_worker`).
 async fn manager_write_gate(
     call: &FunctionCall,
     ctx: &FunctionCallContext<'_>,
@@ -705,7 +705,7 @@ async fn manager_write_gate(
     // compose_card) passes in Auto + always_confirm_high OFF (PreApproved), and
     // requires review when always_confirm_high is ON (High → detached refuse /
     // attended modal). The cross-agent skill-creation risk is accepted-and-named,
-    // consistent with prompts (§13-MF-2, option B) and grant/revoke (§4.1):
+    // consistent with prompts (option B) and grant/revoke:
     // mitigated by Kanban-only gating + audit + toast + manual recovery.
     let requires_validation =
         should_require_validation(&settings, &ValidationType::ManagerWrite, &risk);
@@ -722,7 +722,7 @@ async fn manager_write_gate(
     match action {
         ManagerWriteAction::Execute => {
             // Auto / permissive: run it, then record PreApproved + opportunistic
-            // toast. Count it toward the per-run cap (self-grants included, MF-3).
+            // toast. Count it toward the per-run cap (self-grants included).
             *manager_writes_made += 1;
             match tool.execute(call.arguments.clone()).await {
                 Ok(result) => {
@@ -815,12 +815,12 @@ async fn manager_write_gate(
 ///
 /// `mcp_result_bytes` is the cumulative sink byte size (serialized result +
 /// error) of all prior MCP results in this run — success AND error — consulted by
-/// the R-SEC-10 per-run budget gate (the caller accumulates it in `iteration.rs`
+/// the per-run budget gate (the caller accumulates it in `iteration.rs`
 /// after each MCP call via [`result_sink_byte_len`] + [`mcp_result_budget_charge`]).
 ///
 /// `manager_writes_made` is the run-scoped count of *Manager content/privilege
 /// writes already executed, consulted + incremented by the *Manager write gate
-/// for the per-run volume cap (§4.3).
+/// for the per-run volume cap.
 pub(crate) async fn execute_function_call(
     call: &FunctionCall,
     ctx: &FunctionCallContext<'_>,
@@ -835,13 +835,13 @@ pub(crate) async fn execute_function_call(
     if let Some((server, tool)) = call.parse_mcp_name() {
         // Execute via MCP
         if let Some(mcp) = ctx.mcp_manager {
-            // R-SEC-10: snapshot the pre-call count BEFORE recording this
+            // Snapshot the pre-call count BEFORE recording this
             // attempt, so the per-run cap (CHECK-BEFORE-REFUSE) counts only
             // prior calls and allows EXACTLY MCP_MAX_CALLS_PER_RUN.
             let calls_before = mcp_calls_made.len();
             mcp_calls_made.push(call.name.clone());
 
-            // R-SEC-4: in a DETACHED run there is no human to answer the
+            // In a DETACHED run there is no human to answer the
             // validation modal, so the gate is the per-agent allowlist —
             // evaluated UNCONDITIONALLY (independent of ValidationMode, which
             // would otherwise let `Auto` short-circuit to fail-open). Keyed by
@@ -858,8 +858,8 @@ pub(crate) async fn execute_function_call(
                     ctx.is_delegated,
                 );
                 if !armed {
-                    // R-SEC-11: structured refusal audit (no secret). `delegated`
-                    // distinguishes the R1 confused-deputy refusal (armed for the
+                    // Structured refusal audit (no secret). `delegated`
+                    // distinguishes the confused-deputy refusal (armed for the
                     // agent but not flagged `allow_in_delegated_runs`) from a
                     // plain unarmed refusal.
                     warn!(
@@ -869,7 +869,7 @@ pub(crate) async fn execute_function_call(
                         delegated = ctx.is_delegated,
                         "MCP tool refused: not armed for this agent in a detached run"
                     );
-                    // R2: persist the refusal into the EXISTING audit log
+                    // Persist the refusal into the EXISTING audit log
                     // (Settings > Audit Log) so a no-human-in-the-loop block is
                     // visible, not only traced. Unconditional + best-effort
                     // (never blocks or fails the refusal itself).
@@ -899,7 +899,7 @@ pub(crate) async fn execute_function_call(
                     );
                 }
                 // Armed: proceed without the interactive modal (no human
-                // present). B3: record the pre-approved execution into the audit
+                // present). Record the pre-approved execution into the audit
                 // log so an unattended MCP call that ran by allowlist policy is
                 // traceable (decided_by = PreApproved). Best-effort + run-scoped
                 // dedup per (tool, op) inside the helper; MCP is Medium risk so
@@ -919,7 +919,7 @@ pub(crate) async fn execute_function_call(
                 }
             }
 
-            // R-SEC-10: per-run cap + cumulative byte budget. Checked AFTER the
+            // Per-run cap + cumulative byte budget. Checked AFTER the
             // detached gate (a budget refusal can never short-circuit / fail-open
             // that gate) and BEFORE the attended modal (don't prompt the human for
             // a call we will refuse anyway). Applies to BOTH run types. An
@@ -977,7 +977,7 @@ pub(crate) async fn execute_function_call(
         if let Some(tool) = matching_tool {
             tools_used.push(call.name.clone());
 
-            // B1/B2/B4 — *Manager WRITE gate (prompt/skill/workflow). Runs BEFORE
+            // *Manager WRITE gate (prompt/skill/workflow). Runs BEFORE
             // the generic tool validation: a write op is fully handled here
             // (executed + audited PreApproved, validated via modal, or refused).
             // A read op / non-Manager tool returns None and falls through.
@@ -1125,7 +1125,7 @@ mod tests {
     }
 
     /// A Kanban-kind primary agent must NEVER receive Spawn/Delegate/Parallel,
-    /// even with a full context present (PAT_KANBAN_STRICT_SEPARATION). The
+    /// even with a full context present (strict Kanban separation). The
     /// explicitly-configured SpawnAgentTool is stripped defensively.
     #[tokio::test]
     async fn kanban_primary_agent_never_gets_sub_agent_tools() {
@@ -1161,7 +1161,7 @@ mod tests {
         );
     }
 
-    /// B(-1): a non-Kanban (kind = None) agent must NOT receive ANY *Manager
+    /// A non-Kanban (kind = None) agent must NOT receive ANY *Manager
     /// tool — they are reserved to Kanban supervisors. The defensive strip in
     /// `create_local_tools` removes them from the tool set entirely, even when
     /// the user persisted them on the config.
@@ -1206,7 +1206,7 @@ mod tests {
         );
     }
 
-    /// B(-1): a Kanban-kind agent DOES receive the *Manager tools (they are the
+    /// A Kanban-kind agent DOES receive the *Manager tools (they are the
     /// supervisors that curate prompts/skills/workflows). The detached
     /// classification is no longer about wrapping — write governance moved to
     /// the validation gate in `execute_function_call`.
@@ -1309,7 +1309,7 @@ mod tests {
     }
 
     // ----------------------------------------------------------------------
-    // B0: *Manager write classification + decision (pure).
+    // *Manager write classification + decision (pure).
     // ----------------------------------------------------------------------
 
     #[test]
@@ -1362,7 +1362,7 @@ mod tests {
         );
     }
 
-    /// MF-4 (BLOCKING): every operation a *Manager tool actually dispatches must
+    /// Every operation a *Manager tool actually dispatches must
     /// be covered exactly once by CONTENT ∪ PRIVILEGE ∪ READONLY. An op present
     /// in the dispatch `match` but absent from the classification would be a
     /// fail-open silent write once the hard refusal is replaced by a flow.
@@ -1460,12 +1460,12 @@ mod tests {
             manager_write_action(true, false, true, true, 0, MANAGER_MAX_WRITES_PER_RUN),
             ManagerWriteAction::Validate
         );
-        // Detached + requires validation → refuse (court-circuit, B2): no modal.
+        // Detached + requires validation → refuse (court-circuit): no modal.
         assert_eq!(
             manager_write_action(true, true, true, true, 0, MANAGER_MAX_WRITES_PER_RUN),
             ManagerWriteAction::Refuse(ManagerWriteRefusal::Detached)
         );
-        // Attended + requires validation but NO helper → fail closed (B4).
+        // Attended + requires validation but NO helper → fail closed.
         assert_eq!(
             manager_write_action(true, false, false, true, 0, MANAGER_MAX_WRITES_PER_RUN),
             ManagerWriteAction::Refuse(ManagerWriteRefusal::NoHelper)
@@ -1519,7 +1519,7 @@ mod tests {
     }
 
     // ----------------------------------------------------------------------
-    // B1/B5 — *Manager write gate, end-to-end through execute_function_call.
+    // *Manager write gate, end-to-end through execute_function_call.
     // ----------------------------------------------------------------------
 
     /// Builds a FunctionCallContext for the gate integration tests.
@@ -1552,10 +1552,10 @@ mod tests {
             .count()
     }
 
-    /// B1 nominal: a DETACHED Kanban content write executes under the DEFAULT
+    /// Nominal: a DETACHED Kanban content write executes under the DEFAULT
     /// validation settings (Selective + tools unchecked → no validation
     /// required) and is recorded as a `PreApproved` audit entry. This is the
-    /// auto-improvement path K6.1 now permits (the old wrapper refused it).
+    /// auto-improvement path now permitted (the old wrapper refused it).
     #[tokio::test]
     async fn detached_manager_write_executes_and_audits_preapproved() {
         let (state, _g) = setup_test_state().await;
@@ -1593,7 +1593,7 @@ mod tests {
         );
     }
 
-    /// B1 scope §4.2(A): a DETACHED update_skill targeting a skill the agent
+    /// Scope: a DETACHED update_skill targeting a skill the agent
     /// does NOT own (its name is not in `config.skills`) is refused for scope —
     /// regardless of the validation mode — and audited.
     #[tokio::test]
@@ -1630,7 +1630,7 @@ mod tests {
         assert_eq!(mw, 0, "a refused write must NOT count toward the cap");
     }
 
-    /// B2/B1 at the gate: a DETACHED content write that WOULD require validation
+    /// At the gate: a DETACHED content write that WOULD require validation
     /// (Manual mode) is refused immediately (no modal), not executed.
     #[tokio::test]
     async fn detached_manager_write_refused_when_validation_required() {
@@ -1677,9 +1677,6 @@ mod tests {
         assert_eq!(mw, 0, "a refused write must NOT count toward the cap");
     }
 
-    /// B1 fix (§4.2(A)): a `create_skill` targeting ANOTHER agent is forced
-    /// through validation even under default (Auto-permissive) settings — so in
-    /// a DETACHED run it is REFUSED, never executed unreviewed. Closes the
     /// `create_skill` is governed UNIFORMLY like `create_prompt`: in a detached
     /// run under default (Auto-permissive) settings it PASSES the gate (it is the
     /// legitimate compose_card auto-improvement flow — a Kanban supervisor
@@ -1721,7 +1718,7 @@ mod tests {
     }
 
     // ----------------------------------------------------------------------
-    // R-SEC-4: detached MCP tool allowlist gate
+    // Detached MCP tool allowlist gate
     // ----------------------------------------------------------------------
 
     use crate::models::agent::McpToolAllowlistEntry;
@@ -1736,7 +1733,7 @@ mod tests {
     }
 
     /// Like [`allow`] but the entry is also armed for DELEGATED detached runs
-    /// (`allow_in_delegated_runs = true`, R1).
+    /// (`allow_in_delegated_runs = true`).
     fn allow_delegated(server_id: &str, tools: &[&str]) -> McpToolAllowlistEntry {
         McpToolAllowlistEntry {
             server_id: server_id.to_string(),
@@ -1745,10 +1742,10 @@ mod tests {
         }
     }
 
-    /// R1 matrix on the pure decision: the per-entry `allow_in_delegated_runs`
+    /// Delegated-flag matrix on the pure decision: the per-entry `allow_in_delegated_runs`
     /// flag ONLY gates DELEGATED runs (Delegate/Parallel). A DIRECT detached run
     /// (rerun-primary / analyze / compose / Spawn-clone, `is_delegated = false`)
-    /// ignores the flag — its behavior is exactly the pre-R1 armed check.
+    /// ignores the flag — its behavior is exactly the non-delegated armed check.
     #[test]
     fn armed_decision_respects_delegated_flag() {
         let strict = vec![allow("srv-id-1", &["read"])]; // flag = false (default/strict)
@@ -1812,7 +1809,7 @@ mod tests {
 
     #[test]
     fn budget_check_allows_under_both_limits() {
-        // R-SEC-10: a run well under both ceilings proceeds.
+        // A run well under both ceilings proceeds.
         assert!(mcp_run_budget_check(0, 0).is_ok());
         // One below each limit is still allowed (the cap allows EXACTLY
         // MCP_MAX_CALLS_PER_RUN calls, so calls_so_far == cap-1 passes).
@@ -1859,7 +1856,7 @@ mod tests {
 
     #[test]
     fn oversized_mcp_result_is_refused_success_or_error() {
-        // R-SEC-10.1: an MCP result past the per-result cap is replaced by an
+        // An MCP result past the per-result cap is replaced by an
         // actionable error (closes the cumulative soft-ceiling). SUCCESS-AGNOSTIC:
         // the wiring serializes the result the same way whether the call
         // succeeded or errored, so a compromised server's giant ERROR payload is
@@ -1883,13 +1880,13 @@ mod tests {
     #[test]
     fn oversized_local_tool_result_is_out_of_scope() {
         // Local tools are user-trusted; the per-result MCP cap must not touch them
-        // (the R-SEC-10 threat model is a compromised MCP server, not local tools).
+        // (the threat model is a compromised MCP server, not local tools).
         assert!(mcp_oversized_result_refusal(false, MCP_MAX_SINGLE_RESULT_BYTES * 4).is_none());
     }
 
     #[test]
     fn mcp_result_budget_charge_counts_every_mcp_result() {
-        // R-SEC-10 twin fix: the cumulative budget charges EVERY MCP result, not
+        // Twin fix: the cumulative budget charges EVERY MCP result, not
         // just successful ones — a compromised server can flood medium-sized ERROR
         // payloads (each under the per-result cap) that would otherwise bypass the
         // cumulative gate. Success-agnostic (no success parameter).
@@ -2040,7 +2037,7 @@ mod tests {
 
     #[test]
     fn agent_config_allowlist_round_trips_through_serde() {
-        // R-SEC-4 persistence (Rust side): the nested array<object> survives a
+        // Allowlist persistence (Rust side): the nested array<object> survives a
         // serialize -> deserialize round-trip without dropping sub-keys.
         let config = agent_config_from(serde_json::json!({
             "id": "a1",
@@ -2077,11 +2074,11 @@ mod tests {
 
     #[tokio::test]
     async fn detached_refusal_is_audit_grade_and_still_counts_the_call() {
-        // R-SEC-11: a detached refusal must (1) name the unattended/detached
+        // A detached refusal must (1) name the unattended/detached
         // context in the returned failure so the audit trail is unambiguous,
         // and (2) the refused call must still be recorded in `mcp_calls_made`
         // (the counter is bumped before the gate — relevant for the per-run MCP
-        // budget/audit, R-SEC-10). The allowlist here references a SERVER ID
+        // budget/audit). The allowlist here references a SERVER ID
         // that no live server resolves to (e.g. a deleted server): the call's
         // server name cannot be resolved -> fail-closed, no panic.
         let (state, _g) = setup_test_state().await;
@@ -2112,7 +2109,7 @@ mod tests {
 
     #[tokio::test]
     async fn mcp_call_refused_when_run_byte_budget_exhausted_even_attended() {
-        // R-SEC-10: the per-run byte budget is NOT coupled to detached mode — it
+        // The per-run byte budget is NOT coupled to detached mode — it
         // gates ATTENDED runs too, and trips BEFORE the tool is dispatched. Here
         // the run is attended (is_detached=false), no allowlist, no helper; the
         // budget is already at the ceiling, so the call is refused for budget
@@ -2148,7 +2145,7 @@ mod tests {
 
     #[tokio::test]
     async fn mcp_call_refused_when_run_call_cap_reached() {
-        // R-SEC-10: once MCP_MAX_CALLS_PER_RUN calls have been made, the next is
+        // Once MCP_MAX_CALLS_PER_RUN calls have been made, the next is
         // refused (CHECK-BEFORE-REFUSE on the pre-call count). Attended run, no
         // helper, so the cap is the only thing that can refuse here.
         let (state, _g) = setup_test_state().await;
@@ -2177,7 +2174,7 @@ mod tests {
 
     #[tokio::test]
     async fn mcp_budget_does_not_fail_open_detached_gate() {
-        // R-SEC-10 must NOT fail-open R-SEC-4: a detached UNARMED call that is
+        // The byte budget must NOT fail-open the detached gate: a detached UNARMED call that is
         // also over budget stays refused, and the detached gate runs FIRST so the
         // refusal is the audited allowlist refusal (not the budget one). The key
         // invariant is that an over-budget state never lets an unarmed detached
@@ -2212,8 +2209,8 @@ mod tests {
 
     #[tokio::test]
     async fn mcp_budget_gates_armed_detached_call_after_the_gate_passes() {
-        // R-SEC-10 applies on the detached path too: an ARMED tool clears the
-        // R-SEC-4 gate but is still refused once the run is over budget (the
+        // The byte budget applies on the detached path too: an ARMED tool clears the
+        // allowlist gate but is still refused once the run is over budget (the
         // budget check sits AFTER the gate, BEFORE execution).
         let (state, _g) = setup_test_state().await;
         state
@@ -2247,7 +2244,7 @@ mod tests {
         );
     }
 
-    /// R-SEC-4 TRANSITIVE gate — the hole the direct gate tests above do NOT
+    /// Transitive gate — the hole the direct gate tests above do NOT
     /// catch. A sub-agent task built by a DETACHED parent (spawn / delegate /
     /// parallel call `stamp_detached(.., true)` on the task they hand the
     /// orchestrator) must resolve detached, so an MCP call to an UNARMED tool
@@ -2345,7 +2342,7 @@ mod tests {
         );
     }
 
-    /// R1 + 3.2 end-to-end at the gate, with a RESOLVABLE server (so the
+    /// Delegated flag end-to-end at the gate, with a RESOLVABLE server (so the
     /// decision exercises the flag, not the fail-closed-on-unresolved path).
     /// `validation_helper` is None → proves the gate is UNCONDITIONAL (above
     /// ValidationMode): a delegated detached run cannot open MCP by letting the

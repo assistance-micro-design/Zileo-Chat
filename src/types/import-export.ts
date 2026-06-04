@@ -143,7 +143,7 @@ export interface AgentExportData {
 	/** Whether a Kanban agent auto-analyzes its card reports (v1.3). */
 	autoAnalyzeReports: boolean;
 	/**
-	 * Per-MCP-server tool allowlist (v1.3, R-SEC-4). Entry keys are snake_case.
+	 * Per-MCP-server tool allowlist (v1.3). Entry keys are snake_case.
 	 * Always reset to empty on import (fail-closed authorization boundary).
 	 */
 	mcpToolAllowlist: McpToolAllowlistEntry[];

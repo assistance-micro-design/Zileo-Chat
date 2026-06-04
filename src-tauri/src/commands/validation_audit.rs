@@ -78,7 +78,7 @@ pub async fn write_audit_entry(
 
 /// Persists an audit entry UNCONDITIONALLY, bypassing `audit.enable_logging`.
 ///
-/// Used for security-policy refusals (R-SEC-11 / R2): a refusal to run a tool
+/// Used for security-policy refusals: a refusal to run a tool
 /// with no human in the loop must stay traceable even when the user turned
 /// audit logging off — otherwise an attacker-relevant refusal could be silently
 /// hidden. Like [`write_audit_entry`], failures are logged and swallowed:

@@ -80,7 +80,7 @@ pub mod validation {
     /// (gonflement de `prompt_version` / `skill_version`). Sized well above any
     /// legitimate self-improvement run: a supervisor refining a handful of
     /// prompts/skills in one pass stays far under it, while a runaway/adversarial
-    /// loop is refused once the cap is reached. Self-grants count toward it (MF-3).
+    /// loop is refused once the cap is reached. Self-grants count toward it.
     pub const MANAGER_MAX_WRITES_PER_RUN: usize = 20;
 }
 
@@ -122,7 +122,7 @@ pub mod query_limits {
     pub const DEFAULT_MODELS_LIMIT: usize = 100;
 }
 
-/// Per-run MCP resource budget (R-SEC-10).
+/// Per-run MCP resource budget.
 ///
 /// A single agent run (one tool loop) is bounded independently of the
 /// per-iteration cap so a runaway model or a misbehaving / compromised MCP
@@ -152,7 +152,7 @@ pub mod mcp {
     /// Maximum sink byte size (serialized result + error) of a SINGLE MCP tool
     /// result (10 MiB).
     ///
-    /// R-SEC-10.1 — closes the [`MCP_MAX_RESULT_BYTES_PER_RUN`] soft-ceiling: the
+    /// Closes the [`MCP_MAX_RESULT_BYTES_PER_RUN`] soft-ceiling: the
     /// cumulative budget is a PRE-call gate, so the FIRST oversized result would
     /// otherwise pass through whole (e.g. a compromised server's one-shot giant
     /// payload injected into the prompt once). Any MCP result larger than this is

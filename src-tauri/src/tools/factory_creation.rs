@@ -318,7 +318,7 @@ impl ToolFactory {
 
             "PromptManagerTool" => {
                 // Kanban-only self-gate: resolve the caller's kind so the tool
-                // refuses every operation for a non-Kanban agent (B(-1)).
+                // refuses every operation for a non-Kanban agent.
                 let agent_kind = self.resolve_agent_kind(&agent_id).await;
                 let tool = PromptManagerTool::new(self.db.clone(), agent_id.clone(), agent_kind);
                 info!("PromptManagerTool instance created");
@@ -333,7 +333,7 @@ impl ToolFactory {
             }
 
             "WorkflowManagerTool" => {
-                // Kanban-only self-gate (B(-1)): mirror SkillManager.
+                // Kanban-only self-gate: mirror SkillManager.
                 let agent_kind = self.resolve_agent_kind(&agent_id).await;
                 let tool = WorkflowManagerTool::new(self.db.clone(), agent_kind);
                 info!("WorkflowManagerTool instance created");

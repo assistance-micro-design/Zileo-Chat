@@ -104,7 +104,7 @@ pub struct WorkflowManagerTool {
     db: Arc<DBClient>,
     /// Whether the calling agent is a Kanban-kind agent. Workflow curation
     /// (rename/folders) is reserved to Kanban supervisors
-    /// (PAT_KANBAN_STRICT_SEPARATION) — a non-Kanban caller is refused on every
+    /// — a non-Kanban caller is refused on every
     /// operation. Execution-level self-gate complementing the defensive strip
     /// in `create_local_tools`.
     is_kanban: bool,
@@ -474,8 +474,8 @@ impl Tool for WorkflowManagerTool {
     async fn execute(&self, input: Value) -> ToolResult<Value> {
         self.ensure_kanban()?;
         // NOTE: write GOVERNANCE lives in `manager_write_gate`
-        // (agents/execution/tools.rs), not here — see PromptManagerTool::execute
-        // and B4 in the spec. This tool only enforces the kind gate.
+        // (agents/execution/tools.rs), not here — see PromptManagerTool::execute.
+        // This tool only enforces the kind gate.
         self.validate_input(&input)?;
         let op = input["operation"].as_str().unwrap_or("");
         debug!(operation = %op, "WorkflowManagerTool execute");
@@ -935,7 +935,7 @@ mod tests {
         assert_eq!(rows[0]["name"], "hidden chat", "name must not change");
     }
 
-    /// B(-1): a non-Kanban caller is refused on every operation at execution,
+    /// A non-Kanban caller is refused on every operation at execution,
     /// even a read — the self-gate complements the defensive strip upstream.
     #[tokio::test]
     async fn non_kanban_caller_is_denied_every_operation() {

@@ -50,12 +50,12 @@ pub(crate) struct IterationMutState<'a> {
     pub tokens: &'a mut TokenTracker,
     pub tools_used: &'a mut Vec<String>,
     pub mcp_calls_made: &'a mut Vec<String>,
-    /// R-SEC-10: cumulative sink byte size (serialized result + error) of MCP
+    /// Cumulative sink byte size (serialized result + error) of MCP
     /// results so far in this run — success AND error (a compromised server
     /// controls error size too). Read before each call to gate the per-run byte
     /// budget, then grown by each MCP result's post per-result-cap sink size.
     pub mcp_result_bytes: &'a mut usize,
-    /// §4.3: run-scoped count of *Manager content/privilege writes executed,
+    /// Run-scoped count of *Manager content/privilege writes executed,
     /// consulted + incremented by the *Manager write gate for the per-run cap.
     pub manager_writes_made: &'a mut usize,
     pub iteration_metrics_data: &'a mut Vec<IterationMetrics>,
@@ -371,7 +371,7 @@ pub(crate) async fn run_single_iteration(
             ),
         );
 
-        // R-SEC-10: pass the cumulative MCP byte total so the per-run budget
+        // Pass the cumulative MCP byte total so the per-run budget
         // gate can refuse BEFORE this call is dispatched (read by value here;
         // accumulated below after each MCP call — success or error).
         let mcp_bytes_so_far = *mstate.mcp_result_bytes;
@@ -395,14 +395,14 @@ pub(crate) async fn run_single_iteration(
         // the loop instead.
         let mut image_attachment = take_image_attachment(&mut result);
 
-        // R-SEC-10.1: per-result MCP size cap. The size that reaches the sinks is
+        // Per-result MCP size cap. The size that reaches the sinks is
         // NOT just the serialized result: a failure carries its (possibly giant)
         // payload in `result.error` while `result.result` is Null, and the LLM
         // message for a failure is `{"error": ...}` (not the serialized result).
         // So measure BOTH fields (`result_sink_byte_len`, post image-strip). If an
         // MCP result exceeds MCP_MAX_SINGLE_RESULT_BYTES, REPLACE it with a clear
         // error BEFORE any of the three sinks (persisted row, stream chunk, LLM
-        // message) sees it — closing the R-SEC-10 soft-ceiling where the first
+        // message) sees it — closing the soft-ceiling where the first
         // oversized result passed through whole (a compromised server's one-shot
         // giant payload). SUCCESS-AGNOSTIC: a giant ERROR payload is just as
         // dangerous and is capped identically. Never truncated (would corrupt the
@@ -419,7 +419,7 @@ pub(crate) async fn run_single_iteration(
             warn!(
                 tool = %call.name,
                 bytes = result_byte_len,
-                "MCP result refused: exceeds the per-result size cap (R-SEC-10.1)"
+                "MCP result refused: exceeds the per-result size cap"
             );
             result = FunctionCallResult::failure(&call.id, &call.name, refusal);
             output_json =
@@ -456,7 +456,7 @@ pub(crate) async fn run_single_iteration(
         let input_json =
             serde_json::to_string(&call.arguments).unwrap_or_else(|_| "{}".to_string());
 
-        // R-SEC-10: grow the per-run MCP byte budget by this result's sink byte
+        // Grow the per-run MCP byte budget by this result's sink byte
         // size (`result_byte_len` = serialized result + error, post image-strip).
         // EVERY MCP result counts — success AND error (a compromised server
         // controls error size too); `result_byte_len` is post per-result cap, so

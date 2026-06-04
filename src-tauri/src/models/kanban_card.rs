@@ -189,7 +189,7 @@ mod tests {
 
     /// A generated-and-awaiting-validation card carries `status='proposed'`.
     /// Locks the wire string both ways (kept in sync with the TS union and the
-    /// schema ASSERT — ERR_SURREAL_019).
+    /// schema ASSERT).
     #[test]
     fn test_status_proposed_round_trip() {
         let parsed: KanbanCardStatus =

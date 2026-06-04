@@ -367,7 +367,7 @@ pub async fn resolve_import_entity(
 /// - **Charset-safe**: appends only `-imported` (optionally `-imported-<n>`).
 ///   The hyphen and digits are valid for every name column, including skills.
 /// - **Length-bounded**: the base is truncated *on a char boundary* (never a
-///   byte slice — ERR_RUST_002) so the final name fits within `max_len`.
+///   byte slice) so the final name fits within `max_len`.
 /// - **Suffix-driven uniqueness**: callers iterate `suffix_n` until the DB
 ///   reports the name free.
 ///

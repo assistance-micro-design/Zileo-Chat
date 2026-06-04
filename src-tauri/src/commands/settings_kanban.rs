@@ -73,8 +73,7 @@ fn apply_update(current: &mut KanbanSettings, update: UpdateKanbanSettingsReques
 /// - `Err(_)` → the (raised) default, so a transient settings-load failure
 ///   never silently shortens the compose ceiling.
 ///
-/// Pure so the compose integration path is unit-testable without a DB
-/// (PAT_RUST_015).
+/// Pure so the compose integration path is unit-testable without a DB.
 pub fn effective_compose_timeout(loaded: Result<KanbanSettings, String>) -> u64 {
     match loaded {
         Ok(settings) => settings

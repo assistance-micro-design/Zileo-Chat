@@ -278,7 +278,7 @@ pub async fn execute_import(
 }
 
 /// Builds agent summaries, detects name conflicts, and warns when an imported
-/// agent's MCP tool allowlist will be reset for security (R-SEC-4).
+/// agent's MCP tool allowlist will be reset for security.
 async fn validate_agents(
     db: &DBClient,
     agents: &[AgentExportData],
@@ -299,7 +299,7 @@ async fn validate_agents(
             folders_count: agent.folders.len(),
         });
 
-        // R-SEC-4 / DECISION A1 (fail-closed): an imported MCP tool allowlist is
+        // Fail-closed: an imported MCP tool allowlist is
         // never hydrated from a third-party file — it is an authorization
         // boundary, and its `server_id` keys do not survive the round-trip. The
         // import always resets it to empty; warn the user so they can re-arm it

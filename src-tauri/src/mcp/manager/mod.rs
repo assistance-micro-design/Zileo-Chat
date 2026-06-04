@@ -213,7 +213,7 @@ impl MCPManager {
     /// Resolves an MCP server's immutable id from its (mutable) display name.
     ///
     /// The agent tool id is `mcp__<server_name>__<tool>`, but the detached
-    /// allowlist (R-SEC-4) is keyed by `server_id` (survives a rename). This
+    /// allowlist is keyed by `server_id` (survives a rename). This
     /// reverse lookup bridges the two. Returns `None` when no running server
     /// carries that name.
     pub async fn get_server_id_by_name(&self, name: &str) -> Option<String> {

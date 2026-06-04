@@ -148,8 +148,7 @@ pub(crate) async fn resolve_validation_if_pending(
     }
 
     // Conditional write. `execute_with_params` is used (not a returning query) to
-    // avoid SurrealDB record deserialization quirks on UPDATE (surrealdb.md /
-    // ERR_SURREAL_002). The `WHERE status = 'pending'` clause keeps it atomic: a
+    // avoid SurrealDB record deserialization quirks on UPDATE. The `WHERE status = 'pending'` clause keeps it atomic: a
     // decision the competing path records in the meantime is never overwritten.
     let extra = extra_set.map(|s| format!(", {}", s)).unwrap_or_default();
     let query = format!(
@@ -235,7 +234,7 @@ fn type_requires_validation(
         ValidationType::FileOp => settings.selective_config.file_ops,
         ValidationType::DbOp => settings.selective_config.db_ops,
         // A *Manager write reuses the existing `tools` checkbox in Selective
-        // mode (no new tri-state — §2/§7). A dedicated "Manager writes" checkbox
+        // mode (no new tri-state). A dedicated "Manager writes" checkbox
         // is an optional future refinement.
         ValidationType::ManagerWrite => settings.selective_config.tools,
     }
@@ -621,18 +620,18 @@ impl ValidationHelper {
         risk_level: RiskLevel,
         is_detached: bool,
     ) -> Result<(), ToolError> {
-        // B2 court-circuit: an UNATTENDED (detached) run has no human to answer
+        // Court-circuit: an UNATTENDED (detached) run has no human to answer
         // the modal, and the boot catch-up loop (`catchup_unanalyzed_review_cards`)
         // is sequential — emitting a modal and polling would block each card for
         // up to the full `timeout_seconds` (up to 600s × N cards = DoS-boot).
-        // Apply the detached policy DIRECTLY: refuse + audit (façon R-SEC-4),
+        // Apply the detached policy DIRECTLY: refuse + audit,
         // never create the request, never emit the event, never poll.
         if is_detached {
             warn!(
                 validation_id = %validation_id,
                 workflow_id = %workflow_id,
                 validation_type = %validation_type,
-                "Validation required in an unattended (detached) run — refusing without a modal (B2)"
+                "Validation required in an unattended (detached) run — refusing without a modal"
             );
             self.record_detached_validation_refusal(
                 workflow_id,
@@ -775,7 +774,7 @@ impl ValidationHelper {
     }
 
     /// Records a security-policy refusal of an MCP tool in a DETACHED run into
-    /// the audit log (R-SEC-11 / R2), so refusals surface in the
+    /// the audit log, so refusals surface in the
     /// `Settings > Audit Log` page. Best-effort: never propagates errors.
     ///
     /// Written UNCONDITIONALLY (bypasses `audit.enable_logging`): a refusal with
@@ -789,7 +788,7 @@ impl ValidationHelper {
     /// * `server_id` - Immutable MCP server id, or `None` if unresolved.
     /// * `reason` - Short, secret-free explanation of the refusal.
     /// * `is_delegated` - Whether the refused run was a delegated sub-agent;
-    ///   distinguishes the R1 confused-deputy refusal (armed for the agent but
+    ///   distinguishes the confused-deputy refusal (armed for the agent but
     ///   not flagged `allow_in_delegated_runs`) from a plain unarmed refusal.
     /// * `workflow_id` - Workflow context; empty is recorded as no workflow.
     pub(crate) async fn record_security_refusal(
@@ -842,7 +841,7 @@ impl ValidationHelper {
         write_audit_entry_unconditional(&self.db, draft).await;
     }
 
-    /// Records the B2 court-circuit refusal of a validation-required operation
+    /// Records the court-circuit refusal of a validation-required operation
     /// in a DETACHED run into the audit log. Best-effort, unconditional (a
     /// no-human refusal must stay traceable even when audit logging is off).
     ///
@@ -926,7 +925,7 @@ impl ValidationHelper {
     ///
     /// Written UNCONDITIONALLY (bypasses `audit.enable_logging`): the persisted
     /// `PreApproved` row is the REAL safety net for self-improvement writes (the
-    /// toast is opportunistic and lost if the app is closed — §4.5/§13), so it
+    /// toast is opportunistic and lost if the app is closed), so it
     /// must survive even when audit logging is off. Run-scoped dedup on
     /// `(tool_name, operation)` (anti-flood, mirrors `record_security_refusal`).
     ///
@@ -978,7 +977,7 @@ impl ValidationHelper {
         };
         write_audit_entry_unconditional(&self.db, draft).await;
 
-        // Opportunistic live toast for High/Critical writes only (§4.5/§13).
+        // Opportunistic live toast for High/Critical writes only.
         if matches!(risk_level, RiskLevel::High | RiskLevel::Critical) {
             if let Some(ref app_handle) = self.app_handle {
                 let event = ManagerWriteNoticeEvent {

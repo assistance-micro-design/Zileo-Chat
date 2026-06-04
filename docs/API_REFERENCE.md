@@ -45,7 +45,7 @@ Agent CRUD and configuration management.
 | `list_agents` | List all agents with summary (no system_prompt). `AgentSummary` carries `has_file_manager` and `has_mcp_auto_approval` (derived, read-only) so the UI can flag agents with a FileManager or ≥1 genuinely armed MCP tool. |
 | `get_agent_config` | Get full agent configuration |
 | `create_agent` | Create agent with LLM, tools, skills, MCP servers config |
-| `update_agent` | Partial tri-state update of agent configuration. Also the single entry point for the security authorizations edited from `settings/validation`: `mcp_tool_allowlist` (per-agent MCP allowlist, R-SEC-4) and `require_file_confirmation`. A field absent from the payload keeps the stored value (merge), so editing an agent's name never silently disarms its allowlist. |
+| `update_agent` | Partial tri-state update of agent configuration. Also the single entry point for the security authorizations edited from `settings/validation`: `mcp_tool_allowlist` (per-agent MCP allowlist) and `require_file_confirmation`. A field absent from the payload keeps the stored value (merge), so editing an agent's name never silently disarms its allowlist. |
 | `delete_agent` | Delete agent from DB and registry |
 
 ### Skill (`commands/skill.rs`)
@@ -113,7 +113,7 @@ Human-in-the-loop validation for agent operations.
 
 ### Validation Audit (`commands/validation_audit.rs`)
 
-Append-only audit log for validation decisions. `decided_by` ∈ {user, auto, timeout, policy, pre_approved} and `decision` ∈ {approved, rejected, skipped, timeout, blocked} — `blocked` / `policy` record a fail-closed MCP allowlist refusal in a detached run (R-SEC-11), `pre_approved` a `*Manager` write executed under Auto. All are filterable from the Audit Log page.
+Append-only audit log for validation decisions. `decided_by` ∈ {user, auto, timeout, policy, pre_approved} and `decision` ∈ {approved, rejected, skipped, timeout, blocked} — `blocked` / `policy` record a fail-closed MCP allowlist refusal in a detached run, `pre_approved` a `*Manager` write executed under Auto. All are filterable from the Audit Log page.
 
 | Command | Description |
 |---------|-------------|
@@ -298,7 +298,7 @@ Secure API key storage (AES-256-GCM via SecureKeyStore). Stored secrets are neve
 
 ### Import/Export (`commands/import_export/`)
 
-Configuration import/export (schema v1.0 → v1.3, backward compatible). v1.3 additionally round-trips `agent.kind`, `auto_analyze_reports`, the model `supports_vision` / `supports_forced_tool_choice` flags, `skill.kind`, and the custom-provider strict toggles; the MCP tool allowlist is reset fail-closed on import (R-SEC-4) and imported MCP servers are re-validated through the SSRF screen.
+Configuration import/export (schema v1.0 → v1.3, backward compatible). v1.3 additionally round-trips `agent.kind`, `auto_analyze_reports`, the model `supports_vision` / `supports_forced_tool_choice` flags, `skill.kind`, and the custom-provider strict toggles; the MCP tool allowlist is reset fail-closed on import and imported MCP servers are re-validated through the SSRF screen.
 
 | Command | Description |
 |---------|-------------|

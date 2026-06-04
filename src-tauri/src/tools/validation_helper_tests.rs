@@ -430,7 +430,7 @@ async fn test_falls_back_to_default_when_settings_unavailable() {
     assert_eq!(clamp_timeout_seconds(loaded.timeout_seconds), 60);
 }
 
-/// B2: a validation-required operation in a DETACHED run must be refused
+/// A validation-required operation in a DETACHED run must be refused
 /// IMMEDIATELY (no modal, no poll, no row), within milliseconds — the boot
 /// catch-up loop must never block. A `validation_request` row is NOT created.
 #[tokio::test]
@@ -618,7 +618,7 @@ fn test_file_op_details() {
 }
 
 // =====================================================
-// R2 / R-SEC-11: security-policy refusal audit
+// Security-policy refusal audit
 // =====================================================
 
 /// Reads the raw audit rows (selected fields) for assertions.
@@ -775,7 +775,7 @@ async fn record_security_refusal_metadata_carries_reason_server_and_delegated() 
 
     let rows = read_audit_rows(&helper.db).await;
     assert_eq!(rows.len(), 1);
-    // metadata is stored as a JSON string (ERR_SURREAL_001).
+    // metadata is stored as a JSON string.
     let meta_str = rows[0]["metadata"]
         .as_str()
         .expect("metadata is a JSON string");

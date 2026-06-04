@@ -118,7 +118,7 @@ export const kanbanError = derivedStores.error;
  * keeps that single point in sync; the raw `kanbanCards` derived store still
  * CONTAINS proposed cards (the validation zone consumes them). This is one of
  * the TWO `proposed` exclusion points; the other is `template_has_pending_instance`
- * on the scheduler (B1), so a proposed card never blocks a recurrence either.
+ * on the scheduler, so a proposed card never blocks a recurrence either.
  */
 export const kanbanCardsByColumn = derived(baseStore._store, (state) => {
 	const groups: Record<KanbanColumn, KanbanCard[]> = {

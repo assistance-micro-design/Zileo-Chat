@@ -214,7 +214,7 @@ pub(crate) struct ToolLoopContext<'a> {
     pub tool_factory: Option<&'a Arc<ToolFactory>>,
     pub agent_context: Option<&'a AgentToolContext>,
     /// True for an UNATTENDED (detached) run with no human at the keyboard:
-    /// auto-analyze, compose-card, worker re-run (R-SEC-4). Carried explicitly
+    /// auto-analyze, compose-card, worker re-run. Carried explicitly
     /// — NOT derived from `agent_context.is_none()`, which would misclassify
     /// `rerun_worker` (it passes `Some(agent_context)`) as attended = fail-open.
     pub is_detached: bool,
@@ -223,7 +223,7 @@ pub(crate) struct ToolLoopContext<'a> {
     /// `task.is_delegated()`; the direct detached callers (rerun_worker,
     /// analyze, compose) leave it `false`. Threaded into the MCP gate so a
     /// delegated run additionally requires the entry's `allow_in_delegated_runs`
-    /// flag (R1). Spawned sub-agents leave it `false` (clone = same privilege).
+    /// flag. Spawned sub-agents leave it `false` (clone = same privilege).
     pub is_delegated: bool,
 }
 
@@ -559,11 +559,11 @@ pub(crate) async fn execute_with_tools(
     let start = std::time::Instant::now();
     let mut tools_used: Vec<String> = Vec::new();
     let mut mcp_calls_made: Vec<String> = Vec::new();
-    // R-SEC-10: cumulative serialized size of successful MCP results across the
+    // Cumulative serialized size of successful MCP results across the
     // whole run, gating the per-run byte budget alongside `mcp_calls_made`.
     let mut mcp_result_bytes: usize = 0;
-    // §4.3: run-scoped count of *Manager content/privilege writes, gating the
-    // per-run write cap in `manager_write_gate` (self-grants included, MF-3).
+    // Run-scoped count of *Manager content/privilege writes, gating the
+    // per-run write cap in `manager_write_gate` (self-grants included).
     let mut manager_writes_made: usize = 0;
     let mut tokens = TokenTracker::new();
     let mut iteration_metrics_data: Vec<IterationMetrics> = Vec::new();
@@ -686,7 +686,7 @@ pub(crate) async fn execute_with_tools(
     // sub-agent tools (Spawn / Delegate / Parallel). This is the single source
     // of truth: every detached caller (rerun_worker, analyze, compose) already
     // sets `ToolLoopContext::is_detached`, so the sub-agent tasks those tools
-    // build inherit it (R-SEC-4 transitive gate) without each caller having to
+    // build inherit it (transitive gate) without each caller having to
     // remember a second flag on the AgentToolContext.
     let loop_is_detached = ctx.is_detached;
     let effective_context = match (ctx.agent_context, &cancellation_token) {

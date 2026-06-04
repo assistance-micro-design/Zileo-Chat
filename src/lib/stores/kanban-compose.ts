@@ -19,7 +19,7 @@
  * stale-entry sweep guards against a frontend leak if a backend task ever dies
  * without emitting (the real cap is freed backend-side by the RAII guard).
  *
- * Root-mounted (PAT_STORE_LIFECYCLE_APP_ROOT) so its listeners survive
+ * Root-mounted so its listeners survive
  * navigation away from /kanban — a compose launched there still toasts and
  * refreshes the board if it finishes while the user is elsewhere.
  *

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Docker spawn-argument guard (R-SEC-6 / LOT 1a).
+//! Docker spawn-argument guard.
 //!
 //! The MCP user supplies the *entire* docker command line; `build_command`
 //! passes `config.args` 100% raw to `docker`. Exec is direct (no shell), so
@@ -43,7 +43,7 @@ const FORBIDDEN_SOURCE_PREFIXES: &[&str] = &[
 /// Validates the raw argument vector that will be handed to `docker`.
 ///
 /// Only [`MCPDeploymentMethod::Docker`] is guarded here: `npx`/`uvx`
-/// supply-chain trust is a separate concern (R-SEC-12) and `http` never
+/// supply-chain trust is a separate concern and `http` never
 /// reaches a process spawn, so both pass through unchanged.
 ///
 /// # Arguments

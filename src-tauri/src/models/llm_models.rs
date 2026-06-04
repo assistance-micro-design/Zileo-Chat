@@ -63,7 +63,7 @@ pub struct LLMModel {
     ///
     /// `deserialize_with` makes an explicit `null` (legacy SCHEMAFULL rows
     /// written before this column existed) coalesce to the default instead of
-    /// failing the whole `LLMModel` (ERR_SERDE_005/006).
+    /// failing the whole `LLMModel`.
     #[serde(
         default,
         deserialize_with = "crate::models::agent::deserialize_bool_default_false"
@@ -77,7 +77,7 @@ pub struct LLMModel {
     ///
     /// `deserialize_with` makes an explicit `null` (legacy SCHEMAFULL rows
     /// written before this column existed) coalesce to the default instead of
-    /// failing the whole `LLMModel` (ERR_SERDE_005/006).
+    /// failing the whole `LLMModel`.
     #[serde(
         default = "default_true",
         deserialize_with = "crate::models::agent::deserialize_bool_default_true"
@@ -679,7 +679,7 @@ mod tests {
         // legacy row written before these columns existed returns them as
         // explicit `null` on a SCHEMAFULL SELECT. `#[serde(default)]` /
         // `#[serde(default = "...")]` cover an ABSENT key but do NOT intercept
-        // an explicit `null` (ERR_SERDE_005/006); without a null-tolerant
+        // an explicit `null`; without a null-tolerant
         // `deserialize_with` the WHOLE LLMModel fails to deserialize ("invalid
         // type: null, expected a boolean"). The SELECTs coalesce today, so no
         // model vanishes in practice, but the struct must be immune by itself.

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! SSRF protection for the MCP HTTP transport (R-SEC-1 / R-SEC-3 / R-SEC-7).
+//! SSRF protection for the MCP HTTP transport.
 //!
 //! Two enforcement points, because hyper/reqwest only invokes a custom
 //! `dns::Resolve` for a *hostname*:
@@ -299,7 +299,7 @@ pub fn screen_resolved_addrs(addrs: &[SocketAddr], policy: ScreenPolicy) -> Resu
     Ok(())
 }
 
-/// R-SEC-7: screens credentials sent over plaintext HTTP.
+/// Screens credentials sent over plaintext HTTP.
 ///
 /// `has_auth` must already account for **both** `auth_type` *and* any sensitive
 /// `extra_headers` (see [`has_sensitive_extra_header`]) — otherwise the strict
@@ -331,7 +331,7 @@ pub fn screen_http_auth(
         Some(url::Host::Ipv6(v6)) => Some(classify_ip(IpAddr::V6(v6))),
         // Reuse `is_loopback_domain` so `localhost`, `app.localhost`, and a
         // trailing-dot FQDN are all treated as loopback consistently with the
-        // pre-connect screen (R4). A non-loopback domain is left unclassified:
+        // pre-connect screen. A non-loopback domain is left unclassified:
         // only literal private IPs and `localhost` are trusted-local — a domain
         // that *resolves* to a private IP is NOT (fail-secure; surfaced in UI).
         Some(url::Host::Domain(d)) => {
@@ -367,7 +367,7 @@ pub fn screen_http_auth(
 /// Returns true when an `extra_headers` map carries a credential-bearing header
 /// (`Authorization`, `X-API-Key`, or any `X-Auth-*`), matched case-insensitively.
 ///
-/// Used to close the R-SEC-7 bypass: an `Authorization`/`X-API-Key` slipped in
+/// Used to close the plaintext-credential bypass: an `Authorization`/`X-API-Key` slipped in
 /// via `extra_headers` (rather than `auth_type`) must still count as
 /// "has auth" so [`screen_http_auth`] can refuse it over plaintext http.
 pub fn has_sensitive_extra_header(extra: &HashMap<String, String>) -> bool {
@@ -421,7 +421,7 @@ pub enum RedirectDecision {
     Refuse(String),
 }
 
-/// Pure decision for a redirect hop (R-SEC-3), independent of reqwest's
+/// Pure decision for a redirect hop, independent of reqwest's
 /// `Attempt` so it can be unit-tested.
 ///
 /// Refuses, in order: too many hops; an `https -> http` downgrade; a
@@ -474,7 +474,7 @@ pub fn classify_redirect(target: &url::Url, prev: &url::Url, hops: usize) -> Red
     }
 }
 
-/// Redirect policy for the MCP HTTP client (R-SEC-3). Delegates each hop to the
+/// Redirect policy for the MCP HTTP client. Delegates each hop to the
 /// pure [`classify_redirect`]: caps hops, blocks `https -> http` downgrade,
 /// refuses cross-host redirects, and screens literal-IP targets (the DNS
 /// resolver is never invoked for a literal-IP redirect target, so it must be
@@ -711,7 +711,7 @@ mod tests {
         assert!(screen_resolved_addrs(&[priv_addr], ScreenPolicy::IMPORT).is_err());
     }
 
-    // ---------- R-SEC-7 ----------
+    // ---------- plaintext-credential screen ----------
 
     #[test]
     fn http_auth_remote_blocked() {
@@ -734,7 +734,7 @@ mod tests {
 
     #[test]
     fn http_auth_localhost_subdomain_is_trusted_local() {
-        // R4: `*.localhost` is treated as loopback (consistent with the
+        // `*.localhost` is treated as loopback (consistent with the
         // pre-connect screen via is_loopback_domain) -> warned, not refused.
         let r = screen_http_auth("http://app.localhost:8080/mcp", true, false);
         assert!(matches!(r, Ok(Some(_))), "got {r:?}");
@@ -781,7 +781,7 @@ mod tests {
         ));
     }
 
-    // ---------- has_sensitive_extra_header (R-SEC-7 bypass closure) ----------
+    // ---------- has_sensitive_extra_header ----------
 
     #[test]
     fn sensitive_extra_header_detects_credential_headers() {
@@ -807,7 +807,7 @@ mod tests {
         assert!(!has_sensitive_extra_header(&HashMap::new()));
     }
 
-    // ---------- redirect policy decision (R-SEC-3 hardening) ----------
+    // ---------- redirect policy decision ----------
 
     fn u(s: &str) -> url::Url {
         url::Url::parse(s).unwrap()

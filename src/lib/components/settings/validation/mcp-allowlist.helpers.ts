@@ -3,7 +3,7 @@ import type { MCPServerStatus } from '$types/mcp';
 
 /**
  * Pure, framework-agnostic helpers that turn an editable per-server arming
- * state into the complete `mcp_tool_allowlist` payload (R-SEC-4 / R1: arm MCP
+ * state into the complete `mcp_tool_allowlist` payload (arm MCP
  * tools for UNATTENDED detached runs, with an optional per-server
  * `allow_in_delegated_runs` flag). Used by `AgentMcpAllowlist.svelte` on the
  * Settings → Validation authorization page (the AgentForm no longer owns the
@@ -14,7 +14,7 @@ import type { MCPServerStatus } from '$types/mcp';
  * Editable arming state for ONE MCP server in the allowlist UI.
  *
  * - `tools`: tool names the user has armed (auto-approved in a detached run);
- * - `allowInDelegatedRuns`: per-server flag (R1) — when true, the armed tools
+ * - `allowInDelegatedRuns`: per-server flag — when true, the armed tools
  *   are also auto-approved when ANOTHER autonomous agent delegates to this one.
  */
 export interface McpServerArming {
@@ -33,8 +33,8 @@ export type McpArmingState = Record<string, McpServerArming>;
  * pretends to edit tools it cannot enumerate.
  *
  * Seeding from the existing allowlist is what makes an open+save WITHOUT
- * changes reproduce the allowlist identically (anti-involuntary-disarm, R1
- * point 6): the rebuilt payload equals the input.
+ * changes reproduce the allowlist identically (anti-involuntary-disarm):
+ * the rebuilt payload equals the input.
  */
 export function seedMcpArmingState(
 	existing: McpToolAllowlistEntry[],

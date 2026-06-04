@@ -106,7 +106,7 @@ pub struct PromptManagerTool {
     agent_id: String,
     /// Whether the calling agent is a Kanban-kind agent. The prompt library is
     /// only writable/readable through this tool by Kanban supervisors
-    /// (PAT_KANBAN_STRICT_SEPARATION) — a non-Kanban caller receives
+    /// — a non-Kanban caller receives
     /// `PermissionDenied` on every operation. This is the execution-level
     /// self-gate that complements the defensive strip in `create_local_tools`.
     is_kanban: bool,
@@ -365,7 +365,7 @@ impl Tool for PromptManagerTool {
         // the single enforcement point in `execute_function_call`. Any NEW code
         // path that calls this tool's `execute` outside the agent tool loop MUST
         // replicate that gate, or write governance is bypassed (kind gating above
-        // still holds). See B4 in docs/specs/2026-06-02_spec-validation-detached-modal.md.
+        // still holds).
         self.validate_input(&input)?;
         let op = input["operation"].as_str().unwrap_or("");
         debug!(operation = %op, "PromptManagerTool execute");
@@ -440,7 +440,7 @@ mod tests {
 
     #[tokio::test]
     async fn non_kanban_caller_is_denied_every_operation() {
-        // B(-1): the prompt library is curated only by Kanban supervisors. A
+        // The prompt library is curated only by Kanban supervisors. A
         // standard (kind = None) caller must be refused at execution even for a
         // read — the self-gate complements the defensive strip upstream.
         let (state, _g) = crate::test_utils::setup_test_state().await;

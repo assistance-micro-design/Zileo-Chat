@@ -59,9 +59,9 @@ where
 ///
 /// Legacy agent rows written before a `Vec` column existed return that column
 /// as explicit `null` on a SCHEMAFULL SELECT (the `DEFINE FIELD ... DEFAULT []`
-/// does NOT backfill existing rows — ERR_SURREAL_011). `#[serde(default)]`
+/// does NOT backfill existing rows). `#[serde(default)]`
 /// covers an ABSENT key but does NOT intercept an explicit `null`
-/// (ERR_SERDE_005/006): without this helper `serde_json::from_value` fails with
+/// — without this helper `serde_json::from_value` fails with
 /// "invalid type: null, expected a sequence" and `main.rs` drops the agent on
 /// startup → the whole agent list vanishes from the UI. Mirrors
 /// [`deserialize_bool_default_false`] for the `Vec` case.
@@ -139,7 +139,7 @@ pub enum AgentKind {
     Kanban,
 }
 
-/// One entry of an agent's MCP tool allowlist (R-SEC-4).
+/// One entry of an agent's MCP tool allowlist.
 ///
 /// Lists, per **immutable** `server_id`, the exact MCP tool names this agent is
 /// pre-authorized to call in an **unattended (detached) run** (auto-analyze,
@@ -154,7 +154,7 @@ pub struct McpToolAllowlistEntry {
     /// Exact tool names auto-approved for this server in detached runs.
     #[serde(default)]
     pub tools: Vec<String>,
-    /// R1: whether the armed tools are ALSO authorized when this agent runs as
+    /// Whether the armed tools are ALSO authorized when this agent runs as
     /// a **delegated/parallel** sub-agent of a detached parent — not just in a
     /// **direct** detached run (rerun-primary / analyze / compose).
     ///
@@ -164,7 +164,7 @@ pub struct McpToolAllowlistEntry {
     /// **spawned** sub-agents — they clone the parent's allowlist (same
     /// privilege, no confused-deputy), so the direct-run path gates them.
     /// `#[serde(default)]`: legacy entries without the field deserialize to
-    /// `false` (strict) — same treatment as `tools` (ERR_SURREAL_011: DEFAULT
+    /// `false` (strict) — same treatment as `tools` (DEFAULT
     /// does not backfill existing rows; the serde default is the safety net).
     #[serde(default)]
     pub allow_in_delegated_runs: bool,
@@ -233,11 +233,11 @@ pub struct AgentConfig {
         skip_serializing_if = "is_false"
     )]
     pub auto_analyze_reports: bool,
-    /// MCP tools this agent may call in an unattended (detached) run (R-SEC-4).
+    /// MCP tools this agent may call in an unattended (detached) run.
     /// Empty = nothing armed = every MCP tool refused in detached (fail-closed).
     /// Tolerates `null` from legacy DB rows (column added after they were
     /// written) by falling back to an empty Vec — otherwise the agent would be
-    /// dropped on startup load (ERR_SURREAL_011 / ERR_SERDE_005-006).
+    /// dropped on startup load.
     #[serde(
         default,
         deserialize_with = "deserialize_vec_default",
@@ -357,7 +357,7 @@ pub struct AgentConfigCreate {
     /// Auto-analyze workflow reports on completion (only meaningful for Kanban agents).
     #[serde(default)]
     pub auto_analyze_reports: bool,
-    /// MCP tools auto-approved for this agent in unattended (detached) runs (R-SEC-4).
+    /// MCP tools auto-approved for this agent in unattended (detached) runs.
     #[serde(default)]
     pub mcp_tool_allowlist: Vec<McpToolAllowlistEntry>,
 }
@@ -417,7 +417,7 @@ pub struct AgentConfigUpdate {
     /// Auto-analyze workflow reports flag (absent = keep, value = set).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_analyze_reports: Option<bool>,
-    /// MCP tool allowlist (R-SEC-4; absent = keep existing, value = replace).
+    /// MCP tool allowlist (absent = keep existing, value = replace).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_tool_allowlist: Option<Vec<McpToolAllowlistEntry>>,
 }

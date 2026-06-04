@@ -569,8 +569,8 @@ DEFINE FIELD OVERWRITE kind ON agent TYPE option<string>
     ASSERT $value IS NONE OR $value IN ['kanban'];
 DEFINE FIELD OVERWRITE auto_analyze_reports ON agent TYPE bool DEFAULT false;
 
--- R-SEC-4: per-agent MCP tool allowlist for unattended (detached) runs.
--- Nested object sub-keys are defined explicitly (ERR_SURREAL_001: SCHEMAFULL
+-- Per-agent MCP tool allowlist for unattended (detached) runs.
+-- Nested object sub-keys are defined explicitly (SCHEMAFULL
 -- drops dynamic sub-keys otherwise), mirroring the multimodal attachments[*].* pattern.
 DEFINE FIELD OVERWRITE mcp_tool_allowlist ON agent TYPE array<object> DEFAULT [];
 DEFINE FIELD OVERWRITE mcp_tool_allowlist[*].server_id ON agent TYPE string;
@@ -578,7 +578,7 @@ DEFINE FIELD OVERWRITE mcp_tool_allowlist[*].tools ON agent TYPE array<string> D
 DEFINE FIELD OVERWRITE mcp_tool_allowlist[*].allow_in_delegated_runs ON agent TYPE bool DEFAULT false;
 
 -- Backfill mcp_tool_allowlist on existing agents (DEFAULT only applies to new
--- records — ERR_SURREAL_011). Without this, agents created before this column
+-- records). Without this, agents created before this column
 -- existed keep it NONE: the SCHEMAFULL SELECT then returns `null` and the
 -- startup load (main.rs) fails to deserialize AgentConfig and DROPS the agent,
 -- so the whole agent list vanishes from the UI. Idempotent: re-running the DDL

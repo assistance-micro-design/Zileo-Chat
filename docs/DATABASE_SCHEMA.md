@@ -174,7 +174,7 @@ Append-only audit log of validation decisions (user / auto / timeout). Write fai
 | id | string | | UUID |
 | validation_id | string | | Source `validation_request` id |
 | tool_name | string | | Tool / operation name |
-| decision | string ASSERT IN [approved, rejected, skipped, timeout, blocked] | | Final decision (`blocked` = a fail-closed policy refusal, e.g. an unarmed MCP tool in a detached run — R-SEC-11) |
+| decision | string ASSERT IN [approved, rejected, skipped, timeout, blocked] | | Final decision (`blocked` = a fail-closed policy refusal, e.g. an unarmed MCP tool in a detached run) |
 | decided_by | string ASSERT IN [user, auto, timeout, policy, pre_approved] | | Decision source (`policy` = the detached allowlist gate; `pre_approved` = a `*Manager` write executed under Auto without confirmation) |
 | decided_at | datetime | time::now() | Decision timestamp |
 | risk_level | string ASSERT IN [low, medium, high, critical] | | Risk at decision time |
@@ -230,7 +230,7 @@ User-created agent configurations.
 | kind | option\<string\> ASSERT IN [standard, kanban] | NONE | Agent kind. `kanban` agents only see the supervisor toolkit (PromptManagerTool, SkillManagerTool, WorkflowManagerTool, ListAgentsTool) and cannot be delegated to. `NONE` is treated as `standard` for backward compatibility. |
 | auto_analyze_reports | bool | false | When true, the `workflow_complete` listener auto-triggers `analyze_card_report` for any Kanban card linked to the completing workflow |
 | require_file_confirmation | bool | true | Confirm destructive file ops |
-| mcp_tool_allowlist | array\<object\> | [] | Per-agent MCP tool allowlist gating **unattended** (detached) runs (R-SEC-4). An MCP tool auto-called in a detached run executes only if armed here. Sub-fields declared explicitly (ERR_SURREAL_001). Backfilled to `[]` on legacy rows (`WHERE mcp_tool_allowlist IS NONE`) and read via a null-tolerant deserializer (`#[serde(default)]` does not intercept explicit `null` — ERR_SERDE_006) |
+| mcp_tool_allowlist | array\<object\> | [] | Per-agent MCP tool allowlist gating **unattended** (detached) runs. An MCP tool auto-called in a detached run executes only if armed here. Sub-fields declared explicitly. Backfilled to `[]` on legacy rows (`WHERE mcp_tool_allowlist IS NONE`) and read via a null-tolerant deserializer (`#[serde(default)]` does not intercept explicit `null`) |
 | mcp_tool_allowlist[*].server_id | string | | MCP server id the entry arms |
 | mcp_tool_allowlist[*].tools | array\<string\> | [] | Armed tool names on that server |
 | mcp_tool_allowlist[*].allow_in_delegated_runs | bool | false | When false (default = strict), the entry is honoured only in the agent's own detached runs, not when reached as a Delegate/Parallel callee (closes the cross-agent confused-deputy) |

@@ -215,7 +215,7 @@ pub fn validate_mcp_server_config(config: &MCPServerConfig) -> Result<MCPServerC
     let validated_args = validate_mcp_args(&config.args)?;
     let validated_env = validate_mcp_env(&config.env)?;
 
-    // R-SEC-6 (LOT 1a): pre-validate the docker invocation at create/update so
+    // Pre-validate the docker invocation at create/update so
     // the user gets a form error *before* persistence. The same pure guard is
     // the hard gate at the spawn choke-point (`server_handle::build_command`),
     // which also covers boot/import and legacy configs. No-op for npx/uvx/http.

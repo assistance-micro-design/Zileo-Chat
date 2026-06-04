@@ -147,10 +147,10 @@ pub async fn analyze_card_report_core(
         provider_manager: llm_manager,
         tool_factory: Some(tool_factory),
         agent_context: None,
-        // Auto-analyze runs unattended: enforce the MCP tool allowlist (R-SEC-4).
+        // Auto-analyze runs unattended: enforce the MCP tool allowlist.
         is_detached: true,
         // Direct detached run (the Kanban agent itself), not a delegate → the
-        // R1 per-entry delegation flag does not apply here.
+        // The per-entry delegation flag does not apply here.
         is_delegated: false,
     };
     let exec_report = match tool_loop::execute_with_tools(
@@ -169,7 +169,7 @@ pub async fn analyze_card_report_core(
     {
         Ok(report) => report,
         Err(e) => {
-            // R-SEC-4 anti stall-loop: the tool loop ERRORED (provider error,
+            // Anti stall-loop: the tool loop ERRORED (provider error,
             // SSE timeout, cancellation, max-iterations) BEFORE any verdict
             // could be captured. Record a TERMINAL `kind='analyze'` interaction
             // so this card leaves the boot catch-up victim set
@@ -196,7 +196,7 @@ pub async fn analyze_card_report_core(
     let analysis = match capture.lock().await.take() {
         Some(a) => a,
         None => {
-            // R-SEC-4 anti stall-loop: a detached analyze that produced no
+            // Anti stall-loop: a detached analyze that produced no
             // verdict (e.g. an MCP tool was refused by the allowlist gate) MUST
             // still record a TERMINAL `kind='analyze'` interaction. Otherwise
             // the boot catch-up query (`meta::id(id) NOT IN (… kind='analyze')`)
@@ -258,7 +258,7 @@ pub async fn analyze_card_report_core(
 ///     capture slot) — persist then return the empty-verdict error.
 ///
 /// Without a terminal interaction the catch-up query re-analyzes the card on
-/// every startup (R-SEC-4 anti stall-loop). Best-effort: a DB failure is logged
+/// every startup (anti stall-loop). Best-effort: a DB failure is logged
 /// and swallowed — the caller still surfaces the original error, and a missing
 /// row only means the card is retried later (no data loss, no incorrect state).
 ///
@@ -797,7 +797,7 @@ mod tests {
         );
     }
 
-    /// R-SEC-4 anti stall-loop (test7): when a DETACHED analyze produces no
+    /// Anti stall-loop: when a DETACHED analyze produces no
     /// verdict (e.g. an MCP tool was refused by the allowlist gate), the
     /// `capture == None` branch persists a TERMINAL `kind='analyze'`
     /// interaction via the real `persist_interaction`. This test locks the
@@ -881,7 +881,7 @@ mod tests {
         );
     }
 
-    /// R-SEC-4 anti stall-loop (FIX (d), Err branch): when the analyze tool
+    /// Anti stall-loop (Err branch): when the analyze tool
     /// loop ERRORS (provider error / SSE timeout / cancellation / max-iter),
     /// the extracted `persist_terminal_analyze_interaction` helper — called on
     /// the Err arm with a `Report::failed` and an `error:` summary — must record
