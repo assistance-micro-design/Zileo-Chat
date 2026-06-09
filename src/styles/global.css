@@ -79,7 +79,10 @@
   --color-success-bg: #d1fae5;
   --color-success-border: #86efac;
   --color-warning: #b45309;
-  --color-warning-light: #78350f;
+  /* Pale amber surface meant for backgrounds (badges, banners), following the
+     same convention as --color-success-light / --color-error-light. Must stay
+     readable with --color-warning used as the text color on top of it. */
+  --color-warning-light: rgba(180, 83, 9, 0.12);
   --color-warning-bg: rgba(234, 179, 8, 0.1);
   --color-error: #ef4444;
   --color-error-light: #fee2e2;
@@ -98,6 +101,24 @@
   --color-danger-light: rgba(239, 68, 68, 0.12);
   --color-info: var(--color-status-running);
   --color-text-on-accent: var(--color-accent-text);
+  /* Subtle info surface, same convention as --color-danger-light: a pale tint
+     of --color-status-running that works as a background in both themes. */
+  --color-info-light: rgba(59, 130, 246, 0.12);
+
+  /* Compatibility aliases: the kanban and versions-history surfaces were
+     authored against a parallel naming scheme (surface/bg/text-muted) that was
+     never defined, so those rules silently resolved to transparent backgrounds
+     and inherited text colors. Map the names onto the canonical tokens above so
+     a single palette drives the whole app; they follow the dark theme
+     automatically because their targets are redefined there. New components
+     should use the canonical token names directly. */
+  --color-surface: var(--color-bg-primary);
+  --color-surface-alt: var(--color-bg-secondary);
+  --color-bg: var(--color-bg-secondary);
+  --color-bg-elevated: var(--color-bg-primary);
+  --color-text: var(--color-text-primary);
+  --color-text-muted: var(--color-text-tertiary);
+  --color-accent-dark: var(--color-primary-dark);
 
   --color-status-idle: #6c757d;
   --color-status-running: #3b82f6;
@@ -202,6 +223,9 @@
   --color-error-bg: rgba(239, 68, 68, 0.15);
   --color-error-border: rgba(239, 68, 68, 0.4);
   --color-warning: #fbbf24;
+  /* Dark counterpart of the pale warning surface; a translucent tint of the
+     dark-theme amber so badge text in --color-warning stays readable. */
+  --color-warning-light: rgba(251, 191, 36, 0.16);
   --color-warning-bg: rgba(234, 179, 8, 0.15);
   --color-danger-bg: rgba(239, 68, 68, 0.15);
   /* Subtle danger surface for emphasis elements (badges, error banners) — a
@@ -671,9 +695,12 @@ body {
   color: var(--color-success);
 }
 
+/* Same pale-surface + tinted-text pattern as .badge-success / .badge-error;
+   a solid amber background with white text fails WCAG AA contrast in dark
+   mode where --color-warning is a light amber. */
 .badge-warning {
-  background: var(--color-warning);
-  color: white;
+  background: var(--color-warning-light);
+  color: var(--color-warning);
 }
 
 .badge-error {
