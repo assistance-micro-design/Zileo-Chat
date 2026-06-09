@@ -342,7 +342,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	}
 
 	.message-wrapper {
-		animation: fadeIn 200ms ease-out;
+		animation: fadeIn var(--transition-base);
 	}
 
 	/* Performance mode: use content-visibility for off-screen messages */
@@ -370,17 +370,6 @@ Main chat area with message display, execution blocks inline, and input controls
 		padding: var(--spacing-sm) var(--spacing-lg);
 	}
 
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(8px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
 	.scroll-to-bottom {
 		position: absolute;
 		bottom: calc(100% + var(--spacing-sm));
@@ -396,7 +385,7 @@ Main chat area with message display, execution blocks inline, and input controls
 		justify-content: center;
 		cursor: pointer;
 		z-index: 5;
-		animation: fadeIn 200ms ease-out;
+		animation: fadeIn var(--transition-base);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 	}
 

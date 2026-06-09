@@ -241,7 +241,7 @@
 		align-items: center;
 		justify-content: center;
 		padding: var(--spacing-xl);
-		animation: fadeIn 0.15s ease-out;
+		animation: fadeIn var(--transition-fast);
 	}
 
 	@keyframes fadeIn {
@@ -260,7 +260,7 @@
 		width: 100%;
 		max-width: 480px;
 		overflow: hidden;
-		animation: slideUp 0.2s ease-out;
+		animation: slideUp var(--transition-base);
 	}
 
 	@keyframes slideUp {

@@ -237,10 +237,4 @@
 			box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
 		}
 	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
 </style>

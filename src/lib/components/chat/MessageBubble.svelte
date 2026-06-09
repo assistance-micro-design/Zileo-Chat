@@ -213,7 +213,7 @@
 		max-width: 80%;
 		padding: var(--spacing-md);
 		border-radius: var(--border-radius-lg);
-		animation: fadeIn 0.3s ease-in;
+		animation: fadeIn var(--transition-base);
 		position: relative;
 	}
 
@@ -276,7 +276,9 @@
 	.image-zoom-overlay {
 		position: fixed;
 		inset: 0;
-		z-index: 1000;
+		/* Full-screen overlay: stack at the modal layer, not the dropdown layer,
+		   so popovers and sticky chrome can never paint above the zoomed image. */
+		z-index: var(--z-index-modal);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -383,16 +385,5 @@
 	.copy-button.copy-error {
 		opacity: 1;
 		color: var(--color-danger);
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
 	}
 </style>

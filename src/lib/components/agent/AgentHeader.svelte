@@ -199,15 +199,6 @@ Agent and iterations are configured in Settings > Agents (source of truth).
 		animation: spin 1s linear infinite;
 	}
 
-	@keyframes spin {
-		from {
-			transform: rotate(0deg);
-		}
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
 	/* Responsive: Medium screens — tighter spacing, hide labels */
 	@media (max-width: 900px) {
 		.agent-header {

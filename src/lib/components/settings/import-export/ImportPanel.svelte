@@ -842,12 +842,6 @@ Orchestrates the multi-step import process:
 		animation: spin 1s linear infinite;
 	}
 
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
 	.executing-content h3 {
 		margin: 0;
 		font-size: var(--font-size-lg);

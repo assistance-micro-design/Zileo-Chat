@@ -39,7 +39,7 @@
 		padding: var(--spacing-sm) var(--spacing-md);
 		color: var(--color-text-secondary);
 		font-size: var(--font-size-sm);
-		animation: fadeIn 0.2s ease-in;
+		animation: fadeIn var(--transition-base);
 	}
 
 	.spinner-text {

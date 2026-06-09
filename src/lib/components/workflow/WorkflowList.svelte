@@ -451,15 +451,6 @@
 		animation: spin 1s linear infinite;
 	}
 
-	@keyframes spin {
-		from {
-			transform: rotate(0deg);
-		}
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
 	.workflow-list-empty {
 		text-align: center;
 		padding: var(--spacing-xl);

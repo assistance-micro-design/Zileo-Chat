@@ -476,16 +476,6 @@
 		animation: pulse 2s ease-in-out infinite;
 	}
 
-	@keyframes pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.4;
-		}
-	}
-
 	:global(.pin-icon) {
 		color: var(--color-accent);
 		min-width: 12px;

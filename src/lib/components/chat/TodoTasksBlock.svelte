@@ -140,7 +140,7 @@ Visible during and after execution.
 		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-md);
 		overflow: hidden;
-		animation: fadeIn 0.2s ease-in;
+		animation: fadeIn var(--transition-base);
 	}
 
 	.tasks-header {
@@ -266,26 +266,6 @@ Visible during and after execution.
 
 	.task-status-icon :global(.spinning) {
 		animation: spin 1.5s linear infinite;
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(8px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	@keyframes spin {
-		from {
-			transform: rotate(0deg);
-		}
-		to {
-			transform: rotate(360deg);
-		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {
