@@ -307,11 +307,11 @@
 	}
 	.who {
 		font-family: var(--font-mono);
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}
 	.when {
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}
 	.summary {
@@ -340,7 +340,7 @@
 		margin: 0;
 		padding: 0.75rem;
 		white-space: pre-wrap;
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 		overflow: auto;
 	}
 	@media (max-width: 700px) {

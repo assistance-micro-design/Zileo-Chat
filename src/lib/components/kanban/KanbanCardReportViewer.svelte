@@ -617,7 +617,7 @@
 		align-items: center;
 	}
 	.meta-pill {
-		font-size: 0.78rem;
+		font-size: var(--font-size-xs);
 		padding: 0.15rem 0.5rem;
 		border-radius: 999px;
 		background: var(--color-bg-secondary);
@@ -629,7 +629,7 @@
 	}
 	h5 {
 		margin: 0.4rem 0 0.2rem;
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}
 	.multiline {
@@ -638,13 +638,13 @@
 	}
 	.muted {
 		color: var(--color-text-muted);
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 	}
 	.variables-list {
 		display: grid;
 		grid-template-columns: max-content 1fr;
 		gap: 0.25rem 0.6rem;
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 	}
 	.variables-list dt {
 		font-weight: 600;
@@ -693,7 +693,7 @@
 	}
 	.iteration-title {
 		font-weight: 600;
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 	}
 	.reasoning-toggle {
 		display: inline-flex;
@@ -702,7 +702,7 @@
 		background: none;
 		border: none;
 		padding: 0.2rem 0;
-		font-size: 0.82rem;
+		font-size: var(--font-size-xs);
 		cursor: pointer;
 		color: var(--color-text-muted);
 	}
@@ -710,7 +710,7 @@
 		color: var(--color-text);
 	}
 	.reasoning-body {
-		font-size: 0.82rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		padding: 0.3rem 0.5rem;
 		background: var(--color-bg);

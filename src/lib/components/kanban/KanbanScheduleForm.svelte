@@ -117,7 +117,7 @@
 		border: 1px solid var(--color-border);
 		background: var(--color-surface);
 		cursor: pointer;
-		font-size: 0.8rem;
+		font-size: var(--font-size-xs);
 	}
 	.day-chip.active {
 		background: var(--color-accent);

@@ -183,7 +183,7 @@
 	.hint {
 		margin: 0 0 0.4rem;
 		color: var(--color-text-muted);
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 	}
 	.error {
 		color: var(--color-error);

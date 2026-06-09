@@ -73,7 +73,7 @@
 		font-weight: 600;
 	}
 	.kanban-column-count {
-		font-size: 0.8rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		background: var(--color-bg-primary);
 		padding: 0.1rem 0.5rem;
@@ -95,7 +95,7 @@
 		justify-content: center;
 		gap: 0.5rem;
 		color: var(--color-text-muted);
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 		opacity: 0.6;
 		user-select: none;
 	}

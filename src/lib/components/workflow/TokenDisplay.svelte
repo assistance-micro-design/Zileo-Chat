@@ -463,7 +463,7 @@
 	}
 
 	.context-label {
-		font-size: 10px;
+		font-size: var(--font-size-2xs);
 		color: var(--color-text-tertiary);
 	}
 
@@ -568,7 +568,7 @@
 	}
 
 	.cost-estimate {
-		font-size: 10px;
+		font-size: var(--font-size-2xs);
 		color: var(--color-text-tertiary);
 		font-style: italic;
 	}
@@ -588,7 +588,7 @@
 	}
 
 	.speed-unit {
-		font-size: 10px;
+		font-size: var(--font-size-2xs);
 		color: var(--color-status-running);
 		opacity: 0.8;
 	}
@@ -661,7 +661,7 @@
 		color: var(--color-text-tertiary);
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		font-size: 10px;
+		font-size: var(--font-size-2xs);
 		font-family: var(--font-base, inherit);
 	}
 
@@ -674,7 +674,7 @@
 	}
 
 	.cache-rate {
-		font-size: 10px;
+		font-size: var(--font-size-2xs);
 		font-weight: var(--font-weight-semibold);
 		padding: 1px 4px;
 		border-radius: var(--border-radius-sm);

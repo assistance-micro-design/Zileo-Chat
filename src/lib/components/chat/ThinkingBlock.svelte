@@ -123,7 +123,7 @@
 		display: inline-flex;
 		align-items: center;
 		padding: 2px 6px;
-		font-size: 0.75rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 		background: color-mix(in srgb, var(--color-info) 10%, transparent);
 		border-radius: 4px;

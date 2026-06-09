@@ -95,14 +95,14 @@
 	}
 	.hint {
 		margin: 0;
-		font-size: 0.8rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		font-style: italic;
 	}
 	.cap-notice {
 		margin: 0;
 		padding: 0.5rem 0.7rem;
-		font-size: 0.82rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-warning, #b45309);
 		background: var(--color-warning-bg);
 		border-radius: 6px;

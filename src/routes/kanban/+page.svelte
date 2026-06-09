@@ -957,7 +957,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		font-size: 0.82rem;
+		font-size: var(--font-size-xs);
 		font-style: italic;
 		color: var(--color-accent-text);
 	}
@@ -991,12 +991,12 @@
 	}
 	.proposed-card-meta {
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 	}
 	.proposed-card-desc {
 		margin: 0;
-		font-size: 0.82rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text);
 		display: -webkit-box;
 		-webkit-line-clamp: 3;

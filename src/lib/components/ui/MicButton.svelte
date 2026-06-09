@@ -212,7 +212,7 @@
 		right: -10px;
 		background: #fff;
 		color: var(--color-error, #dc2626);
-		font-size: 10px;
+		font-size: var(--font-size-2xs);
 		font-weight: var(--font-weight-bold, 700);
 		padding: 2px 5px;
 		border-radius: 4px;

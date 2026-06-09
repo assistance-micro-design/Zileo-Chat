@@ -253,11 +253,11 @@
 		border-radius: 6px;
 	}
 	.readonly-label {
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}
 	.readonly-value {
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 		font-weight: 500;
 	}
 	.variables {
@@ -272,6 +272,6 @@
 	.modal-error {
 		color: var(--color-error);
 		margin: 0;
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
 	}
 </style>

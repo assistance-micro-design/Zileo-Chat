@@ -114,7 +114,7 @@
 	}
 
 	.chip-count {
-		font-size: 10px;
+		font-size: var(--font-size-2xs);
 		opacity: 0.8;
 	}
 

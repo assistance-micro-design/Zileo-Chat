@@ -65,7 +65,13 @@
 	}
 </script>
 
-<div class="splash" role="status" aria-live="polite" aria-busy="true" out:fade={{ duration: motionDuration(350) }}>
+<div
+	class="splash"
+	role="status"
+	aria-live="polite"
+	aria-busy="true"
+	out:fade={{ duration: motionDuration(350) }}
+>
 	<div class="splash-center">
 		<h1 class="splash-title">{$i18n('splash_app_name')}</h1>
 		<Spinner size="md" label={$i18n('splash_step_loading')} />

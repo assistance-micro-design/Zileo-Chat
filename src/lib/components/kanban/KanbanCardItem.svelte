@@ -344,7 +344,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.2rem;
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		padding: 0.1rem 0.35rem;
 		border-radius: 999px;
@@ -356,12 +356,12 @@
 	}
 	.card-meta {
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 	}
 	.card-description {
 		margin: 0;
-		font-size: 0.82rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text);
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
@@ -371,7 +371,7 @@
 	}
 	.card-progress {
 		margin: 0;
-		font-size: 0.78rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-accent);
 		font-style: italic;
 	}
@@ -380,13 +380,13 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-size: 0.78rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-accent);
 		font-style: italic;
 	}
 	.card-error {
 		margin: 0;
-		font-size: 0.78rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-error);
 	}
 	.card-actions {
