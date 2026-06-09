@@ -36,6 +36,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	import ExecutionSpinner from '$lib/components/chat/ExecutionSpinner.svelte';
 	import TodoTasksBlock from '$lib/components/chat/TodoTasksBlock.svelte';
 	import { i18n } from '$lib/i18n';
+	import { pauseOnScroll } from '$lib/actions/pauseOnScroll';
 	import type { Message, MessageAttachment } from '$types/message';
 	import type {
 		ChatBlock,
@@ -174,7 +175,12 @@ Main chat area with message display, execution blocks inline, and input controls
 	</div>
 
 	<!-- Messages Area -->
-	<div class="messages-area" bind:this={messagesContainer} onscroll={handleScroll}>
+	<div
+		class="messages-area"
+		bind:this={messagesContainer}
+		onscroll={handleScroll}
+		{@attach pauseOnScroll()}
+	>
 		{#if messagesLoading}
 			<MessageListSkeleton count={3} />
 		{:else}
