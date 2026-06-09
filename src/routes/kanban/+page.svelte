@@ -918,7 +918,7 @@
 	}
 	.page-head h1 {
 		margin: 0;
-		font-size: 1.4rem;
+		font-size: var(--font-size-2xl);
 	}
 	.head-right {
 		display: flex;
@@ -949,7 +949,7 @@
 	}
 	.proposed-zone-title {
 		margin: 0;
-		font-size: 0.95rem;
+		font-size: var(--font-size-base);
 		font-weight: 600;
 		color: var(--color-accent-text);
 	}
@@ -986,7 +986,7 @@
 	}
 	.proposed-card-title {
 		margin: 0;
-		font-size: 0.9rem;
+		font-size: var(--font-size-sm);
 		font-weight: 600;
 	}
 	.proposed-card-meta {

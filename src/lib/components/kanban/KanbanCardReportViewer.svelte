@@ -625,7 +625,7 @@
 	}
 	h4 {
 		margin: 0 0 0.3rem;
-		font-size: 0.95rem;
+		font-size: var(--font-size-base);
 	}
 	h5 {
 		margin: 0.4rem 0 0.2rem;

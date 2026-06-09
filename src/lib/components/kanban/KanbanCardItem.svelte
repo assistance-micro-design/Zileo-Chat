@@ -334,7 +334,7 @@
 	}
 	.card-title {
 		margin: 0;
-		font-size: 0.9rem;
+		font-size: var(--font-size-sm);
 		font-weight: 600;
 		line-height: 1.3;
 		flex: 1;

@@ -199,7 +199,7 @@
 	}
 	.modal-card-title {
 		margin: 0 0 0.75rem;
-		font-size: 0.9rem;
+		font-size: var(--font-size-sm);
 	}
 	.skip-pending {
 		display: flex;

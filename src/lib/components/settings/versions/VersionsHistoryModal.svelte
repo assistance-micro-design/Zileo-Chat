@@ -261,13 +261,13 @@
 	}
 	.modal-head h3 {
 		margin: 0;
-		font-size: 1.05rem;
+		font-size: var(--font-size-lg);
 	}
 	.close {
 		background: none;
 		border: none;
 		color: inherit;
-		font-size: 1.5rem;
+		font-size: var(--font-size-2xl);
 		line-height: 1;
 		cursor: pointer;
 	}

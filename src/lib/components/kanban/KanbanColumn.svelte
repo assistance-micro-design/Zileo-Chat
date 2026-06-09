@@ -69,7 +69,7 @@
 	}
 	.kanban-column-title {
 		margin: 0;
-		font-size: 0.95rem;
+		font-size: var(--font-size-base);
 		font-weight: 600;
 	}
 	.kanban-column-count {
