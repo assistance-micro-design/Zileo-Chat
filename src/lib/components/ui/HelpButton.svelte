@@ -195,7 +195,7 @@
 	.step-text {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-primary);
-		line-height: var(--line-height-normal);
+		line-height: var(--line-height-base);
 		padding-top: 2px;
 	}
 </style>

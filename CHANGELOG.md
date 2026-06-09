@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Undefined color tokens flattened the Kanban board and versions history** (`src/styles/global.css`) -- the kanban components and `VersionsHistoryModal` were written against a parallel token naming scheme (`--color-surface`, `--color-surface-alt`, `--color-bg`, `--color-bg-elevated`, `--color-text`, `--color-text-muted`, `--color-accent-dark`, `--color-info-light`) that was never defined: card backgrounds silently resolved to transparent (cards melted into their column) and "muted" text rendered at full intensity, flattening the title/description/meta hierarchy -- worst in dark theme. The names are now defined as compatibility aliases pointing at the canonical palette tokens, so both themes drive every surface again without touching any component. Two more undefined tokens fixed the same way at their single use sites: `--font-size-md` (`MCPServerForm.svelte`) and `--line-height-normal` (`HelpButton.svelte`).
+- **Warning badges were unreadable** (`src/styles/global.css`) -- `.badge-warning` painted white text on solid amber, which falls to ~1.8:1 contrast in dark mode (WCAG AA requires 4.5:1); it now uses the same pale-surface + tinted-text pattern as the success/error badges. The `--color-warning-light` token itself was a dark brown -- inverting the `-light` convention and rendering the audit-log timeout/high-risk badges at ~1.5:1 in both themes -- and is now a real pale amber tint with a dark-theme counterpart.
+- **Splash screen ignored the reduced-motion preference** (`src/lib/components/SplashScreen.svelte`) -- Svelte transitions run in JavaScript, out of reach of the global `prefers-reduced-motion` CSS rule; the exit fade now goes through the same `motionDuration()` helper as the onboarding flow and disappears instantly when the OS requests reduced motion.
+- **Chat image zoom overlay stacked at the dropdown layer** (`src/lib/components/chat/MessageBubble.svelte`) -- the full-screen overlay used a hardcoded `z-index: 1000`; it now sits at the modal tier so popovers and sticky chrome can never paint above the zoomed image.
+
+### Changed
+
+- **Animations consolidated on the design tokens** (12 components) -- component-local `@keyframes` duplicating the global `spin` / `fadeIn` / `pulse` definitions are removed (the animation names resolve to the shared keyframes, eliminating drift such as 8px vs 10px fade offsets), and hardcoded entry-animation durations (0.15s/0.2s/0.3s mix) now use the `--transition-fast/base` scale. Intentionally distinct effects (opacity-only backdrop fades, the modal slide-up with scale, the mic button pulse ring) stay local.
+- **Font sizes aligned on the typographic scale** (kanban subsystem, `VersionsHistoryModal`, chat/settings labels) -- ad-hoc sizes between the scale steps (0.7 to 0.875rem and 10px) are mapped onto the existing tokens, with a new `--font-size-2xs` (0.625rem) reserved for micro-labels (REC badge, filter counters, token display).
+- **Scroll-pause optimization now active where it matters** (`src/lib/actions/pauseOnScroll.ts`, chat, kanban, settings) -- the global stylesheet pauses decorative animations under an `is-scrolling` ancestor, but only the settings layout ever set that class. The scroll handler (250 ms idle debounce for WebKitGTK momentum scrolling, passive listener) is extracted into a reusable `pauseOnScroll` attachment and applied to the chat messages area and the kanban column bodies; the settings layout consumes the same attachment instead of its local copy.
+
 ## [0.27.0] - 2026-06-04
 
 ### Added
