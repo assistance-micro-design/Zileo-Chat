@@ -114,12 +114,12 @@
 
 	let titleKey = $derived(
 		isRecording
-			? 'stt.fab_recording'
+			? 'stt_fab_recording'
 			: isTranscribing
-				? 'stt.fab_transcribing'
+				? 'stt_fab_transcribing'
 				: focusedEditable
-					? 'stt.fab_ready'
-					: 'stt.fab_focus_required'
+					? 'stt_fab_ready'
+					: 'stt_fab_focus_required'
 	);
 </script>
 

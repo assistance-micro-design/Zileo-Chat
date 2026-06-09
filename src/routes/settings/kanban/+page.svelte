@@ -24,10 +24,10 @@
 	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import { Card, Input, Button } from '$lib/components/ui';
+	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { i18n } from '$lib/i18n';
 	import { toastStore } from '$lib/stores/toast';
 	import { getErrorMessage } from '$lib/utils/error';
-	import { KanbanSquare } from '@lucide/svelte';
 	import {
 		COMPOSE_TIMEOUT_MIN_SECS,
 		COMPOSE_TIMEOUT_MAX_SECS,
@@ -141,11 +141,13 @@
 </script>
 
 <section class="settings-section">
-	<div class="section-title-row">
-		<KanbanSquare size={24} />
-		<h2 class="section-title">{$i18n('kanban_settings_title')}</h2>
-	</div>
-	<p class="section-description">{$i18n('kanban_settings_description')}</p>
+	<SettingsSectionHeader
+		titleKey="kanban_settings_title"
+		descriptionKey="kanban_settings_description"
+		helpTitleKey="help_kanban_settings_title"
+		helpDescriptionKey="help_kanban_settings_description"
+		helpTutorialKey="help_kanban_settings_tutorial"
+	/>
 
 	{#if loading}
 		<div class="lazy-loading">{$i18n('kanban_settings_loading')}</div>
@@ -182,8 +184,7 @@
 </section>
 
 <style>
-	.section-description {
-		color: var(--color-text-secondary);
+	.settings-section :global(.settings-header) {
 		margin-bottom: var(--spacing-lg);
 	}
 

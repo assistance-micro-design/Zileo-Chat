@@ -23,6 +23,7 @@ Manages MCP server configuration.
 	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import MCPSection from '$lib/components/settings/MCPSection.svelte';
+	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { Card } from '$lib/components/ui';
 	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 	import { i18n } from '$lib/i18n';
@@ -102,8 +103,13 @@ Manages MCP server configuration.
 </script>
 
 <section class="network-section">
-	<h2 class="section-title">{$i18n('mcp_network_title')}</h2>
-	<p class="section-description">{$i18n('mcp_network_description')}</p>
+	<SettingsSectionHeader
+		titleKey="mcp_network_title"
+		descriptionKey="mcp_network_description"
+		helpTitleKey="help_mcp_network_title"
+		helpDescriptionKey="help_mcp_network_description"
+		helpTutorialKey="help_mcp_network_tutorial"
+	/>
 
 	<Card>
 		{#snippet body()}
@@ -141,15 +147,8 @@ Manages MCP server configuration.
 		margin-bottom: var(--spacing-xl);
 	}
 
-	.section-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		margin: 0 0 var(--spacing-xs);
-	}
-
-	.section-description {
-		color: var(--color-text-secondary);
-		margin: 0 0 var(--spacing-md);
+	.network-section :global(.settings-header) {
+		margin-bottom: var(--spacing-lg);
 	}
 
 	.network-body {

@@ -33,8 +33,9 @@
 	import { validateVoxtralModelId } from '$lib/utils/stt-validation';
 	import { openExternalUrl } from '$lib/tauri/opener';
 	import { toastStore } from '$lib/stores/toast';
+	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { i18n } from '$lib/i18n';
-	import { ExternalLink, Mic } from '@lucide/svelte';
+	import { ExternalLink } from '@lucide/svelte';
 	import { getErrorMessage } from '$lib/utils/error';
 
 	let enabled = $state(false);
@@ -44,8 +45,8 @@
 	let modelError = $state<string | null>(null);
 
 	const languageOptions: SelectOption[] = [
-		{ value: 'auto', label: 'stt.language_auto' },
-		...STT_SUPPORTED_LANGUAGES.map((code) => ({ value: code, label: `stt.language_${code}` }))
+		{ value: 'auto', label: 'stt_language_auto' },
+		...STT_SUPPORTED_LANGUAGES.map((code) => ({ value: code, label: `stt_language_${code}` }))
 	];
 
 	function hydrate(settings: typeof $sttSettings): void {
@@ -63,7 +64,7 @@
 		} catch (err) {
 			toastStore.add({
 				type: 'error',
-				title: $i18n('stt.toast_error_title'),
+				title: $i18n('stt_toast_error_title'),
 				message: getErrorMessage(err),
 				persistent: false,
 				duration: 5000
@@ -93,15 +94,15 @@
 			});
 			toastStore.add({
 				type: 'success',
-				title: $i18n('stt.toast_saved_title'),
-				message: $i18n('stt.toast_saved_message'),
+				title: $i18n('stt_toast_saved_title'),
+				message: $i18n('stt_toast_saved_message'),
 				persistent: false,
 				duration: 3000
 			});
 		} catch (err) {
 			toastStore.add({
 				type: 'error',
-				title: $i18n('stt.toast_error_title'),
+				title: $i18n('stt_toast_error_title'),
 				message: getErrorMessage(err),
 				persistent: false,
 				duration: 6000
@@ -116,15 +117,15 @@
 			modelError = null;
 			toastStore.add({
 				type: 'success',
-				title: $i18n('stt.toast_saved_title'),
-				message: $i18n('stt.toast_reset_message'),
+				title: $i18n('stt_toast_saved_title'),
+				message: $i18n('stt_toast_reset_message'),
 				persistent: false,
 				duration: 3000
 			});
 		} catch (err) {
 			toastStore.add({
 				type: 'error',
-				title: $i18n('stt.toast_error_title'),
+				title: $i18n('stt_toast_error_title'),
 				message: getErrorMessage(err),
 				persistent: false,
 				duration: 6000
@@ -147,31 +148,33 @@
 </script>
 
 <section class="settings-section">
-	<div class="section-title-row">
-		<Mic size={24} />
-		<h2 class="section-title">{$i18n('stt.title')}</h2>
-	</div>
-	<p class="section-description">{$i18n('stt.description')}</p>
-	<p class="section-description shortcut-hint">{$i18n('stt.shortcut_help')}</p>
+	<SettingsSectionHeader
+		titleKey="stt_title"
+		descriptionKey="stt_description"
+		helpTitleKey="help_stt_title"
+		helpDescriptionKey="help_stt_description"
+		helpTutorialKey="help_stt_tutorial"
+	/>
+	<p class="shortcut-hint">{$i18n('stt_shortcut_help')}</p>
 
 	{#if $sttSettingsLoading}
-		<div class="lazy-loading">{$i18n('stt.loading')}</div>
+		<div class="lazy-loading">{$i18n('stt_loading')}</div>
 	{:else}
 		<Card>
 			{#snippet body()}
 				<div class="form-grid">
 					<label class="toggle-row">
 						<input type="checkbox" bind:checked={enabled} />
-						<span>{$i18n('stt.enabled_label')}</span>
+						<span>{$i18n('stt_enabled_label')}</span>
 					</label>
-					<p class="form-hint">{$i18n('stt.enabled_help')}</p>
+					<p class="form-hint">{$i18n('stt_enabled_help')}</p>
 
 					<Input
-						label={$i18n('stt.model_id_label')}
+						label={$i18n('stt_model_id_label')}
 						value={modelId}
 						placeholder={DEFAULT_VOXTRAL_MODEL_ID}
 						oninput={handleModelInput}
-						help={$i18n('stt.model_id_help')}
+						help={$i18n('stt_model_id_help')}
 					/>
 					{#if modelError}
 						<p class="form-error" role="alert">{$i18n(modelError)}</p>
@@ -179,24 +182,24 @@
 
 					<button type="button" class="link-button" onclick={openModelsDoc}>
 						<ExternalLink size={14} />
-						<span>{$i18n('stt.see_models_link')}</span>
+						<span>{$i18n('stt_see_models_link')}</span>
 					</button>
 
 					<Select
-						label={$i18n('stt.language_label')}
+						label={$i18n('stt_language_label')}
 						value={language}
 						options={languageOptions.map((opt) => ({ ...opt, label: $i18n(opt.label) }))}
 						onchange={(ev) => (language = ev.currentTarget.value as typeof language)}
-						help={$i18n('stt.language_help')}
+						help={$i18n('stt_language_help')}
 					/>
 
 					<Textarea
-						label={$i18n('stt.context_bias_label')}
+						label={$i18n('stt_context_bias_label')}
 						value={contextBiasRaw}
-						placeholder={$i18n('stt.context_bias_placeholder')}
+						placeholder={$i18n('stt_context_bias_placeholder')}
 						rows={5}
 						oninput={(e) => (contextBiasRaw = e.currentTarget.value)}
-						help={$i18n('stt.context_bias_help')}
+						help={$i18n('stt_context_bias_help')}
 					/>
 
 					<div class="actions">
@@ -205,10 +208,10 @@
 							onclick={handleSave}
 							disabled={$sttSettingsSaving || modelError !== null}
 						>
-							{$sttSettingsSaving ? $i18n('stt.saving') : $i18n('stt.save')}
+							{$sttSettingsSaving ? $i18n('stt_saving') : $i18n('stt_save')}
 						</Button>
 						<Button variant="secondary" onclick={handleReset} disabled={$sttSettingsSaving}>
-							{$i18n('stt.reset')}
+							{$i18n('stt_reset')}
 						</Button>
 					</div>
 				</div>
@@ -218,9 +221,14 @@
 </section>
 
 <style>
-	.section-description {
+	.settings-section :global(.settings-header) {
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.shortcut-hint {
+		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
-		margin-bottom: var(--spacing-lg);
+		margin: 0 0 var(--spacing-lg);
 	}
 
 	.form-grid {

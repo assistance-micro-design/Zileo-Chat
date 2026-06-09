@@ -60,7 +60,7 @@ function t(key: string): string {
 function fail(messageKey: string, detail?: string): void {
 	toastStore.add({
 		type: 'error',
-		title: t('stt.toast_error_title'),
+		title: t('stt_toast_error_title'),
 		message: detail ? `${t(messageKey)} — ${detail}` : t(messageKey),
 		persistent: false,
 		duration: 5000
