@@ -27,6 +27,7 @@
 -->
 <script lang="ts">
 	import { fade } from 'svelte/transition';
+	import { motionDuration } from '$lib/utils/motion';
 	import { i18n } from '$lib/i18n';
 	import { openExternalUrl } from '$lib/tauri';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
@@ -64,7 +65,7 @@
 	}
 </script>
 
-<div class="splash" role="status" aria-live="polite" aria-busy="true" out:fade={{ duration: 350 }}>
+<div class="splash" role="status" aria-live="polite" aria-busy="true" out:fade={{ duration: motionDuration(350) }}>
 	<div class="splash-center">
 		<h1 class="splash-title">{$i18n('splash_app_name')}</h1>
 		<Spinner size="md" label={$i18n('splash_step_loading')} />
