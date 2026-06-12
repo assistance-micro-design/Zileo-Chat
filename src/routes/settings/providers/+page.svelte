@@ -20,7 +20,7 @@ Manages LLM providers and models configuration.
 -->
 
 <script lang="ts">
-	import type { ProviderType, ProviderSettings } from '$types/llm';
+	import type { ProviderType } from '$types/llm';
 	import LLMSection from '$lib/components/settings/providers/LLMSection.svelte';
 	import APIKeysSection from '$lib/components/settings/providers/APIKeysSection.svelte';
 	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
@@ -35,9 +35,7 @@ Manages LLM providers and models configuration.
 	let showApiKeyModal = $state(false);
 	let apiKeyProvider = $state<ProviderType>('mistral');
 	let apiKeyProviderDisplayName = $state<string | undefined>(undefined);
-	let apiKeyProviderSettings = $state<ProviderSettings | null>(null);
 	let apiKeyHasKey = $state(false);
-	let apiKeyIsCustom = $state(false);
 
 	/**
 	 * Opens API key configuration modal with provider state from LLMSection
@@ -45,15 +43,11 @@ Manages LLM providers and models configuration.
 	function handleConfigureApiKey(
 		provider: ProviderType,
 		hasKey: boolean,
-		provSettings: ProviderSettings | null,
-		displayName?: string,
-		isCustom?: boolean
+		displayName?: string
 	): void {
 		apiKeyProvider = provider;
 		apiKeyHasKey = hasKey;
-		apiKeyProviderSettings = provSettings;
 		apiKeyProviderDisplayName = displayName;
-		apiKeyIsCustom = isCustom ?? false;
 		showApiKeyModal = true;
 	}
 
@@ -76,9 +70,7 @@ Manages LLM providers and models configuration.
 	open={showApiKeyModal}
 	provider={apiKeyProvider}
 	providerDisplayName={apiKeyProviderDisplayName}
-	providerSettings={apiKeyProviderSettings}
 	hasApiKey={apiKeyHasKey}
-	isCustom={apiKeyIsCustom}
 	onclose={() => {
 		showApiKeyModal = false;
 	}}

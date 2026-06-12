@@ -57,6 +57,11 @@
 		 */
 		fullscreen?: boolean;
 		/**
+		 * When true, the modal widens to 860px for multi-column forms (e.g. the
+		 * model editor's 3-column rows). Ignored when fullscreen is set.
+		 */
+		wide?: boolean;
+		/**
 		 * When true, the backdrop stacks above popover-level overlays. Set this
 		 * for a modal rendered from within another already-open modal that was
 		 * itself elevated (e.g. the delete confirmation inside
@@ -83,6 +88,7 @@
 		body,
 		footer,
 		fullscreen = false,
+		wide = false,
 		elevated = false,
 		closeOnBackdrop = true,
 		closeOnEscape = true,
@@ -118,7 +124,7 @@
 		onkeydown={handleKeydown}
 	>
 		<div
-			class={['modal', fullscreen && 'modal-fullscreen']}
+			class={['modal', fullscreen && 'modal-fullscreen', !fullscreen && wide && 'modal-wide']}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="modal-title"

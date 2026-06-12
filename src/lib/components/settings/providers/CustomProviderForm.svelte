@@ -18,17 +18,21 @@
   CustomProviderForm Component
   Form for adding or editing an OpenAI-compatible custom provider.
   In create mode it auto-generates a URL-safe name from the display name.
-  In edit mode the name is fixed (it is the provider's stable id) and the API
-  key is optional (left blank keeps the stored key unchanged).
+  In edit mode the name is fixed (it is the provider's stable id), the API
+  key is optional (left blank keeps the stored key unchanged) and the footer
+  offers a connection test against the saved configuration.
 -->
 
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { Input, Button } from '$lib/components/ui';
+	import { Input, PasswordInput, Button, Switch, Spinner } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
-	import { createCustomProvider, updateCustomProvider } from '$lib/stores/llm';
+	import { createCustomProvider, updateCustomProvider, testConnection } from '$lib/stores/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { toastStore } from '$lib/stores/toast';
+	import type { ToastType } from '$types/background-workflow';
+	import { Zap } from '@lucide/svelte';
 
 	/** Props */
 	interface Props {
@@ -47,6 +51,10 @@
 
 	let { provider, oncreated, onupdated, oncancel }: Props = $props();
 
+	function notify(type: ToastType, text: string): void {
+		toastStore.add({ type, title: text, message: '', persistent: false, duration: 5000 });
+	}
+
 	// The modal mounts a fresh form per open, so the `provider` prop is stable
 	// for the component's lifetime. `untrack` captures the seed values once
 	// without the reactive-read warning (the form is intentionally uncontrolled
@@ -60,13 +68,14 @@
 	let apiKey = $state('');
 	/**
 	 * Strict-mode toggles. Default `true` preserves OpenRouter behaviour
-	 * (cache_control + reasoning top-level object injected). Uncheck both
+	 * (cache_control + reasoning top-level object injected). Disable both
 	 * for Fireworks, Groq, Together, Cerebras. In edit mode the stored values
-	 * seed the checkboxes so they can be corrected without recreating.
+	 * seed the switches so they can be corrected without recreating.
 	 */
 	let supportsCacheControl = $state(untrack(() => provider?.supportsCacheControl ?? true));
 	let supportsReasoningParam = $state(untrack(() => provider?.supportsReasoningParam ?? true));
 	let saving = $state(false);
+	let testing = $state(false);
 	let error = $state<string | null>(null);
 
 	/**
@@ -133,6 +142,30 @@
 			saving = false;
 		}
 	}
+
+	/**
+	 * Tests the connection against the provider's saved configuration
+	 * (edit mode only) and reports the outcome as a toast.
+	 */
+	async function handleTestConnection(): Promise<void> {
+		if (!isEdit) return;
+		testing = true;
+		try {
+			const result = await testConnection(name);
+			if (result.success) {
+				notify(
+					'success',
+					$i18n('llm_connection_connected', { latency: `${result.latency_ms ?? 0}ms` })
+				);
+			} else {
+				notify('error', result.error_message || $i18n('llm_connection_failed'));
+			}
+		} catch (e) {
+			notify('error', getErrorMessage(e));
+		} finally {
+			testing = false;
+		}
+	}
 </script>
 
 <form
@@ -142,20 +175,16 @@
 		handleSubmit();
 	}}
 >
-	<Input
-		label={$i18n('llm_custom_provider_display_name')}
-		placeholder="RouterLab"
-		bind:value={displayName}
-		disabled={saving}
-		required
-	/>
-
-	{#if name}
-		<div class="name-preview">
-			<span class="name-label">{$i18n('llm_custom_provider_name')}:</span>
-			<code class="name-value">{name}</code>
-		</div>
-	{/if}
+	<div class="form-row">
+		<Input label={$i18n('llm_custom_provider_name')} value={name} disabled />
+		<Input
+			label={$i18n('llm_custom_provider_display_name')}
+			placeholder="RouterLab"
+			bind:value={displayName}
+			disabled={saving}
+			required
+		/>
+	</div>
 
 	<Input
 		label={$i18n('llm_custom_provider_base_url')}
@@ -167,34 +196,42 @@
 		required
 	/>
 
-	<Input
-		label={$i18n('llm_custom_provider_api_key')}
-		type="password"
-		placeholder="sk-..."
+	<PasswordInput
+		label={$i18n('api_key_label')}
+		placeholder={isEdit ? $i18n('llm_custom_provider_api_key_edit_help') : 'sk-...'}
 		bind:value={apiKey}
 		disabled={saving}
-		help={isEdit ? $i18n('llm_custom_provider_api_key_edit_help') : undefined}
 		required={!isEdit}
 	/>
 
-	<div class="checkbox-field">
-		<label class="checkbox-label">
-			<input type="checkbox" bind:checked={supportsCacheControl} disabled={saving} />
-			<span class="checkbox-text">{$i18n('llm_custom_provider_supports_cache_control')}</span>
-		</label>
-		<p class="checkbox-help">
-			{$i18n('llm_custom_provider_supports_cache_control_help')}
-		</p>
+	<div class="toggle-row">
+		<span class="toggle-text">
+			<strong id="custom-provider-cache-label">
+				{$i18n('llm_custom_provider_supports_cache_control')}
+			</strong>
+			<span>{$i18n('llm_custom_provider_supports_cache_control_help')}</span>
+		</span>
+		<Switch
+			checked={supportsCacheControl}
+			onchange={(value) => (supportsCacheControl = value)}
+			disabled={saving}
+			labelledBy="custom-provider-cache-label"
+		/>
 	</div>
 
-	<div class="checkbox-field">
-		<label class="checkbox-label">
-			<input type="checkbox" bind:checked={supportsReasoningParam} disabled={saving} />
-			<span class="checkbox-text">{$i18n('llm_custom_provider_supports_reasoning_param')}</span>
-		</label>
-		<p class="checkbox-help">
-			{$i18n('llm_custom_provider_supports_reasoning_param_help')}
-		</p>
+	<div class="toggle-row">
+		<span class="toggle-text">
+			<strong id="custom-provider-reasoning-label">
+				{$i18n('llm_custom_provider_supports_reasoning_param')}
+			</strong>
+			<span>{$i18n('llm_custom_provider_supports_reasoning_param_help')}</span>
+		</span>
+		<Switch
+			checked={supportsReasoningParam}
+			onchange={(value) => (supportsReasoningParam = value)}
+			disabled={saving}
+			labelledBy="custom-provider-reasoning-label"
+		/>
 	</div>
 
 	{#if error}
@@ -202,11 +239,28 @@
 	{/if}
 
 	<div class="form-actions">
+		{#if isEdit}
+			<div class="test-action">
+				<Button variant="outline" onclick={handleTestConnection} disabled={testing || saving}>
+					{#if testing}
+						<Spinner size="sm" />
+						<span>{$i18n('llm_connection_testing')}</span>
+					{:else}
+						<Zap size={14} aria-hidden="true" />
+						<span>{$i18n('llm_connection_test')}</span>
+					{/if}
+				</Button>
+			</div>
+		{/if}
 		<Button variant="ghost" onclick={oncancel} disabled={saving}>
 			{$i18n('common_cancel')}
 		</Button>
 		<Button variant="primary" type="submit" disabled={saving || !isValid}>
-			{saving ? $i18n('common_saving') : $i18n('common_save')}
+			{saving
+				? $i18n('common_saving')
+				: isEdit
+					? $i18n('llm_form_save_changes')
+					: $i18n('common_save')}
 		</Button>
 	</div>
 </form>
@@ -218,24 +272,10 @@
 		gap: var(--spacing-md);
 	}
 
-	.name-preview {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
-	.name-label {
-		white-space: nowrap;
-	}
-
-	.name-value {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		padding: 2px 6px;
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-sm);
+	.form-row {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--spacing-md);
 	}
 
 	.form-error {
@@ -249,40 +289,51 @@
 	.form-actions {
 		display: flex;
 		justify-content: flex-end;
+		align-items: center;
 		gap: var(--spacing-sm);
 		margin-top: var(--spacing-sm);
 	}
 
-	.checkbox-field {
+	.test-action {
+		margin-right: auto;
+	}
+
+	.form-actions :global(button) {
 		display: flex;
-		flex-direction: column;
+		align-items: center;
 		gap: var(--spacing-xs);
 	}
 
-	.checkbox-label {
+	.toggle-row {
 		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		cursor: pointer;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--spacing-lg);
+		padding: var(--spacing-sm) 0;
 	}
 
-	.checkbox-label input[type='checkbox'] {
-		width: 18px;
-		height: 18px;
-		accent-color: var(--color-primary);
-		cursor: pointer;
+	.toggle-row + .toggle-row {
+		border-top: 1px solid var(--color-border-light);
 	}
 
-	.checkbox-text {
+	.toggle-text strong {
+		display: block;
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 	}
 
-	.checkbox-help {
-		margin: 0;
+	.toggle-text span {
+		display: block;
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-		padding-left: calc(18px + var(--spacing-sm));
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
+	}
+
+	@media (max-width: 640px) {
+		.form-row {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

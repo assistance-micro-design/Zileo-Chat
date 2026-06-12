@@ -617,6 +617,17 @@ body {
   background: var(--surface-2);
 }
 
+/* Opt-in lift on hover for interactive card grids (providers, models). */
+.card-hover {
+  transition: box-shadow var(--transition-base), transform var(--transition-base), border-color var(--transition-base);
+}
+
+.card-hover:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+  border-color: rgba(148, 239, 238, 0.4);
+}
+
 /* =====================================================================
    Button Component - solid turquoise with dark text, like the site
    ===================================================================== */
@@ -1068,6 +1079,11 @@ a:hover {
   width: 100%;
   height: 100%;
   max-height: none;
+}
+
+/* Wide variant: multi-column forms (e.g. the model editor's 3-column rows). */
+.modal-wide {
+  max-width: 860px;
 }
 
 .modal-header {

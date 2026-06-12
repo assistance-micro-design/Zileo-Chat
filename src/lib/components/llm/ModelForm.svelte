@@ -36,7 +36,7 @@
   />
 -->
 <script lang="ts">
-	import { Input, Select, Button } from '$lib/components/ui';
+	import { Input, Select, Button, Switch } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
 	import { i18n, t } from '$lib/i18n';
 	import type { CreateModelRequest, UpdateModelRequest, LLMModel, ProviderType } from '$types/llm';
@@ -328,11 +328,6 @@
 	/** Whether the model is builtin (edit restrictions apply) */
 	const isBuiltin = $derived(model?.is_builtin ?? false);
 
-	/** Form title based on mode */
-	const formTitle = $derived(
-		mode === 'create' ? $i18n('llm_form_create_title') : $i18n('llm_form_edit_title')
-	);
-
 	/** Submit button text */
 	const submitText = $derived(
 		saving
@@ -350,49 +345,54 @@
 		handleSubmit();
 	}}
 >
-	<h3 class="form-title">{formTitle}</h3>
-
 	{#if isBuiltin}
 		<div class="builtin-notice">
 			<p>{$i18n('llm_form_builtin_notice')}</p>
 		</div>
 	{/if}
 
-	{#if mode === 'create'}
-		<Select
-			label={$i18n('llm_form_provider_label')}
-			value={formData.provider}
-			options={providerOptions}
-			onchange={handleProviderChange}
-			required
-		/>
-	{/if}
+	<div class="form-row form-row-3">
+		<div class="form-field">
+			<Select
+				label={$i18n('llm_form_provider_label')}
+				value={formData.provider}
+				options={providerOptions}
+				onchange={handleProviderChange}
+				disabled={mode === 'edit'}
+				required
+			/>
+		</div>
 
-	<Input
-		label={$i18n('llm_form_name_label')}
-		bind:value={formData.name}
-		placeholder={$i18n('llm_form_name_placeholder')}
-		help={$i18n('llm_form_name_help')}
-		disabled={isBuiltin || saving}
-		required
-	/>
-	{#if touched && errors.name}
-		<span class="error-text">{errors.name}</span>
-	{/if}
+		<div class="form-field">
+			<Input
+				label={$i18n('llm_form_name_label')}
+				bind:value={formData.name}
+				placeholder={$i18n('llm_form_name_placeholder')}
+				help={$i18n('llm_form_name_help')}
+				disabled={isBuiltin || saving}
+				required
+			/>
+			{#if touched && errors.name}
+				<span class="error-text">{errors.name}</span>
+			{/if}
+		</div>
 
-	<Input
-		label={$i18n('llm_form_api_name_label')}
-		bind:value={formData.api_name}
-		placeholder={$i18n('llm_form_api_name_placeholder')}
-		help={$i18n('llm_form_api_name_help')}
-		disabled={isBuiltin || saving}
-		required
-	/>
-	{#if touched && errors.api_name}
-		<span class="error-text">{errors.api_name}</span>
-	{/if}
+		<div class="form-field">
+			<Input
+				label={$i18n('llm_form_api_name_label')}
+				bind:value={formData.api_name}
+				placeholder={$i18n('llm_form_api_name_placeholder')}
+				help={$i18n('llm_form_api_name_help')}
+				disabled={isBuiltin || saving}
+				required
+			/>
+			{#if touched && errors.api_name}
+				<span class="error-text">{errors.api_name}</span>
+			{/if}
+		</div>
+	</div>
 
-	<div class="form-row">
+	<div class="form-row form-row-3">
 		<div class="form-field">
 			<Input
 				label={$i18n('llm_form_context_window_label')}
@@ -420,27 +420,29 @@
 				<span class="error-text">{errors.max_output_tokens}</span>
 			{/if}
 		</div>
+
+		<div class="form-field">
+			<Input
+				label={$i18n('llm_form_temperature_label')}
+				type="number"
+				value={formData.temperature_default.toString()}
+				oninput={(e) => handleNumberInput('temperature_default', e)}
+				step="0.1"
+				min="0"
+				max="2"
+				help={$i18n('llm_form_temperature_help')}
+				disabled={saving}
+			/>
+			{#if touched && errors.temperature_default}
+				<span class="error-text">{errors.temperature_default}</span>
+			{/if}
+		</div>
 	</div>
 
-	<Input
-		label={$i18n('llm_form_temperature_label')}
-		type="number"
-		value={formData.temperature_default.toString()}
-		oninput={(e) => handleNumberInput('temperature_default', e)}
-		step="0.1"
-		min="0"
-		max="2"
-		help={$i18n('llm_form_temperature_help')}
-		disabled={saving}
-	/>
-	{#if touched && errors.temperature_default}
-		<span class="error-text">{errors.temperature_default}</span>
-	{/if}
-
-	<!-- Pricing Section -->
+	<!-- Pricing -->
 	<div class="pricing-section">
 		<div class="pricing-header">
-			<h4 class="pricing-title">{$i18n('llm_form_pricing_title')}</h4>
+			<span class="pricing-title">{$i18n('llm_form_pricing_title')}</span>
 			<p class="pricing-help">
 				{$i18n('llm_form_pricing_help')}
 				<a
@@ -452,7 +454,14 @@
 			</p>
 		</div>
 
-		<div class="form-row">
+		<!--
+		  Ollama adapter forces `cached_tokens: None` and `cache_write_tokens: None`
+		  (ollama_adapter.rs:228-230), so any cache prices saved against an Ollama
+		  model would never be charged against any token count. Hiding the inputs
+		  removes the trap. Existing values stay in `formData` so switching
+		  back to a cache-aware provider restores them without re-typing.
+		-->
+		<div class={['form-row', formData.provider === 'ollama' ? 'form-row-2' : 'form-row-4']}>
 			<div class="form-field">
 				<Input
 					label={$i18n('llm_form_input_price_label')}
@@ -486,17 +495,8 @@
 					<span class="error-text">{errors.output_price_per_mtok}</span>
 				{/if}
 			</div>
-		</div>
 
-		{#if formData.provider !== 'ollama'}
-			<!--
-			  Ollama adapter forces `cached_tokens: None` and `cache_write_tokens: None`
-			  (ollama_adapter.rs:228-230), so any cache prices saved against an Ollama
-			  model would never be charged against any token count. Hiding the inputs
-			  removes the trap. Existing values stay in `formData` so switching
-			  back to a cache-aware provider restores them without re-typing.
-			-->
-			<div class="form-row">
+			{#if formData.provider !== 'ollama'}
 				<div class="form-field">
 					<Input
 						label={$i18n('llm_form_cache_read_price_label')}
@@ -530,36 +530,47 @@
 						<span class="error-text">{errors.cache_write_price_per_mtok}</span>
 					{/if}
 				</div>
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</div>
 
-	<div class="checkbox-field">
-		<label class="checkbox-label">
-			<input type="checkbox" bind:checked={formData.is_reasoning} disabled={saving} />
-			<span class="checkbox-text">{$i18n('llm_form_reasoning_label')}</span>
-		</label>
-		<p class="checkbox-help">{$i18n('llm_form_reasoning_help')}</p>
+	<div class="toggle-row">
+		<span class="toggle-text">
+			<strong id="model-form-reasoning-label">{$i18n('llm_form_reasoning_label')}</strong>
+			<span>{$i18n('llm_form_reasoning_help')}</span>
+		</span>
+		<Switch
+			checked={formData.is_reasoning}
+			onchange={(value) => (formData.is_reasoning = value)}
+			disabled={saving}
+			labelledBy="model-form-reasoning-label"
+		/>
 	</div>
 
-	<div class="checkbox-field">
-		<label class="checkbox-label">
-			<input type="checkbox" bind:checked={formData.supports_vision} disabled={saving} />
-			<span class="checkbox-text">{$i18n('models_supports_vision')}</span>
-		</label>
-		<p class="checkbox-help">{$i18n('models_supports_vision_help')}</p>
+	<div class="toggle-row">
+		<span class="toggle-text">
+			<strong id="model-form-vision-label">{$i18n('models_supports_vision')}</strong>
+			<span>{$i18n('models_supports_vision_help')}</span>
+		</span>
+		<Switch
+			checked={formData.supports_vision}
+			onchange={(value) => (formData.supports_vision = value)}
+			disabled={saving}
+			labelledBy="model-form-vision-label"
+		/>
 	</div>
 
-	<div class="checkbox-field">
-		<label class="checkbox-label">
-			<input
-				type="checkbox"
-				bind:checked={formData.supports_forced_tool_choice}
-				disabled={saving}
-			/>
-			<span class="checkbox-text">{$i18n('models_supports_forced_tool_choice')}</span>
-		</label>
-		<p class="checkbox-help">{$i18n('models_supports_forced_tool_choice_help')}</p>
+	<div class="toggle-row">
+		<span class="toggle-text">
+			<strong id="model-form-forced-label">{$i18n('models_supports_forced_tool_choice')}</strong>
+			<span>{$i18n('models_supports_forced_tool_choice_help')}</span>
+		</span>
+		<Switch
+			checked={formData.supports_forced_tool_choice}
+			onchange={(value) => (formData.supports_forced_tool_choice = value)}
+			disabled={saving}
+			labelledBy="model-form-forced-label"
+		/>
 	</div>
 
 	<div class="form-actions">
@@ -577,14 +588,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
-		max-width: 500px;
-	}
-
-	.form-title {
-		margin: 0 0 var(--spacing-sm) 0;
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
 	}
 
 	.builtin-notice {
@@ -602,8 +605,19 @@
 
 	.form-row {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
 		gap: var(--spacing-md);
+	}
+
+	.form-row-2 {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	.form-row-3 {
+		grid-template-columns: repeat(3, 1fr);
+	}
+
+	.form-row-4 {
+		grid-template-columns: repeat(4, 1fr);
 	}
 
 	.form-field {
@@ -626,48 +640,38 @@
 		border-top: 1px solid var(--color-border);
 	}
 
-	.checkbox-field {
+	.toggle-row {
 		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--spacing-lg);
+		padding: var(--spacing-sm) 0;
 	}
 
-	.checkbox-label {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		cursor: pointer;
+	.toggle-row + .toggle-row {
+		border-top: 1px solid var(--color-border-light);
 	}
 
-	.checkbox-label input[type='checkbox'] {
-		width: 18px;
-		height: 18px;
-		accent-color: var(--color-primary);
-		cursor: pointer;
-	}
-
-	.checkbox-text {
+	.toggle-text strong {
+		display: block;
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 	}
 
-	.checkbox-help {
-		margin: 0;
+	.toggle-text span {
+		display: block;
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-		padding-left: calc(18px + var(--spacing-sm));
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
 	}
 
-	/* Pricing Section */
+	/* Pricing */
 	.pricing-section {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-md);
-		border: 1px solid var(--color-border-light);
 	}
 
 	.pricing-header {
@@ -677,7 +681,6 @@
 	}
 
 	.pricing-title {
-		margin: 0;
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-text-primary);
@@ -698,9 +701,11 @@
 		text-decoration: underline;
 	}
 
-	/* Responsive: stack form row on small screens */
-	@media (max-width: 480px) {
-		.form-row {
+	/* Responsive: stack form rows on small screens */
+	@media (max-width: 640px) {
+		.form-row-2,
+		.form-row-3,
+		.form-row-4 {
 			grid-template-columns: 1fr;
 		}
 	}

@@ -16,13 +16,15 @@
 
 <!--
 API Keys Section - Extracted from Settings page
-Manages API key configuration modal for LLM providers.
+API key configuration modal for cloud builtin providers (Mistral). Ollama
+edits its server URL directly on its provider card, and custom providers
+manage their key from the edit-provider form.
 -->
 
 <script lang="ts">
 	import { tauriInvoke } from '$lib/tauri';
-	import type { ProviderType, ProviderSettings } from '$types/llm';
-	import { Button, Input, Modal, StatusIndicator, DeleteConfirmModal } from '$lib/components/ui';
+	import type { ProviderType } from '$types/llm';
+	import { Button, PasswordInput, Modal, DeleteConfirmModal } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { toastStore } from '$lib/stores/toast';
@@ -38,33 +40,17 @@ Manages API key configuration modal for LLM providers.
 		open: boolean;
 		/** Current provider being configured */
 		provider: ProviderType;
-		/** Optional display name for the provider (custom providers) */
+		/** Display name used in the modal title and delete confirmation */
 		providerDisplayName?: string;
-		/** Provider settings (for Ollama base_url) */
-		providerSettings: ProviderSettings | null;
 		/** Whether provider has API key configured */
 		hasApiKey: boolean;
-		/** Whether this is a custom provider */
-		isCustom?: boolean;
 		/** Close modal callback */
 		onclose: () => void;
 		/** Reload LLM data callback (after save/delete) */
 		onReload: () => void;
 	}
 
-	let {
-		open,
-		provider,
-		providerDisplayName,
-		providerSettings,
-		hasApiKey,
-		isCustom = false,
-		onclose,
-		onReload
-	}: Props = $props();
-
-	/** Whether this provider requires an API key (not ollama) */
-	const requiresApiKey = $derived(provider !== 'ollama');
+	let { open, provider, providerDisplayName, hasApiKey, onclose, onReload }: Props = $props();
 
 	/** Form state */
 	let apiKey = $state('');
@@ -105,10 +91,10 @@ Manages API key configuration modal for LLM providers.
 		saveConfirming = true;
 
 		try {
-			// Pass the provider id verbatim (lowercase, e.g. "mistral", "routerlab").
-			// The backend canonicalizes built-in providers to their keystore key
-			// (e.g. "Mistral"), so the casing sent here does not have to match the
-			// read sites; custom providers are stored under their id as-is.
+			// Pass the provider id verbatim (lowercase, e.g. "mistral"). The
+			// backend canonicalizes built-in providers to their keystore key
+			// (e.g. "Mistral"), so the casing sent here does not have to match
+			// the read sites.
 			await tauriInvoke('save_api_key', {
 				provider: provider,
 				apiKey: apiKey
@@ -166,80 +152,38 @@ Manages API key configuration modal for LLM providers.
 	}
 </script>
 
-<Modal
-	{open}
-	title={provider === 'ollama'
-		? $i18n('api_key_modal_ollama')
-		: isCustom
-			? `${$i18n('llm_provider_configure')} ${providerDisplayName ?? provider}`
-			: $i18n('api_key_modal_mistral')}
-	onclose={() => onclose()}
->
+<Modal {open} title={$i18n('api_key_modal_mistral')} onclose={() => onclose()}>
 	{#snippet body()}
 		<div class="api-key-modal-content">
-			{#if provider === 'ollama'}
-				<p class="api-key-info">
-					{$i18n('api_key_ollama_info')}
-				</p>
-				<Input
-					type="url"
-					label={$i18n('api_key_server_url')}
-					value={providerSettings?.base_url ?? 'http://localhost:11434'}
-					help={$i18n('api_key_server_url_help')}
-					disabled
-				/>
-				<div class="status-row">
-					<StatusIndicator status="completed" size="sm" />
-					<span class="status-text">{$i18n('api_key_not_required')}</span>
-				</div>
-			{:else}
-				<p class="api-key-info">
-					{#if isCustom}
-						{$i18n('llm_custom_provider_api_key')}
-					{:else}
-						{$i18n('api_key_mistral_info')}
-					{/if}
-				</p>
-				<Input
-					type="password"
-					label={$i18n('api_key_label')}
-					placeholder={$i18n('api_key_placeholder')}
-					bind:value={apiKey}
-					disabled={saving}
-					help={$i18n('api_key_help')}
-				/>
-				{#if hasApiKey}
-					<div class="status-row">
-						<StatusIndicator status="completed" size="sm" />
-						<span class="status-text">{$i18n('api_key_configured')}</span>
-					</div>
-				{/if}
-			{/if}
+			<p class="api-key-info">{$i18n('api_key_mistral_info')}</p>
+			<PasswordInput
+				label={$i18n('api_key_label')}
+				placeholder={$i18n('api_key_placeholder')}
+				bind:value={apiKey}
+				disabled={saving}
+				help={$i18n('api_key_help')}
+			/>
 		</div>
 	{/snippet}
 	{#snippet footer()}
 		<div class="api-key-modal-actions">
+			{#if hasApiKey}
+				<div class="delete-action">
+					<Button variant="danger-soft" onclick={handleDeleteApiKeyRequest} disabled={saving}>
+						{$i18n('api_key_delete')}
+					</Button>
+				</div>
+			{/if}
 			<Button variant="ghost" onclick={() => onclose()} disabled={saving}>
 				{$i18n('common_cancel')}
 			</Button>
-			{#if requiresApiKey}
-				{#if hasApiKey}
-					<Button variant="danger" onclick={handleDeleteApiKeyRequest} disabled={saving}>
-						{$i18n('api_key_delete')}
-					</Button>
-				{/if}
-				<Button
-					variant="primary"
-					onclick={handleSaveApiKeyRequest}
-					disabled={saving || !apiKey.trim()}
-				>
-					{saving ? $i18n('common_saving') : $i18n('api_key_save')}
-				</Button>
-			{:else}
-				<Button variant="primary" onclick={() => onclose()}>
-					{$i18n('common_done')}
-				</Button>
-			{/if}
+			<Button
+				variant="primary"
+				onclick={handleSaveApiKeyRequest}
+				disabled={saving || !apiKey.trim()}
+			>
+				{saving ? $i18n('common_saving') : $i18n('api_key_save')}
+			</Button>
 		</div>
 	{/snippet}
 </Modal>
@@ -282,23 +226,15 @@ Manages API key configuration modal for LLM providers.
 		margin: 0;
 	}
 
-	.status-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-md);
-		background: var(--color-success-light);
-		border-radius: var(--border-radius-md);
-	}
-
-	.status-text {
-		font-size: var(--font-size-sm);
-		color: var(--color-success);
-	}
-
 	.api-key-modal-actions {
 		display: flex;
 		justify-content: flex-end;
+		align-items: center;
 		gap: var(--spacing-sm);
+		width: 100%;
+	}
+
+	.delete-action {
+		margin-right: auto;
 	}
 </style>

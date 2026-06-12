@@ -47,12 +47,14 @@
 		body?: Snippet;
 		/** Footer content slot */
 		footer?: Snippet;
+		/** Lift the card on hover (interactive card grids) */
+		hover?: boolean;
 	}
 
-	let { title, description, header, headerActions, body, footer }: Props = $props();
+	let { title, description, header, headerActions, body, footer, hover = false }: Props = $props();
 </script>
 
-<div class="card">
+<div class={['card', hover && 'card-hover']}>
 	{#if header || title || headerActions}
 		<div class="card-header">
 			{#if header}

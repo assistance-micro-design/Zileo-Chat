@@ -16,8 +16,10 @@
 
 <!--
   ProviderCard Component
-  Displays a LLM provider with status, configuration options, and connection testing.
-  All providers are always available - agents can use models from multiple providers.
+  Displays a builtin LLM provider: configuration status badge, short
+  description, connection testing, and either the API key entry point
+  (cloud providers) or the editable server URL (Ollama). Custom providers
+  are rendered as compact entity rows by LLMSection instead.
 
   @example
   <ProviderCard
@@ -32,11 +34,20 @@
   </ProviderCard>
 -->
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Snippet } from 'svelte';
-	import { Card, Badge, Button, StatusIndicator } from '$lib/components/ui';
+	import { Card, Badge, Button, Input } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import ConnectionTester from './ConnectionTester.svelte';
+	import { updateProviderSettings } from '$lib/stores/llm';
+	import { toastStore } from '$lib/stores/toast';
+	import { getErrorMessage } from '$lib/utils/error';
+	import { Check, KeyRound } from '@lucide/svelte';
 	import type { ProviderSettings, ProviderType } from '$types/llm';
+	import type { ToastType } from '$types/background-workflow';
+
+	/** Default Ollama endpoint used when no settings row exists yet. */
+	const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 
 	/**
 	 * ProviderCard props
@@ -44,78 +55,20 @@
 	interface Props {
 		/** Provider type identifier */
 		provider: ProviderType;
-		/** Override display name (for custom providers) */
-		displayName?: string;
 		/** Provider settings (null if not loaded) */
 		settings: ProviderSettings | null;
 		/** Whether the provider has an API key configured */
 		hasApiKey: boolean;
-		/** Whether this is a custom (non-builtin) provider */
-		isCustom?: boolean;
 		/** Icon snippet to render */
 		icon?: Snippet;
-		/** Callback when configure button is clicked */
-		onConfigure: () => void;
-		/** Callback when edit button is clicked (custom providers only) */
-		onEdit?: () => void;
-		/** Callback when delete button is clicked (custom providers only) */
-		onDelete?: () => void;
+		/** Callback when the API key configuration button is clicked (cloud providers) */
+		onConfigure?: () => void;
 	}
 
-	let {
-		provider,
-		displayName,
-		settings,
-		hasApiKey,
-		isCustom = false,
-		icon,
-		onConfigure,
-		onEdit,
-		onDelete
-	}: Props = $props();
+	let { provider, settings, hasApiKey, icon, onConfigure }: Props = $props();
 
-	/**
-	 * Gets the display name for the provider.
-	 * Uses displayName prop override for custom providers, i18n for builtins.
-	 */
-	function getProviderDisplayName(p: ProviderType): string {
-		if (displayName) return displayName;
-		switch (p) {
-			case 'mistral':
-				return $i18n('llm_provider_mistral');
-			case 'ollama':
-				return $i18n('llm_provider_ollama');
-			default:
-				return p;
-		}
-	}
-
-	/**
-	 * Gets the provider type description.
-	 */
-	function getProviderTypeDescription(p: ProviderType): string {
-		switch (p) {
-			case 'mistral':
-				return $i18n('llm_provider_cloud_api');
-			case 'ollama':
-				return $i18n('llm_provider_local_server');
-			default:
-				return $i18n('llm_provider_cloud_api');
-		}
-	}
-
-	/**
-	 * Gets the badge variant based on configuration status
-	 */
-	function getBadgeVariant(): 'success' | 'warning' {
-		return isConfigured ? 'success' : 'warning';
-	}
-
-	/**
-	 * Gets the translation key for status text
-	 */
-	function getStatusKey(): string {
-		return isConfigured ? 'llm_provider_ready' : 'llm_provider_not_configured';
+	function notify(type: ToastType, text: string): void {
+		toastStore.add({ type, title: text, message: '', persistent: false, duration: 5000 });
 	}
 
 	/**
@@ -124,76 +77,109 @@
 	const isConfigured = $derived(hasApiKey || provider === 'ollama');
 
 	/** Provider name for display */
-	const providerDisplayName = $derived(getProviderDisplayName(provider));
-	const providerTypeDesc = $derived(getProviderTypeDescription(provider));
+	const providerDisplayName = $derived(
+		provider === 'mistral'
+			? $i18n('llm_provider_mistral')
+			: provider === 'ollama'
+				? $i18n('llm_provider_ollama')
+				: provider
+	);
+
+	/** Status badge label */
+	const statusText = $derived(
+		!isConfigured
+			? $i18n('llm_provider_not_configured')
+			: provider === 'ollama'
+				? $i18n('llm_provider_server_available')
+				: $i18n('llm_provider_api_key_configured')
+	);
+
+	// Local editable copy of the Ollama base URL. The card is mounted after
+	// the parent finished loading, so the prop seed is stable; untrack avoids
+	// the state_referenced_locally warning (the field is intentionally
+	// uncontrolled after mount).
+	let urlValue = $state(untrack(() => settings?.base_url ?? DEFAULT_OLLAMA_URL));
+	let lastSavedUrl = untrack(() => settings?.base_url ?? DEFAULT_OLLAMA_URL);
+	let urlSaving = $state(false);
+
+	/**
+	 * Persists the edited server URL on blur when it changed. Invalid values
+	 * are rejected with a toast and the field reverts to the saved URL.
+	 */
+	async function saveServerUrl(): Promise<void> {
+		const trimmed = urlValue.trim();
+		if (trimmed === lastSavedUrl) {
+			urlValue = lastSavedUrl;
+			return;
+		}
+		if (!/^https?:\/\//.test(trimmed)) {
+			notify('error', $i18n('llm_provider_url_invalid'));
+			urlValue = lastSavedUrl;
+			return;
+		}
+		urlSaving = true;
+		try {
+			await updateProviderSettings(provider, undefined, trimmed);
+			lastSavedUrl = trimmed;
+			urlValue = trimmed;
+			notify('success', $i18n('llm_provider_url_saved'));
+		} catch (err) {
+			urlValue = lastSavedUrl;
+			notify('error', $i18n('llm_provider_url_save_failed', { error: getErrorMessage(err) }));
+		} finally {
+			urlSaving = false;
+		}
+	}
 </script>
 
-<Card>
+<Card hover>
 	{#snippet header()}
 		<div class="provider-header">
 			<div class="provider-info">
 				{#if icon}
-					<div class="provider-icon">
+					<span class="provider-icon">
 						{@render icon()}
-					</div>
+					</span>
 				{/if}
-				<div class="provider-details">
-					<h3 class="provider-name">{providerDisplayName}</h3>
-					<p class="provider-type">{providerTypeDesc}</p>
-				</div>
+				<span class="card-title">{providerDisplayName}</span>
 			</div>
-			<Badge variant={getBadgeVariant()}>
-				{$i18n(getStatusKey())}
+			<Badge variant={isConfigured ? 'success' : 'warning'}>
+				{#if isConfigured}
+					<Check size={12} aria-hidden="true" />
+				{/if}
+				{statusText}
 			</Badge>
 		</div>
 	{/snippet}
 
 	{#snippet body()}
 		<div class="provider-body">
-			<div class="status-list">
-				{#if isConfigured}
-					<div class="status-row">
-						<StatusIndicator status="completed" size="sm" />
-						<span class="status-text">
-							{provider === 'ollama'
-								? $i18n('llm_provider_server_available')
-								: $i18n('llm_provider_api_key_configured')}
-						</span>
-					</div>
-				{:else}
-					<div class="status-row">
-						<StatusIndicator status="error" size="sm" />
-						<span class="status-text">{$i18n('llm_provider_not_configured')}</span>
-					</div>
-				{/if}
-
-				{#if settings?.base_url && (provider === 'ollama' || isCustom)}
-					<div class="info-row">
-						<span class="info-label">{$i18n('llm_provider_server_url')}</span>
-						<span class="info-value url">{settings.base_url}</span>
-					</div>
-				{/if}
-			</div>
-
-			<ConnectionTester {provider} disabled={!isConfigured} />
+			<p class="provider-description">
+				{provider === 'ollama'
+					? $i18n('llm_provider_local_no_key')
+					: $i18n('llm_provider_cloud_api')}
+			</p>
+			{#if provider === 'ollama'}
+				<Input
+					type="url"
+					label={$i18n('api_key_server_url')}
+					bind:value={urlValue}
+					onblur={() => saveServerUrl()}
+					disabled={urlSaving}
+				/>
+			{/if}
 		</div>
 	{/snippet}
 
 	{#snippet footer()}
 		<div class="provider-actions">
-			{#if isCustom && onDelete}
-				<Button variant="danger" size="sm" onclick={onDelete}>
-					{$i18n('common_delete')}
+			<ConnectionTester {provider} disabled={!isConfigured} />
+			{#if onConfigure}
+				<Button variant="outline" size="sm" onclick={onConfigure}>
+					<KeyRound size={14} aria-hidden="true" />
+					<span>{$i18n('llm_provider_configure')}</span>
 				</Button>
 			{/if}
-			{#if isCustom && onEdit}
-				<Button variant="secondary" size="sm" onclick={onEdit}>
-					{$i18n('common_edit')}
-				</Button>
-			{/if}
-			<Button variant="primary" size="sm" onclick={onConfigure}>
-				{$i18n('llm_provider_configure')}
-			</Button>
 		</div>
 	{/snippet}
 </Card>
@@ -204,6 +190,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--spacing-md);
+		width: 100%;
 	}
 
 	.provider-info {
@@ -215,78 +202,35 @@
 	.provider-icon {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		width: 40px;
-		height: 40px;
-		border-radius: var(--border-radius-md);
-		background-color: var(--color-bg-secondary);
-	}
-
-	.provider-details {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.provider-name {
-		margin: 0;
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
-	}
-
-	.provider-type {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
+		color: var(--color-accent-deep);
 	}
 
 	.provider-body {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
-	.status-list {
-		display: flex;
-		flex-direction: column;
 		gap: var(--spacing-sm);
 	}
 
-	.status-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
-	.status-text {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
-	.info-row {
-		display: flex;
-		align-items: baseline;
-		gap: var(--spacing-xs);
-		font-size: var(--font-size-sm);
-	}
-
-	.info-label {
-		color: var(--color-text-secondary);
-	}
-
-	.info-value {
-		color: var(--color-text-primary);
-		font-weight: var(--font-weight-medium);
-	}
-
-	.info-value.url {
-		font-family: var(--font-mono);
+	.provider-description {
+		margin: 0;
 		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+	}
+
+	.provider-body :global(.form-group) {
+		margin-bottom: 0;
 	}
 
 	.provider-actions {
 		display: flex;
-		justify-content: flex-end;
+		align-items: flex-start;
+		justify-content: space-between;
 		gap: var(--spacing-sm);
+	}
+
+	.provider-actions :global(button) {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
 	}
 </style>

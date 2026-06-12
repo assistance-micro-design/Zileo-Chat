@@ -17,7 +17,8 @@
 <!--
 LLM Section - Extracted from Settings page
 Manages LLM providers and models: list, create, edit, delete.
-Combines Providers and Models sections.
+Builtin providers render as cards, custom providers as compact entity rows
+(edit / test / delete on hover), models as a filterable card grid.
 -->
 
 <script lang="ts">
@@ -25,7 +26,6 @@ Combines Providers and Models sections.
 	import type {
 		LLMModel,
 		ProviderType,
-		ProviderSettings,
 		CreateModelRequest,
 		UpdateModelRequest,
 		LLMState
@@ -38,7 +38,8 @@ Combines Providers and Models sections.
 		Modal,
 		Select,
 		DeleteConfirmModal,
-		ErrorBanner
+		ErrorBanner,
+		HelpButton
 	} from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
@@ -59,9 +60,10 @@ Combines Providers and Models sections.
 		createModel,
 		updateModel,
 		deleteModel,
-		deleteCustomProvider
+		deleteCustomProvider,
+		testConnection
 	} from '$lib/stores/llm';
-	import { Plus, Cpu, Sparkles, Server, Globe } from '@lucide/svelte';
+	import { Plus, Cpu, Server, Globe, Pencil, Zap, Trash2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';
@@ -80,14 +82,8 @@ Combines Providers and Models sections.
 
 	/** Props */
 	interface Props {
-		/** Callback when API key modal should be opened */
-		onConfigureApiKey: (
-			provider: ProviderType,
-			hasApiKey: boolean,
-			providerSettings: ProviderSettings | null,
-			displayName?: string,
-			isCustom?: boolean
-		) => void;
+		/** Callback when API key modal should be opened (cloud builtin providers) */
+		onConfigureApiKey: (provider: ProviderType, hasApiKey: boolean, displayName?: string) => void;
 	}
 
 	let { onConfigureApiKey }: Props = $props();
@@ -111,6 +107,9 @@ Combines Providers and Models sections.
 	let showModelDeleteConfirm = $state(false);
 	let modelToDelete = $state<LLMModel | null>(null);
 	let modelDeleting = $state(false);
+
+	/** Provider currently running an inline connection test (entity rows) */
+	let testingProviderId = $state<string | null>(null);
 
 	/** Provider filter options for models section (dynamic from providerList) */
 	const modelsProviderOptions: SelectOption[] = $derived([
@@ -244,6 +243,49 @@ Combines Providers and Models sections.
 	}
 
 	/**
+	 * Runs a connection test for a custom provider row and reports the
+	 * outcome as a toast (the row has no space for an inline result).
+	 */
+	async function handleTestProvider(providerInfo: ProviderInfo): Promise<void> {
+		testingProviderId = providerInfo.id;
+		try {
+			const result = await testConnection(providerInfo.id);
+			if (result.success) {
+				notify(
+					'success',
+					$i18n('llm_connection_connected', { latency: `${result.latency_ms ?? 0}ms` })
+				);
+			} else {
+				notify('error', result.error_message || $i18n('llm_connection_failed'));
+			}
+		} catch (err) {
+			notify('error', getErrorMessage(err));
+		} finally {
+			testingProviderId = null;
+		}
+	}
+
+	/**
+	 * Builds the entity-row meta line for a custom provider
+	 * (base URL + strict-mode toggles).
+	 */
+	function customProviderMeta(providerInfo: ProviderInfo): string {
+		const yesNo = (value: boolean): string => $i18n(value ? 'common_yes' : 'common_no');
+		return $i18n('llm_custom_provider_meta', {
+			url: providerInfo.baseUrl ?? '',
+			cache: yesNo(providerInfo.supportsCacheControl ?? true),
+			reasoning: yesNo(providerInfo.supportsReasoningParam ?? true)
+		});
+	}
+
+	/**
+	 * Resolves the display name of a model's provider for the model cards.
+	 */
+	function providerLabelOf(providerId: string): string {
+		return providerList.find((p) => p.id === providerId)?.displayName ?? providerId;
+	}
+
+	/**
 	 * Handles model form submission (create or update)
 	 */
 	async function handleSaveModel(data: CreateModelRequest | UpdateModelRequest): Promise<void> {
@@ -340,10 +382,18 @@ Combines Providers and Models sections.
 <section id="providers" class="settings-section">
 	<SettingsSectionHeader
 		titleKey="settings_providers"
+		descriptionKey="settings_providers_description"
 		helpTitleKey="help_providers_title"
 		helpDescriptionKey="help_providers_description"
 		helpTutorialKey="help_providers_tutorial"
-	/>
+	>
+		{#snippet actions()}
+			<Button variant="primary" size="sm" onclick={() => modelModal.openCreate()}>
+				<Plus size={16} />
+				<span>{$i18n('models_add')}</span>
+			</Button>
+		{/snippet}
+	</SettingsSectionHeader>
 
 	{#if llmState.error}
 		<ErrorBanner
@@ -369,79 +419,91 @@ Combines Providers and Models sections.
 					provider={provInfo.id}
 					settings={llmState.providers[provInfo.id] ?? null}
 					hasApiKey={provInfo.id === 'ollama' ? true : providerHasApiKey(provInfo.id)}
-					onConfigure={() =>
-						onConfigureApiKey(
-							provInfo.id,
-							provInfo.id === 'ollama' ? true : providerHasApiKey(provInfo.id),
-							llmState.providers[provInfo.id] ?? null
-						)}
+					onConfigure={provInfo.requiresApiKey
+						? () =>
+								onConfigureApiKey(provInfo.id, providerHasApiKey(provInfo.id), provInfo.displayName)
+						: undefined}
 				>
 					{#snippet icon()}
-						{#if provInfo.id === 'mistral'}
-							<Sparkles size={24} class="icon-accent" />
+						{#if provInfo.id === 'ollama'}
+							<Server size={20} aria-hidden="true" />
 						{:else}
-							<Server size={24} class="icon-success" />
+							<Globe size={20} aria-hidden="true" />
 						{/if}
-					{/snippet}
-				</ProviderCard>
-			{/each}
-
-			<!-- Custom Provider Cards -->
-			{#each providerList.filter((p) => !p.isBuiltin) as provInfo (provInfo.id)}
-				<ProviderCard
-					provider={provInfo.id}
-					displayName={provInfo.displayName}
-					settings={llmState.providers[provInfo.id] ?? null}
-					hasApiKey={providerHasApiKey(provInfo.id)}
-					isCustom={true}
-					onConfigure={() =>
-						onConfigureApiKey(
-							provInfo.id,
-							providerHasApiKey(provInfo.id),
-							llmState.providers[provInfo.id] ?? null,
-							provInfo.displayName,
-							true
-						)}
-					onEdit={() => handleEditProviderRequest(provInfo)}
-					onDelete={() => handleDeleteProviderRequest(provInfo)}
-				>
-					{#snippet icon()}
-						<Globe size={24} class="icon-info" />
 					{/snippet}
 				</ProviderCard>
 			{/each}
 		</div>
 
-		<!-- Add Custom Provider Button -->
-		<div class="custom-provider-actions">
-			<Button variant="secondary" size="sm" onclick={() => (showCustomProviderForm = true)}>
-				<Plus size={16} />
-				<span>{$i18n('llm_add_custom_provider')}</span>
-			</Button>
+		<!-- Custom Providers -->
+		<h3 class="subsection-title">{$i18n('llm_custom_providers')}</h3>
+		<div class="card custom-providers-card">
+			{#each providerList.filter((p) => !p.isBuiltin) as provInfo (provInfo.id)}
+				<div class="entity-row">
+					<span class="entity-icon">
+						<Globe size={20} aria-hidden="true" />
+					</span>
+					<div class="entity-main">
+						<strong>{provInfo.displayName}</strong>
+						<span>{customProviderMeta(provInfo)}</span>
+					</div>
+					<div class="entity-actions">
+						<Button
+							variant="ghost"
+							size="icon"
+							ariaLabel={$i18n('common_edit')}
+							onclick={() => handleEditProviderRequest(provInfo)}
+						>
+							<Pencil size={14} aria-hidden="true" />
+						</Button>
+						<Button
+							variant="ghost"
+							size="icon"
+							ariaLabel={$i18n('llm_connection_test')}
+							disabled={testingProviderId !== null}
+							onclick={() => handleTestProvider(provInfo)}
+						>
+							<Zap size={14} aria-hidden="true" />
+						</Button>
+						<Button
+							variant="ghost"
+							size="icon"
+							ariaLabel={$i18n('common_delete')}
+							onclick={() => handleDeleteProviderRequest(provInfo)}
+						>
+							<Trash2 size={14} aria-hidden="true" />
+						</Button>
+					</div>
+				</div>
+			{/each}
+			<div class="card-footer custom-providers-footer">
+				<Button variant="outline" size="sm" onclick={() => (showCustomProviderForm = true)}>
+					<Plus size={16} />
+					<span>{$i18n('llm_add_custom_provider')}</span>
+				</Button>
+			</div>
 		</div>
 	{/if}
 </section>
 
 <!-- Models Section -->
 <section id="models" class="settings-section">
-	<SettingsSectionHeader
-		titleKey="settings_models"
-		helpTitleKey="help_models_title"
-		helpDescriptionKey="help_models_description"
-		helpTutorialKey="help_models_tutorial"
-	>
-		{#snippet actions()}
-			<Select
-				options={modelsProviderOptions}
-				value={selectedModelsProvider}
-				onchange={handleModelsProviderChange}
+	<div class="models-header">
+		<div class="models-title-row">
+			<h3 class="subsection-title">{$i18n('settings_models')}</h3>
+			<HelpButton
+				titleKey="help_models_title"
+				descriptionKey="help_models_description"
+				tutorialKey="help_models_tutorial"
 			/>
-			<Button variant="primary" size="sm" onclick={() => modelModal.openCreate()}>
-				<Plus size={16} />
-				<span>{$i18n('models_add')}</span>
-			</Button>
-		{/snippet}
-	</SettingsSectionHeader>
+		</div>
+		<Select
+			options={modelsProviderOptions}
+			value={selectedModelsProvider}
+			onchange={handleModelsProviderChange}
+			ariaLabel={$i18n('models_filter_by_provider')}
+		/>
+	</div>
 
 	{#if llmState.loading}
 		<Card>
@@ -478,6 +540,7 @@ Combines Providers and Models sections.
 			{#each filteredModels as model (model.id)}
 				<ModelCard
 					{model}
+					providerLabel={providerLabelOf(model.provider)}
 					onEdit={() => modelModal.openEdit(model)}
 					onDelete={() => handleDeleteModelRequest(model)}
 				/>
@@ -490,6 +553,7 @@ Combines Providers and Models sections.
 <Modal
 	open={modelModal.show}
 	title={modelModal.mode === 'create' ? $i18n('modal_add_custom_model') : $i18n('modal_edit_model')}
+	wide
 	onclose={() => modelModal.close()}
 >
 	{#snippet body()}
@@ -548,19 +612,82 @@ Combines Providers and Models sections.
 	/* Provider Cards */
 	.provider-grid {
 		display: grid;
-		grid-template-columns: repeat(2, 1fr);
+		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 		gap: var(--spacing-lg);
 		margin-bottom: var(--spacing-lg);
 		contain: layout style; /* Isolate layout recalculations */
 	}
 
-	.custom-provider-actions {
-		display: flex;
-		justify-content: flex-start;
-		margin-top: var(--spacing-md);
+	.subsection-title {
+		margin: 0 0 var(--spacing-sm);
+		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
 	}
 
-	.custom-provider-actions :global(button) {
+	/* Custom provider entity rows */
+	.custom-providers-card {
+		margin-bottom: var(--spacing-lg);
+	}
+
+	.entity-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
+		padding: var(--spacing-md);
+		border-bottom: 1px solid var(--color-border-light);
+	}
+
+	.entity-icon {
+		display: flex;
+		align-items: center;
+		color: var(--color-text-tertiary);
+	}
+
+	.entity-main {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.entity-main strong {
+		display: block;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-primary);
+	}
+
+	.entity-main span {
+		display: block;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		margin-top: 1px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.entity-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		opacity: 0.45;
+		transition: opacity var(--transition-fast);
+	}
+
+	.entity-row:hover .entity-actions,
+	.entity-row:focus-within .entity-actions {
+		opacity: 1;
+	}
+
+	.custom-providers-footer {
+		display: flex;
+		justify-content: flex-start;
+	}
+
+	.custom-providers-footer:first-child {
+		border-top: none;
+	}
+
+	.custom-providers-footer :global(button) {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
@@ -576,11 +703,29 @@ Combines Providers and Models sections.
 	}
 
 	/* Models Section */
-	:global(.settings-header .form-group) {
+	.models-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-md);
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.models-header .subsection-title {
 		margin-bottom: 0;
 	}
 
-	:global(.settings-header .form-select) {
+	.models-title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.models-header :global(.form-group) {
+		margin-bottom: 0;
+	}
+
+	.models-header :global(.form-select) {
 		width: auto;
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-xs);
@@ -588,7 +733,7 @@ Combines Providers and Models sections.
 
 	.models-grid {
 		display: grid;
-		grid-template-columns: repeat(2, 1fr);
+		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 		gap: var(--spacing-lg);
 		contain: layout style; /* Isolate layout recalculations */
 	}
