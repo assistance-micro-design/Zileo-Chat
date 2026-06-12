@@ -495,6 +495,9 @@
 
 		<!-- Actions -->
 		<div class="settings-actions">
+			{#if hasChanges && !$isSaving}
+				<span class="unsaved-hint" role="status">{$i18n('settings_unsaved_changes')}</span>
+			{/if}
 			<Button variant="secondary" onclick={handleReset} disabled={$isSaving}>
 				{$i18n('validation_reset_button')}
 			</Button>
@@ -837,11 +840,24 @@
 	}
 
 	/* Actions */
+	/* Sticky save bar: stays visible while the long form scrolls beneath it. */
 	.settings-actions {
+		position: sticky;
+		bottom: 0;
 		display: flex;
+		align-items: center;
 		justify-content: flex-end;
 		gap: var(--spacing-md);
-		padding-top: var(--spacing-lg);
+		padding: var(--spacing-md) 0;
 		border-top: 1px solid var(--color-border);
+		background: var(--surface-overlay);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+	}
+
+	.unsaved-hint {
+		margin-right: auto;
+		font-size: var(--font-size-xs);
+		color: var(--color-warning);
 	}
 </style>

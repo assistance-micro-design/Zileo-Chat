@@ -22,7 +22,15 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Card, Button, Input, Textarea, Select, type SelectOption } from '$lib/components/ui';
+	import {
+		Card,
+		Button,
+		Input,
+		Textarea,
+		Select,
+		Switch,
+		type SelectOption
+	} from '$lib/components/ui';
 	import {
 		sttSettingsStore,
 		sttSettings,
@@ -163,10 +171,14 @@
 		<Card>
 			{#snippet body()}
 				<div class="form-grid">
-					<label class="toggle-row">
-						<input type="checkbox" bind:checked={enabled} />
-						<span>{$i18n('stt_enabled_label')}</span>
-					</label>
+					<div class="toggle-row">
+						<Switch
+							checked={enabled}
+							onchange={(value) => (enabled = value)}
+							labelledBy="stt-enabled-label"
+						/>
+						<span id="stt-enabled-label">{$i18n('stt_enabled_label')}</span>
+					</div>
 					<p class="form-hint">{$i18n('stt_enabled_help')}</p>
 
 					<Input

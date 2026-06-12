@@ -35,6 +35,7 @@
 	"agent_new_workflow": "New Workflow",
 
 	"settings_title": "Settings",
+	"settings_unsaved_changes": "Unsaved changes",
 	"settings_providers": "Providers",
 	"settings_models": "Models",
 	"settings_agents": "Agents",

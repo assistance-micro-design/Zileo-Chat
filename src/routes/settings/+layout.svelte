@@ -201,6 +201,7 @@ Each section is now a separate route for better performance and UX.
 	}
 
 	.nav-button {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-md);
@@ -227,7 +228,20 @@ Each section is now a separate route for better performance and UX.
 	.nav-button.active {
 		background: var(--color-accent-light);
 		color: var(--color-accent-deep);
-		font-weight: var(--font-weight-medium);
+		font-weight: var(--font-weight-semibold);
+	}
+
+	/* Glowing gradient bar marking the active section */
+	.nav-button.active::before {
+		content: '';
+		position: absolute;
+		left: -8px;
+		top: 20%;
+		bottom: 20%;
+		width: 3px;
+		border-radius: var(--border-radius-full);
+		background: var(--gradient-brand);
+		box-shadow: var(--glow-accent-soft);
 	}
 
 	.nav-button-icon {

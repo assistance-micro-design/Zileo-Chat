@@ -35,6 +35,7 @@
 	"agent_new_workflow": "Nouveau flux de travail",
 
 	"settings_title": "Paramètres",
+	"settings_unsaved_changes": "Modifications non enregistrées",
 	"settings_providers": "Fournisseurs",
 	"settings_models": "Modèles",
 	"settings_agents": "Agents",

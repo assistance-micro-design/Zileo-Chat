@@ -345,15 +345,25 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		color: var(--color-text-secondary);
 	}
 
+	/* Sticky save bar: stays visible while the long authorizations form
+	   scrolls beneath it. */
 	.auth-actions {
+		position: sticky;
+		bottom: 0;
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
 		gap: var(--spacing-md);
+		padding: var(--spacing-md) 0;
+		border-top: 1px solid var(--color-border);
+		background: var(--surface-overlay);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
 	}
 
 	.auth-dirty {
-		font-size: var(--font-size-sm);
+		margin-right: auto;
+		font-size: var(--font-size-xs);
 		color: var(--color-warning, var(--color-text-secondary));
 	}
 

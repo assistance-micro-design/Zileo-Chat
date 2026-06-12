@@ -61,6 +61,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		attachSettingsRefreshListener,
 		dispatchSettingsRefresh
 	} from '$lib/utils/settings-refresh';
+	import { isDirty } from '$lib/utils/dirty';
 	import AgentFolders from './AgentFolders.svelte';
 	/**
 	 * Component props
@@ -75,6 +76,29 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	}
 
 	let { mode, agent, oncancel }: Props = $props();
+
+	/**
+	 * Canonical form values for a given agent (create defaults when null).
+	 * Single source for both seeding the editable state and computing the
+	 * unsaved-changes indicator, so the two can never drift apart.
+	 */
+	function formValuesOf(source: AgentConfig | null) {
+		return {
+			name: source?.name ?? '',
+			lifecycle: source?.lifecycle ?? ('permanent' as Lifecycle),
+			provider: (source?.llm.provider ?? 'mistral').toLowerCase(),
+			model: source?.llm.model ?? 'mistral-large-latest',
+			maxToolIterations: source?.max_tool_iterations ?? 50,
+			reasoningEffort: source?.reasoning_effort,
+			selectedTools: source?.tools ?? [],
+			selectedMcpServers: source?.mcp_servers ?? [],
+			selectedSkills: source?.skills ?? [],
+			selectedFolders: source?.folders ?? [],
+			systemPrompt: source?.system_prompt ?? '',
+			kind: source?.kind ?? undefined,
+			autoAnalyzeReports: source?.auto_analyze_reports ?? false
+		};
+	}
 
 	/** Form state */
 	let name = $state('');
@@ -91,24 +115,44 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let kind = $state<AgentKind | undefined>(undefined);
 	let autoAnalyzeReports = $state(false);
 
+	/** True when the form values diverge from the agent they were seeded with. */
+	const dirty = $derived(
+		isDirty(formValuesOf(agent), {
+			name,
+			lifecycle,
+			provider,
+			model,
+			maxToolIterations,
+			reasoningEffort,
+			selectedTools,
+			selectedMcpServers,
+			selectedSkills,
+			selectedFolders,
+			systemPrompt,
+			kind,
+			autoAnalyzeReports
+		})
+	);
+
 	// Sync form state when agent prop changes (e.g., switching between edit targets)
 	$effect(() => {
-		name = agent?.name ?? '';
-		lifecycle = agent?.lifecycle ?? 'permanent';
-		provider = (agent?.llm.provider ?? 'mistral').toLowerCase();
-		model = agent?.llm.model ?? 'mistral-large-latest';
-		maxToolIterations = agent?.max_tool_iterations ?? 50;
-		reasoningEffort = agent?.reasoning_effort;
-		selectedTools = agent?.tools ?? [];
-		selectedMcpServers = agent?.mcp_servers ?? [];
-		selectedSkills = agent?.skills ?? [];
-		selectedFolders = agent?.folders ?? [];
-		systemPrompt = agent?.system_prompt ?? '';
-		kind = agent?.kind ?? undefined;
-		autoAnalyzeReports = agent?.auto_analyze_reports ?? false;
+		const seed = formValuesOf(agent);
+		name = seed.name;
+		lifecycle = seed.lifecycle;
+		provider = seed.provider;
+		model = seed.model;
+		maxToolIterations = seed.maxToolIterations;
+		reasoningEffort = seed.reasoningEffort;
+		selectedTools = seed.selectedTools;
+		selectedMcpServers = seed.selectedMcpServers;
+		selectedSkills = seed.selectedSkills;
+		selectedFolders = seed.selectedFolders;
+		systemPrompt = seed.systemPrompt;
+		kind = seed.kind;
+		autoAnalyzeReports = seed.autoAnalyzeReports;
 		// Reset validation state when agent changes
 		errors = {};
-		previousKind = agent?.kind ?? undefined;
+		previousKind = seed.kind;
 	});
 
 	/**
@@ -757,6 +801,9 @@ Be concise, factual, and conservative in your judgements.`;
 			</div>
 
 			<div class="form-actions">
+				{#if dirty && !saving}
+					<span class="dirty-hint" role="status">{$i18n('settings_unsaved_changes')}</span>
+				{/if}
 				<Button variant="ghost" type="button" onclick={oncancel} disabled={saving}>
 					{$i18n('common_cancel')}
 				</Button>
@@ -1040,13 +1087,26 @@ Be concise, factual, and conservative in your judgements.`;
 		margin-top: var(--spacing-xs);
 	}
 
-	/* Form Actions */
+	/* Form Actions: sticky save bar pinned to the bottom of the scrolling
+	   form, on a translucent surface so content scrolls beneath it. */
 	.form-actions {
+		position: sticky;
+		bottom: 0;
 		display: flex;
+		align-items: center;
 		gap: var(--spacing-md);
 		justify-content: flex-end;
-		padding-top: var(--spacing-lg);
+		padding: var(--spacing-md) 0;
 		border-top: 1px solid var(--color-border);
+		background: var(--surface-overlay);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+	}
+
+	.dirty-hint {
+		margin-right: auto;
+		font-size: var(--font-size-xs);
+		color: var(--color-warning);
 	}
 
 	/* Responsive */

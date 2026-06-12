@@ -106,7 +106,7 @@ Three action variants: default create button, custom `actions` snippet, or no ac
 	}
 
 	.header-title {
-		font-size: var(--font-size-lg);
+		font-size: var(--font-size-2xl);
 		font-weight: var(--font-weight-semibold);
 		margin: 0;
 	}
@@ -114,7 +114,8 @@ Three action variants: default create button, custom `actions` snippet, or no ac
 	.header-description {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
-		margin: 0;
+		margin: var(--spacing-xs) 0 0;
+		max-width: 70ch;
 	}
 
 	.header-actions {
