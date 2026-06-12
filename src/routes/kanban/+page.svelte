@@ -935,23 +935,24 @@
 		color: var(--color-error);
 		margin: 0;
 	}
+	/* Review zone on the site's signature cream surface, with a dashed brand
+	   border and a soft halo so proposed cards read as "awaiting a decision". */
 	.proposed-zone {
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-		padding: 0.75rem;
-		/* Blue like the "Tableau de tâches" button (project blue), dark text —
-		   reuses the existing accent tokens. */
-		border: 1px solid var(--color-accent-hover);
-		border-radius: 8px;
-		background: var(--color-accent-hover);
-		color: var(--color-accent-text);
+		padding: var(--spacing-md);
+		border: 1px dashed var(--color-accent-hover);
+		border-radius: var(--border-radius-lg);
+		background: var(--surface-cream);
+		box-shadow: var(--glow-accent-soft);
+		color: var(--color-text-primary);
 	}
 	.proposed-zone-title {
 		margin: 0;
-		font-size: var(--font-size-base);
-		font-weight: 600;
-		color: var(--color-accent-text);
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-accent-deep);
 	}
 	.composing-row {
 		display: flex;
@@ -959,7 +960,7 @@
 		gap: 0.5rem;
 		font-size: var(--font-size-xs);
 		font-style: italic;
-		color: var(--color-accent-text);
+		color: var(--color-accent-deep);
 	}
 	.proposed-card {
 		display: flex;
@@ -967,10 +968,11 @@
 		justify-content: space-between;
 		gap: 0.75rem;
 		padding: 0.6rem 0.7rem;
-		background: var(--color-bg-primary);
+		background: var(--surface-1);
 		color: var(--color-text-primary);
 		border: 1px solid var(--color-border);
-		border-radius: 6px;
+		border-radius: var(--border-radius-md);
+		box-shadow: var(--shadow-xs);
 	}
 	.proposed-card-main {
 		display: flex;

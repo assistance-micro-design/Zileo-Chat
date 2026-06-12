@@ -28,6 +28,7 @@
 
 <section class="kanban-column" data-column={column} aria-label={title}>
 	<header class="kanban-column-head">
+		<span class="kanban-column-dot" aria-hidden="true"></span>
 		<h3 class="kanban-column-title">{title}</h3>
 		<span class="kanban-column-count" aria-label={`${cards.length}`}>{cards.length}</span>
 	</header>
@@ -49,35 +50,69 @@
 </section>
 
 <style>
+	/* Each column carries a status tint (--col-tint) driving its glowing dot
+	   in the header; cards reuse the same variable for their side rib. */
 	.kanban-column {
+		--col-tint: var(--color-text-tertiary);
 		display: flex;
 		flex-direction: column;
 		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
-		border-radius: 8px;
+		border-radius: var(--border-radius-lg);
 		min-height: 200px;
 		max-height: 100%;
 		overflow: hidden;
 	}
+	.kanban-column[data-column='todo'] {
+		--col-tint: var(--color-status-idle);
+	}
+	.kanban-column[data-column='doing'] {
+		--col-tint: var(--color-status-running);
+	}
+	.kanban-column[data-column='review'] {
+		--col-tint: var(--color-warning);
+	}
+	.kanban-column[data-column='done'] {
+		--col-tint: var(--color-online);
+	}
 	.kanban-column-head {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
+		gap: var(--spacing-sm);
 		padding: 0.6rem 0.8rem;
-		border-bottom: 1px solid var(--color-border);
-		background: var(--color-bg-tertiary);
+		border-bottom: 1px solid var(--color-border-light);
+	}
+	.kanban-column-dot {
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--col-tint);
+		box-shadow: 0 0 6px var(--col-tint);
+		flex-shrink: 0;
+	}
+	.kanban-column[data-column='doing'] .kanban-column-dot {
+		animation: pulse 2s ease-in-out infinite;
 	}
 	.kanban-column-title {
 		margin: 0;
-		font-size: var(--font-size-base);
-		font-weight: 600;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
 	}
 	.kanban-column-count {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		background: var(--color-bg-primary);
-		padding: 0.1rem 0.5rem;
-		border-radius: 999px;
+		margin-left: auto;
+		font-size: var(--font-size-2xs);
+		font-weight: var(--font-weight-semibold);
+		font-variant-numeric: tabular-nums;
+		color: var(--color-text-secondary);
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		padding: 0.05rem 0.5rem;
+		border-radius: var(--border-radius-full);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.kanban-column[data-column='doing'] .kanban-column-dot {
+			animation: none;
+		}
 	}
 	.kanban-column-body {
 		flex: 1;

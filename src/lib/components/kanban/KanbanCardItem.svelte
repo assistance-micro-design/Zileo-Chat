@@ -303,22 +303,38 @@
 </article>
 
 <style>
+	/* The status rib inherits --col-tint from the hosting column (custom
+	   properties cascade through the display:contents card slot). */
 	.kanban-card {
+		position: relative;
 		background: var(--color-surface);
 		border: 1px solid var(--color-border);
-		border-radius: 6px;
+		border-left: 3px solid var(--col-tint, var(--color-border));
+		border-radius: var(--border-radius-md);
 		padding: 0.6rem 0.7rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.35rem;
-		transition: box-shadow var(--transition-fast);
+		box-shadow: var(--shadow-xs);
+		transition:
+			box-shadow var(--transition-base),
+			transform var(--transition-base);
 	}
 	.kanban-card:hover {
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+		box-shadow: var(--shadow-md);
+		transform: translateY(-1px);
 	}
 	.kanban-card.running {
-		opacity: 0.85;
-		border-style: dashed;
+		border-left-color: var(--color-status-running);
+	}
+	.kanban-card.running::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		pointer-events: none;
+		box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.25);
+		animation: pulse 2.4s ease-in-out infinite;
 	}
 	.card-head {
 		display: flex;
@@ -389,6 +405,8 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-error);
 	}
+	/* Actions revealed on hover or keyboard focus (desktop-first choice:
+	   to revisit if touch usage ever appears). */
 	.card-actions {
 		display: flex;
 		flex-wrap: wrap;
@@ -396,6 +414,17 @@
 		gap: 0.25rem 0.35rem;
 		margin-top: 0.25rem;
 		min-width: 0;
+		opacity: 0.45;
+		transition: opacity var(--transition-fast);
+	}
+	.kanban-card:hover .card-actions,
+	.kanban-card:focus-within .card-actions {
+		opacity: 1;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.kanban-card.running::after {
+			animation: none;
+		}
 	}
 	.card-workflow-link {
 		color: var(--color-text-muted);
