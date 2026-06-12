@@ -16,19 +16,21 @@
 
 <!--
 MCPServerTester Component
-Displays MCP server connection test results including tools, resources, and latency.
+Displays MCP server connection test results: status badge, discovered tools
+as monospace badges on the MCP channel, resources, and the error output in a
+monospace panel on failure. The retry action lives in the host modal footer.
 
 @example
 <MCPServerTester
   result={testResult}
   loading={isTestRunning}
-  onRetry={handleRetry}
+  error={connectError}
 />
 -->
 <script lang="ts">
 	import type { MCPTestResult } from '$types/mcp';
-	import { Button, Badge, Spinner } from '$lib/components/ui';
-	import { CircleCheck, CircleX, RefreshCw, Wrench, FileText, Clock } from '@lucide/svelte';
+	import { Badge, Spinner } from '$lib/components/ui';
+	import { CircleCheck, CircleX, Clock } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**
@@ -39,13 +41,11 @@ Displays MCP server connection test results including tools, resources, and late
 		result: MCPTestResult | null;
 		/** Whether a test is currently running */
 		loading?: boolean;
-		/** Handler for retry action */
-		onRetry?: () => void;
 		/** Error message if test failed before getting result */
 		error?: string | null;
 	}
 
-	let { result, loading = false, onRetry, error = null }: Props = $props();
+	let { result, loading = false, error = null }: Props = $props();
 
 	/**
 	 * Formats latency in a human-readable way
@@ -56,16 +56,6 @@ Displays MCP server connection test results including tools, resources, and late
 		}
 		return `${(ms / 1000).toFixed(2)}s`;
 	}
-
-	/**
-	 * Truncates tool description for display
-	 */
-	function truncateDescription(desc: string, maxLength: number = 80): string {
-		if (desc.length <= maxLength) {
-			return desc;
-		}
-		return desc.slice(0, maxLength - 3) + '...';
-	}
 </script>
 
 <div class="tester-container">
@@ -75,92 +65,67 @@ Displays MCP server connection test results including tools, resources, and late
 			<span class="loading-text">{$i18n('mcp_tester_loading')}</span>
 		</div>
 	{:else if error}
-		<div class="tester-error">
-			<div class="error-header">
-				<CircleX size={24} class="error-icon" />
-				<span class="error-title">{$i18n('mcp_tester_failed')}</span>
+		<div class="tester-result">
+			<div class="result-header">
+				<Badge variant="error">
+					<CircleX size={12} />
+					{$i18n('mcp_tester_failed')}
+				</Badge>
 			</div>
-			<p class="error-message">{error}</p>
-			{#if onRetry}
-				<Button variant="ghost" size="sm" onclick={onRetry}>
-					<RefreshCw size={16} />
-					<span>{$i18n('mcp_tester_retry')}</span>
-				</Button>
-			{/if}
+			<div class="code-panel error-text">{error}</div>
 		</div>
 	{:else if result}
-		<div class="tester-result" class:success={result.success} class:failure={!result.success}>
+		<div class="tester-result">
 			<div class="result-header">
 				{#if result.success}
-					<CircleCheck size={24} class="success-icon" />
-					<span class="result-title">{$i18n('mcp_tester_success')}</span>
+					<Badge variant="success">
+						<CircleCheck size={12} />
+						{$i18n('mcp_tester_success')}
+					</Badge>
 				{:else}
-					<CircleX size={24} class="error-icon" />
-					<span class="result-title">{$i18n('mcp_tester_failure')}</span>
+					<Badge variant="error">
+						<CircleX size={12} />
+						{$i18n('mcp_tester_failure')}
+					</Badge>
 				{/if}
-				<Badge variant={result.success ? 'success' : 'error'}>
+				<Badge variant="neutral">
 					<Clock size={12} />
 					{formatLatency(result.latency_ms)}
 				</Badge>
 			</div>
 
-			<p class="result-message">{result.message}</p>
-
 			{#if result.success}
-				<div class="result-details">
-					<!-- Tools Section -->
-					<div class="detail-section">
-						<div class="section-header">
-							<Wrench size={16} />
-							<span class="section-title">{$i18n('mcp_tester_tools')} ({result.tools.length})</span>
+				<div class="detail-section">
+					<span class="section-label">
+						{$i18n('mcp_tester_tools')} ({result.tools.length})
+					</span>
+					{#if result.tools.length === 0}
+						<p class="empty-list">{$i18n('mcp_tester_tools_empty')}</p>
+					{:else}
+						<div class="badge-wrap">
+							{#each result.tools as tool (tool.name)}
+								<span class="badge badge-mcp mono-badge" title={tool.description}>{tool.name}</span>
+							{/each}
 						</div>
-						{#if result.tools.length === 0}
-							<p class="empty-list">{$i18n('mcp_tester_tools_empty')}</p>
-						{:else}
-							<ul class="tool-list">
-								{#each result.tools as tool (tool.name)}
-									<li class="tool-item">
-										<span class="tool-name">{tool.name}</span>
-										<span class="tool-description">
-											{truncateDescription(tool.description)}
-										</span>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					</div>
+					{/if}
+				</div>
 
-					<!-- Resources Section -->
-					<div class="detail-section">
-						<div class="section-header">
-							<FileText size={16} />
-							<span class="section-title"
-								>{$i18n('mcp_tester_resources')} ({result.resources.length})</span
-							>
+				<div class="detail-section">
+					<span class="section-label">
+						{$i18n('mcp_tester_resources')} ({result.resources.length})
+					</span>
+					{#if result.resources.length === 0}
+						<p class="empty-list">{$i18n('mcp_tester_resources_empty')}</p>
+					{:else}
+						<div class="badge-wrap">
+							{#each result.resources as resource (resource.uri)}
+								<span class="badge badge-mcp mono-badge" title={resource.uri}>{resource.name}</span>
+							{/each}
 						</div>
-						{#if result.resources.length === 0}
-							<p class="empty-list">{$i18n('mcp_tester_resources_empty')}</p>
-						{:else}
-							<ul class="resource-list">
-								{#each result.resources as resource (resource.uri)}
-									<li class="resource-item">
-										<span class="resource-name">{resource.name}</span>
-										<span class="resource-uri">{resource.uri}</span>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					</div>
+					{/if}
 				</div>
-			{/if}
-
-			{#if onRetry}
-				<div class="result-actions">
-					<Button variant="ghost" size="sm" onclick={onRetry}>
-						<RefreshCw size={16} />
-						<span>{$i18n('mcp_tester_test_again')}</span>
-					</Button>
-				</div>
+			{:else}
+				<div class="code-panel error-text">{result.message}</div>
 			{/if}
 		</div>
 	{:else}
@@ -171,12 +136,6 @@ Displays MCP server connection test results including tools, resources, and late
 </div>
 
 <style>
-	.tester-container {
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		overflow: hidden;
-	}
-
 	.tester-loading {
 		display: flex;
 		flex-direction: column;
@@ -191,66 +150,16 @@ Displays MCP server connection test results including tools, resources, and late
 		color: var(--color-text-secondary);
 	}
 
-	.tester-error,
 	.tester-result {
-		padding: var(--spacing-lg);
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
 	}
 
-	.tester-error {
-		background: var(--color-error-light);
-	}
-
-	.error-header,
 	.result-header {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-md);
-	}
-
-	.error-header :global(.error-icon),
-	.result-header :global(.error-icon) {
-		color: var(--color-error);
-	}
-
-	.result-header :global(.success-icon) {
-		color: var(--color-success);
-	}
-
-	.error-title,
-	.result-title {
-		font-weight: var(--font-weight-semibold);
-		flex: 1;
-	}
-
-	.error-message,
-	.result-message {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin-bottom: var(--spacing-md);
-	}
-
-	.tester-error :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
-	.tester-result.success {
-		background: var(--color-success-light);
-	}
-
-	.tester-result.failure {
-		background: var(--color-error-light);
-	}
-
-	.result-details {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-lg);
-		margin-top: var(--spacing-lg);
-		padding-top: var(--spacing-lg);
-		border-top: 1px solid var(--color-border);
 	}
 
 	.detail-section {
@@ -259,72 +168,43 @@ Displays MCP server connection test results including tools, resources, and late
 		gap: var(--spacing-sm);
 	}
 
-	.section-header {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		color: var(--color-text-secondary);
-	}
-
-	.section-title {
+	.section-label {
 		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-primary);
 	}
 
-	.empty-list {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		font-style: italic;
-	}
-
-	.tool-list,
-	.resource-list {
-		list-style: none;
-		padding: 0;
-		margin: 0;
+	.badge-wrap {
 		display: flex;
-		flex-direction: column;
+		flex-wrap: wrap;
 		gap: var(--spacing-xs);
 	}
 
-	.tool-item,
-	.resource-item {
-		display: flex;
-		flex-direction: column;
-		padding: var(--spacing-sm);
-		background: var(--color-bg-primary);
-		border-radius: var(--border-radius-sm);
-	}
-
-	.tool-name,
-	.resource-name {
+	.mono-badge {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 	}
 
-	.tool-description,
-	.resource-uri {
+	.empty-list {
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
+		color: var(--color-text-tertiary);
+		margin: 0;
 	}
 
-	.resource-uri {
+	.code-panel {
+		padding: var(--spacing-md);
 		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-md);
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 
-	.result-actions {
-		margin-top: var(--spacing-md);
-		padding-top: var(--spacing-md);
-		border-top: 1px solid var(--color-border);
-	}
-
-	.result-actions :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
+	.code-panel.error-text {
+		color: var(--color-error);
+		border-color: var(--color-error-border);
 	}
 
 	.tester-empty {
@@ -335,5 +215,6 @@ Displays MCP server connection test results including tools, resources, and late
 	.empty-text {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
+		margin: 0;
 	}
 </style>

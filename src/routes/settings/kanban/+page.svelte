@@ -24,6 +24,7 @@
 	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import { Card, Input, Button } from '$lib/components/ui';
+	import { RefreshCw } from '@lucide/svelte';
 	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { i18n } from '$lib/i18n';
 	import { toastStore } from '$lib/stores/toast';
@@ -79,10 +80,8 @@
 		return Math.min(Math.max(parsed, COMPOSE_TIMEOUT_MIN_SECS), COMPOSE_TIMEOUT_MAX_SECS);
 	}
 
-	async function handleTimeoutChange(
-		event: Event & { currentTarget: HTMLInputElement }
-	): Promise<void> {
-		const next = clampInput(event.currentTarget.value);
+	async function handleSave(): Promise<void> {
+		const next = clampInput(composeTimeoutSecs);
 		const previous = persistedTimeoutSecs;
 		// Reflect the clamped value immediately in the input.
 		composeTimeoutSecs = String(next);
@@ -152,34 +151,42 @@
 	{#if loading}
 		<div class="lazy-loading">{$i18n('kanban_settings_loading')}</div>
 	{:else}
-		<Card>
-			{#snippet body()}
-				<div class="form-grid">
-					<Input
-						type="number"
-						label={$i18n('kanban_settings_compose_timeout_label')}
-						value={composeTimeoutSecs}
-						min={COMPOSE_TIMEOUT_MIN_SECS}
-						max={COMPOSE_TIMEOUT_MAX_SECS}
-						step={30}
-						disabled={saving}
-						onchange={handleTimeoutChange}
-						help={$i18n('kanban_settings_compose_timeout_help')}
-					/>
-					<p class="form-hint">
-						{$i18n('kanban_settings_compose_timeout_range')
-							.replace('{min}', String(COMPOSE_TIMEOUT_MIN_SECS))
-							.replace('{max}', String(COMPOSE_TIMEOUT_MAX_SECS))}
-					</p>
-
-					<div class="actions">
-						<Button variant="secondary" onclick={handleReset} disabled={saving}>
-							{$i18n('kanban_settings_reload')}
+		<div class="settings-card">
+			<Card>
+				{#snippet body()}
+					<div class="timeout-field">
+						<Input
+							type="number"
+							label={$i18n('kanban_settings_compose_timeout_label')}
+							value={composeTimeoutSecs}
+							min={COMPOSE_TIMEOUT_MIN_SECS}
+							max={COMPOSE_TIMEOUT_MAX_SECS}
+							step={30}
+							disabled={saving}
+							oninput={(e) => {
+								composeTimeoutSecs = e.currentTarget.value;
+							}}
+							help={`${$i18n('kanban_settings_compose_timeout_help')} ${$i18n(
+								'kanban_settings_compose_timeout_range'
+							)
+								.replace('{min}', String(COMPOSE_TIMEOUT_MIN_SECS))
+								.replace('{max}', String(COMPOSE_TIMEOUT_MAX_SECS))}`}
+						/>
+					</div>
+				{/snippet}
+				{#snippet footer()}
+					<div class="card-actions">
+						<Button variant="outline" size="sm" onclick={handleReset} disabled={saving}>
+							<RefreshCw size={14} />
+							<span>{$i18n('kanban_settings_reload')}</span>
+						</Button>
+						<Button variant="primary" size="sm" onclick={handleSave} disabled={saving}>
+							{$i18n('common_save')}
 						</Button>
 					</div>
-				</div>
-			{/snippet}
-		</Card>
+				{/snippet}
+			</Card>
+		</div>
 	{/if}
 </section>
 
@@ -188,20 +195,25 @@
 		margin-bottom: var(--spacing-lg);
 	}
 
-	.form-grid {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
+	.settings-card {
+		max-width: 640px;
 	}
 
-	.form-hint {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin: 0;
+	.timeout-field :global(input) {
+		width: 180px;
 	}
 
-	.actions {
+	.card-actions {
 		display: flex;
 		gap: var(--spacing-sm);
+		justify-content: flex-end;
+		align-items: center;
+		flex: 1;
+	}
+
+	.card-actions :global(button) {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
 	}
 </style>

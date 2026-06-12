@@ -24,7 +24,7 @@ Manages MCP server configuration.
 	import { invoke } from '@tauri-apps/api/core';
 	import MCPSection from '$lib/components/settings/MCPSection.svelte';
 	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
-	import { Card } from '$lib/components/ui';
+	import { Card, Switch } from '$lib/components/ui';
 	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 	import { i18n } from '$lib/i18n';
 	import { toastStore } from '$lib/stores/toast';
@@ -63,10 +63,7 @@ Manages MCP server configuration.
 		}
 	});
 
-	async function handleLanToggle(
-		event: Event & { currentTarget: HTMLInputElement }
-	): Promise<void> {
-		const next = event.currentTarget.checked;
+	async function handleLanToggle(next: boolean): Promise<void> {
 		const previous = allowPrivateNetwork;
 		allowPrivateNetwork = next;
 		networkSaving = true;
@@ -111,33 +108,37 @@ Manages MCP server configuration.
 		helpTutorialKey="help_mcp_network_tutorial"
 	/>
 
-	<Card>
-		{#snippet body()}
-			<div class="network-body">
-				<label class="toggle-row">
-					<input
-						type="checkbox"
-						checked={allowPrivateNetwork}
-						disabled={networkLoading || networkSaving}
-						onchange={handleLanToggle}
-					/>
-					<span>{$i18n('mcp_network_lan_label')}</span>
-				</label>
-				<p class="form-hint">{$i18n('mcp_network_lan_help')}</p>
-
-				{#if allowPrivateNetwork}
-					<div class="lan-warning" role="alert">
-						<TriangleAlert size={18} aria-hidden="true" />
-						<div class="lan-warning-text">
-							<strong>{$i18n('mcp_network_lan_warning_title')}</strong>
-							<span>{$i18n('mcp_network_lan_warning_body')}</span>
-							<span>{$i18n('mcp_network_lan_auth_note')}</span>
-						</div>
+	<div class="network-card">
+		<Card>
+			{#snippet body()}
+				<div class="network-body">
+					<div class="toggle-row">
+						<span class="toggle-text">
+							<strong id="mcp-network-lan-label">{$i18n('mcp_network_lan_label')}</strong>
+							<span>{$i18n('mcp_network_lan_help')}</span>
+						</span>
+						<Switch
+							checked={allowPrivateNetwork}
+							disabled={networkLoading || networkSaving}
+							onchange={handleLanToggle}
+							labelledBy="mcp-network-lan-label"
+						/>
 					</div>
-				{/if}
-			</div>
-		{/snippet}
-	</Card>
+
+					{#if allowPrivateNetwork}
+						<div class="lan-warning" role="alert">
+							<TriangleAlert size={18} aria-hidden="true" />
+							<div class="lan-warning-text">
+								<strong>{$i18n('mcp_network_lan_warning_title')}</strong>
+								<span>{$i18n('mcp_network_lan_warning_body')}</span>
+								<span>{$i18n('mcp_network_lan_auth_note')}</span>
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/snippet}
+		</Card>
+	</div>
 </section>
 
 <MCPSection bind:this={mcpSectionRef} />
@@ -151,24 +152,36 @@ Manages MCP server configuration.
 		margin-bottom: var(--spacing-lg);
 	}
 
+	.network-card {
+		max-width: 720px;
+	}
+
 	.network-body {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-md);
 	}
 
 	.toggle-row {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		font-weight: var(--font-weight-medium);
-		cursor: pointer;
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--spacing-lg);
 	}
 
-	.form-hint {
+	.toggle-text strong {
+		display: block;
 		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin: 0;
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-primary);
+	}
+
+	.toggle-text span {
+		display: block;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
 	}
 
 	.lan-warning {
@@ -177,9 +190,9 @@ Manages MCP server configuration.
 		align-items: flex-start;
 		padding: var(--spacing-md);
 		border-radius: var(--border-radius-md);
-		background: var(--color-warning-bg);
+		background: var(--color-warning-light);
+		border: 1px solid rgba(217, 144, 12, 0.35);
 		color: var(--color-warning);
-		margin-top: var(--spacing-xs);
 	}
 
 	.lan-warning-text {

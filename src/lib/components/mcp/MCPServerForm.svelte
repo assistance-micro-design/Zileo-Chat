@@ -44,7 +44,15 @@
 		MCPServerConfig,
 		MCPServerConfigWithSecret
 	} from '$types/mcp';
-	import { Button, HelpButton, Input, PasswordInput, Select, Textarea } from '$lib/components/ui';
+	import {
+		Button,
+		HelpButton,
+		Input,
+		PasswordInput,
+		Select,
+		Switch,
+		Textarea
+	} from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { Plus, X } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
@@ -421,31 +429,33 @@
 </script>
 
 <form class="mcp-form" onsubmit={handleSubmit}>
-	<div class="form-section">
-		<Input
-			label={$i18n('mcp_form_name_label')}
-			value={formData.name}
-			oninput={(e) => {
-				formData.name = e.currentTarget.value;
-			}}
-			placeholder={$i18n('mcp_form_name_placeholder')}
-			required
-			help={errors.name ?? $i18n('mcp_form_name_help')}
-		/>
-		{#if errors.name}
-			<span class="error-text">{errors.name}</span>
-		{/if}
-	</div>
+	<div class="form-row">
+		<div class="form-section mono-input">
+			<Input
+				label={$i18n('mcp_form_name_label')}
+				value={formData.name}
+				oninput={(e) => {
+					formData.name = e.currentTarget.value;
+				}}
+				placeholder={$i18n('mcp_form_name_placeholder')}
+				required
+				help={errors.name ?? $i18n('mcp_form_name_help')}
+			/>
+			{#if errors.name}
+				<span class="error-text">{errors.name}</span>
+			{/if}
+		</div>
 
-	<div class="form-section">
-		<Select
-			label={$i18n('mcp_form_deployment_label')}
-			options={commandOptions}
-			value={formData.command}
-			onchange={handleCommandChange}
-			required
-			help={$i18n('mcp_form_deployment_help')}
-		/>
+		<div class="form-section">
+			<Select
+				label={$i18n('mcp_form_deployment_label')}
+				options={commandOptions}
+				value={formData.command}
+				onchange={handleCommandChange}
+				required
+				help={$i18n('mcp_form_deployment_help')}
+			/>
+		</div>
 	</div>
 
 	<div class="form-section">
@@ -456,12 +466,93 @@
 				formData.args = e.currentTarget.value;
 			}}
 			placeholder={$i18n('mcp_form_args_placeholder')}
-			rows={4}
+			rows={2}
 			help={errors.args ?? $i18n('mcp_form_args_help')}
 		/>
 		{#if errors.args}
 			<span class="error-text">{errors.args}</span>
 		{/if}
+	</div>
+
+	<div class="form-section" class:section-disabled={isHttp}>
+		<span class="env-label" id="env-vars-label">{$i18n('mcp_form_env_label')}</span>
+
+		{#if isHttp}
+			<p class="env-disabled-banner">{$i18n('mcp_auth_env_disabled_in_http')}</p>
+		{/if}
+
+		{#if formData.env.length > 0}
+			<div class="env-list">
+				{#each formData.env as envVar, index (index)}
+					<div class="env-row">
+						<input
+							type="text"
+							class="env-input env-key"
+							value={envVar.key}
+							oninput={(e) => {
+								const row = formData.env[index];
+								if (row) row.key = e.currentTarget.value;
+							}}
+							placeholder={$i18n('mcp_form_env_key_placeholder')}
+							aria-label={$i18n('mcp_form_env_key_arialabel')}
+							disabled={isHttp}
+						/>
+						<input
+							type="text"
+							class="env-input env-value"
+							value={envVar.value}
+							oninput={(e) => {
+								const row = formData.env[index];
+								if (row) row.value = e.currentTarget.value;
+							}}
+							placeholder={$i18n('mcp_form_env_value_placeholder')}
+							aria-label={$i18n('mcp_form_env_value_arialabel')}
+							disabled={isHttp}
+						/>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							onclick={() => removeEnvVar(index)}
+							ariaLabel={$i18n('mcp_form_env_remove_arialabel')}
+							disabled={isHttp}
+						>
+							<X size={16} />
+						</Button>
+					</div>
+				{/each}
+			</div>
+		{/if}
+
+		<div class="add-row">
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				onclick={addEnvVar}
+				ariaLabel={$i18n('mcp_form_env_add')}
+				disabled={isHttp}
+			>
+				<Plus size={14} />
+				<span>{$i18n('mcp_form_env_add')}</span>
+			</Button>
+		</div>
+		{#if errors.env}
+			<span class="error-text">{errors.env}</span>
+		{/if}
+	</div>
+
+	<div class="form-section">
+		<Textarea
+			label={$i18n('mcp_form_description_label')}
+			value={formData.description}
+			oninput={(e) => {
+				formData.description = e.currentTarget.value;
+			}}
+			placeholder={$i18n('mcp_form_description_placeholder')}
+			rows={2}
+			help={$i18n('mcp_form_description_help')}
+		/>
 	</div>
 
 	{#if isHttp}
@@ -505,37 +596,53 @@
 				</div>
 			{/if}
 
-			<Select
-				label={$i18n('mcp_auth_method_label')}
-				options={authOptions}
-				value={formData.authType}
-				onchange={handleAuthTypeChange}
-				help={$i18n('mcp_auth_method_help')}
-			/>
+			<div class="form-row">
+				<Select
+					label={$i18n('mcp_auth_method_label')}
+					options={authOptions}
+					value={formData.authType}
+					onchange={handleAuthTypeChange}
+					help={$i18n('mcp_auth_method_help')}
+				/>
 
-			{#if formData.authType === 'bearer'}
-				<PasswordInput
-					label={$i18n('mcp_auth_bearer_token_label')}
-					bind:value={formData.bearerToken}
-					placeholder={secretPlaceholder}
-					help={errors.authBearer ?? $i18n('mcp_auth_bearer_token_help')}
-					error={errors.authBearer}
-					required={secretRequired}
-				/>
-			{:else if formData.authType === 'apikey'}
-				<Input
-					label={$i18n('mcp_auth_apikey_header_label')}
-					value={formData.apiKeyHeaderName}
-					oninput={(e) => {
-						formData.apiKeyHeaderName = e.currentTarget.value;
-					}}
-					placeholder="X-API-Key"
-					help={errors.authApiKeyHeader ?? $i18n('mcp_auth_apikey_header_help')}
-				/>
-				{#if errors.authApiKeyHeader}
-					<span class="error-text">{errors.authApiKeyHeader}</span>
+				{#if formData.authType === 'bearer'}
+					<PasswordInput
+						label={$i18n('mcp_auth_bearer_token_label')}
+						bind:value={formData.bearerToken}
+						placeholder={secretPlaceholder}
+						help={errors.authBearer ?? $i18n('mcp_auth_bearer_token_help')}
+						error={errors.authBearer}
+						required={secretRequired}
+					/>
+				{:else if formData.authType === 'apikey'}
+					<div class="form-section">
+						<Input
+							label={$i18n('mcp_auth_apikey_header_label')}
+							value={formData.apiKeyHeaderName}
+							oninput={(e) => {
+								formData.apiKeyHeaderName = e.currentTarget.value;
+							}}
+							placeholder="X-API-Key"
+							help={errors.authApiKeyHeader ?? $i18n('mcp_auth_apikey_header_help')}
+						/>
+						{#if errors.authApiKeyHeader}
+							<span class="error-text">{errors.authApiKeyHeader}</span>
+						{/if}
+					</div>
+				{:else if formData.authType === 'basic'}
+					<Input
+						label={$i18n('mcp_auth_basic_user_label')}
+						value={formData.basicUser}
+						oninput={(e) => {
+							formData.basicUser = e.currentTarget.value;
+						}}
+						placeholder=""
+						help={errors.authBasic}
+					/>
 				{/if}
+			</div>
 
+			{#if formData.authType === 'apikey'}
 				<PasswordInput
 					label={$i18n('mcp_auth_apikey_value_label')}
 					bind:value={formData.apiKeyValue}
@@ -545,15 +652,6 @@
 					required={secretRequired}
 				/>
 			{:else if formData.authType === 'basic'}
-				<Input
-					label={$i18n('mcp_auth_basic_user_label')}
-					value={formData.basicUser}
-					oninput={(e) => {
-						formData.basicUser = e.currentTarget.value;
-					}}
-					placeholder=""
-					help={errors.authBasic}
-				/>
 				<PasswordInput
 					label={$i18n('mcp_auth_basic_pass_label')}
 					bind:value={formData.basicPass}
@@ -566,167 +664,83 @@
 					<span class="warning-text">{$i18n('mcp_auth_basic_http_warning')}</span>
 				{/if}
 			{/if}
-		</div>
 
-		<div class="form-section auth-section">
-			<div class="env-header">
+			<div class="form-section">
 				<span class="env-label">{$i18n('mcp_auth_extra_headers_title')}</span>
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					onclick={addExtraHeader}
-					ariaLabel={$i18n('mcp_auth_extra_headers_add')}
-					disabled={formData.extraHeaders.length >= MAX_EXTRA_HEADERS}
-				>
-					<Plus size={16} />
-					<span>{$i18n('mcp_auth_extra_headers_add')}</span>
-				</Button>
-			</div>
 
-			{#if formData.extraHeaders.length > 0}
-				<div class="env-list">
-					{#each formData.extraHeaders as header, index (index)}
-						<div class="env-row">
-							<input
-								type="text"
-								class="env-input env-key"
-								value={header.key}
-								oninput={(e) => {
-									const row = formData.extraHeaders[index];
-									if (row) row.key = e.currentTarget.value;
-								}}
-								placeholder={$i18n('mcp_auth_extra_headers_key_placeholder')}
-								aria-label={$i18n('mcp_auth_extra_headers_key_placeholder')}
-							/>
-							<span class="env-equals">:</span>
-							<input
-								type="text"
-								class="env-input env-value"
-								value={header.value}
-								oninput={(e) => {
-									const row = formData.extraHeaders[index];
-									if (row) row.value = e.currentTarget.value;
-								}}
-								placeholder={$i18n('mcp_auth_extra_headers_value_placeholder')}
-								aria-label={$i18n('mcp_auth_extra_headers_value_placeholder')}
-							/>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon"
-								onclick={() => removeExtraHeader(index)}
-								ariaLabel={$i18n('mcp_auth_extra_headers_remove')}
-							>
-								<X size={16} />
-							</Button>
-						</div>
-					{/each}
+				{#if formData.extraHeaders.length > 0}
+					<div class="env-list">
+						{#each formData.extraHeaders as header, index (index)}
+							<div class="env-row">
+								<input
+									type="text"
+									class="env-input env-key"
+									value={header.key}
+									oninput={(e) => {
+										const row = formData.extraHeaders[index];
+										if (row) row.key = e.currentTarget.value;
+									}}
+									placeholder={$i18n('mcp_auth_extra_headers_key_placeholder')}
+									aria-label={$i18n('mcp_auth_extra_headers_key_placeholder')}
+								/>
+								<input
+									type="text"
+									class="env-input env-value"
+									value={header.value}
+									oninput={(e) => {
+										const row = formData.extraHeaders[index];
+										if (row) row.value = e.currentTarget.value;
+									}}
+									placeholder={$i18n('mcp_auth_extra_headers_value_placeholder')}
+									aria-label={$i18n('mcp_auth_extra_headers_value_placeholder')}
+								/>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									onclick={() => removeExtraHeader(index)}
+									ariaLabel={$i18n('mcp_auth_extra_headers_remove')}
+								>
+									<X size={16} />
+								</Button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<div class="add-row">
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onclick={addExtraHeader}
+						ariaLabel={$i18n('mcp_auth_extra_headers_add')}
+						disabled={formData.extraHeaders.length >= MAX_EXTRA_HEADERS}
+					>
+						<Plus size={14} />
+						<span>{$i18n('mcp_auth_extra_headers_add')}</span>
+					</Button>
 				</div>
-			{/if}
-			{#if errors.extraHeaders}
-				<span class="error-text">{errors.extraHeaders}</span>
-			{/if}
+				<span class="form-help">{$i18n('mcp_auth_extra_headers_help')}</span>
+				{#if errors.extraHeaders}
+					<span class="error-text">{errors.extraHeaders}</span>
+				{/if}
+			</div>
 		</div>
 	{/if}
 
-	<div class="form-section" class:section-disabled={isHttp}>
-		<div class="env-header">
-			<span class="env-label" id="env-vars-label">{$i18n('mcp_form_env_label')}</span>
-			<Button
-				type="button"
-				variant="ghost"
-				size="sm"
-				onclick={addEnvVar}
-				ariaLabel={$i18n('mcp_form_env_add')}
-				disabled={isHttp}
-			>
-				<Plus size={16} />
-				<span>{$i18n('mcp_form_env_add')}</span>
-			</Button>
-		</div>
-
-		{#if isHttp}
-			<p class="env-disabled-banner">{$i18n('mcp_auth_env_disabled_in_http')}</p>
-		{/if}
-
-		{#if formData.env.length === 0}
-			<p class="env-empty">{$i18n('mcp_form_env_empty')}</p>
-		{:else}
-			<div class="env-list">
-				{#each formData.env as envVar, index (index)}
-					<div class="env-row">
-						<input
-							type="text"
-							class="env-input env-key"
-							value={envVar.key}
-							oninput={(e) => {
-								const row = formData.env[index];
-								if (row) row.key = e.currentTarget.value;
-							}}
-							placeholder={$i18n('mcp_form_env_key_placeholder')}
-							aria-label={$i18n('mcp_form_env_key_arialabel')}
-							disabled={isHttp}
-						/>
-						<span class="env-equals">=</span>
-						<input
-							type="text"
-							class="env-input env-value"
-							value={envVar.value}
-							oninput={(e) => {
-								const row = formData.env[index];
-								if (row) row.value = e.currentTarget.value;
-							}}
-							placeholder={$i18n('mcp_form_env_value_placeholder')}
-							aria-label={$i18n('mcp_form_env_value_arialabel')}
-							disabled={isHttp}
-						/>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon"
-							onclick={() => removeEnvVar(index)}
-							ariaLabel={$i18n('mcp_form_env_remove_arialabel')}
-							disabled={isHttp}
-						>
-							<X size={16} />
-						</Button>
-					</div>
-				{/each}
-			</div>
-		{/if}
-		{#if errors.env}
-			<span class="error-text">{errors.env}</span>
-		{/if}
-	</div>
-
-	<div class="form-section">
-		<Textarea
-			label={$i18n('mcp_form_description_label')}
-			value={formData.description}
-			oninput={(e) => {
-				formData.description = e.currentTarget.value;
+	<div class="toggle-row">
+		<span class="toggle-text">
+			<strong id="mcp-server-enabled-label">{$i18n('mcp_form_enabled_label')}</strong>
+			<span>{$i18n('mcp_form_enabled_help')}</span>
+		</span>
+		<Switch
+			checked={formData.enabled}
+			onchange={(value) => {
+				formData.enabled = value;
 			}}
-			placeholder={$i18n('mcp_form_description_placeholder')}
-			rows={2}
-			help={$i18n('mcp_form_description_help')}
+			labelledBy="mcp-server-enabled-label"
 		/>
-	</div>
-
-	<div class="form-section">
-		<div class="checkbox-wrapper">
-			<input
-				type="checkbox"
-				id="mcp-server-enabled"
-				checked={formData.enabled}
-				onchange={(e) => {
-					formData.enabled = e.currentTarget.checked;
-				}}
-			/>
-			<label for="mcp-server-enabled" class="checkbox-label">
-				{$i18n('mcp_form_enabled_label')}
-			</label>
-		</div>
 	</div>
 
 	<div class="form-actions">
@@ -750,17 +764,24 @@
 		gap: var(--spacing-lg);
 	}
 
+	.form-row {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--spacing-md);
+		align-items: start;
+	}
+
 	.form-section {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-xs);
 	}
 
+	.mono-input :global(input) {
+		font-family: var(--font-mono);
+	}
+
 	.auth-section {
-		padding: var(--spacing-md);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		background: var(--color-bg-secondary);
 		gap: var(--spacing-md);
 	}
 
@@ -772,8 +793,8 @@
 
 	.section-title {
 		margin: 0;
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 	}
 
@@ -821,7 +842,7 @@
 
 	.env-label {
 		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 	}
 
@@ -845,28 +866,6 @@
 		background: var(--color-bg-secondary);
 	}
 
-	.env-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-
-	.env-header :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
-	.env-empty {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		font-style: italic;
-		padding: var(--spacing-md);
-		text-align: center;
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-md);
-	}
-
 	.env-list {
 		display: flex;
 		flex-direction: column;
@@ -885,11 +884,6 @@
 		font-family: var(--font-mono);
 	}
 
-	.env-equals {
-		color: var(--color-text-secondary);
-		font-family: var(--font-mono);
-	}
-
 	.env-value {
 		flex: 2;
 		font-family: var(--font-mono);
@@ -899,22 +893,42 @@
 		flex-shrink: 0;
 	}
 
-	.checkbox-wrapper {
+	.add-row {
+		display: flex;
+		margin-top: var(--spacing-xs);
+	}
+
+	.add-row :global(button) {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-xs);
 	}
 
-	.checkbox-wrapper input[type='checkbox'] {
-		width: 18px;
-		height: 18px;
-		accent-color: var(--color-accent);
-		cursor: pointer;
+	.form-help {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
 	}
 
-	.checkbox-label {
-		cursor: pointer;
+	.toggle-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--spacing-lg);
+	}
+
+	.toggle-text strong {
+		display: block;
 		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-primary);
+	}
+
+	.toggle-text span {
+		display: block;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
 	}
 
 	.form-actions {
@@ -933,5 +947,11 @@
 	.warning-text {
 		font-size: var(--font-size-sm);
 		color: var(--color-warning);
+	}
+
+	@media (max-width: 640px) {
+		.form-row {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

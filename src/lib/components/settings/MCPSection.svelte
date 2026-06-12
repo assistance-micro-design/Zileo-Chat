@@ -57,7 +57,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		listLegacyHttpAuth,
 		type MCPState
 	} from '$lib/stores/mcp';
-	import { Plus, Plug } from '@lucide/svelte';
+	import { Plus, Plug, Zap, RefreshCw } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';
@@ -407,6 +407,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 <!-- MCP Server Modal (Create/Edit) -->
 <Modal
 	open={mcpModal.show}
+	wide
 	title={mcpModal.mode === 'create' ? $i18n('mcp_modal_add') : $i18n('mcp_modal_edit')}
 	onclose={() => mcpModal.close()}
 >
@@ -432,13 +433,27 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			result={testResult}
 			loading={mcpState.testingServerId !== null}
 			error={testError}
-			onRetry={handleRetryTest}
 		/>
 	{/snippet}
 	{#snippet footer()}
-		<Button variant="ghost" onclick={closeTestModal}>
-			{$i18n('common_close')}
-		</Button>
+		<div class="test-modal-actions">
+			<Button
+				variant="outline"
+				onclick={handleRetryTest}
+				disabled={mcpState.testingServerId !== null}
+			>
+				{#if testError || (testResult && !testResult.success)}
+					<RefreshCw size={14} />
+					<span>{$i18n('mcp_tester_retry')}</span>
+				{:else}
+					<Zap size={14} />
+					<span>{$i18n('mcp_tester_test_again')}</span>
+				{/if}
+			</Button>
+			<Button variant="ghost" onclick={closeTestModal}>
+				{$i18n('common_close')}
+			</Button>
+		</div>
 	{/snippet}
 </Modal>
 
@@ -457,9 +472,22 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	/* MCP Servers */
 	.mcp-server-grid {
 		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-lg);
+		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+		gap: var(--spacing-md);
 		contain: layout style; /* Isolate layout recalculations */
+	}
+
+	.test-modal-actions {
+		display: flex;
+		gap: var(--spacing-sm);
+		justify-content: flex-end;
+		align-items: center;
+	}
+
+	.test-modal-actions :global(button) {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
 	}
 
 	.mcp-loading {
