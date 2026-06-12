@@ -73,16 +73,17 @@
 	out:fade={{ duration: motionDuration(350) }}
 >
 	<div class="splash-center">
+		<div class="splash-mark" aria-hidden="true"></div>
 		<h1 class="splash-title">{$i18n('splash_app_name')}</h1>
 		<Spinner size="md" label={$i18n('splash_step_loading')} />
 
 		<div class="splash-ticker" aria-hidden="true">
 			<div class="splash-ticker-track">
 				{#each TICKER_KEYS as key (key)}
-					<span class="splash-ticker-item">{$i18n(key)}</span>
+					<span class="splash-ticker-item"><span class="tick-dot"></span>{$i18n(key)}</span>
 				{/each}
 				{#each TICKER_KEYS as key (key)}
-					<span class="splash-ticker-item">{$i18n(key)}</span>
+					<span class="splash-ticker-item"><span class="tick-dot"></span>{$i18n(key)}</span>
 				{/each}
 			</div>
 		</div>
@@ -112,9 +113,44 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--color-bg-primary);
+		/* Soft turquoise veil radiating from the brand mark, like the site */
+		background:
+			radial-gradient(620px 360px at 50% 38%, var(--color-accent-light), transparent 70%),
+			linear-gradient(180deg, rgba(148, 239, 238, 0.07), transparent 50%), var(--color-bg-primary);
 		color: var(--color-text-primary);
 		font-family: var(--font-family);
+	}
+
+	:global([data-theme='dark']) .splash {
+		background:
+			radial-gradient(620px 360px at 50% 38%, rgba(148, 239, 238, 0.1), transparent 70%),
+			linear-gradient(145deg, var(--color-bg-tertiary), var(--color-bg-primary));
+	}
+
+	/* Brand mark with a breathing glow */
+	.splash-mark {
+		width: 84px;
+		height: 84px;
+		border-radius: 24px;
+		background: var(--gradient-brand);
+		box-shadow: var(--glow-accent);
+		animation: breathe 2.6s ease-in-out infinite;
+	}
+
+	@keyframes breathe {
+		0%,
+		100% {
+			box-shadow:
+				0 0 0 1px rgba(148, 239, 238, 0.4),
+				0 10px 30px rgba(148, 239, 238, 0.2);
+			transform: scale(1);
+		}
+		50% {
+			box-shadow:
+				0 0 0 1px rgba(148, 239, 238, 0.55),
+				0 14px 44px rgba(148, 239, 238, 0.38);
+			transform: scale(1.03);
+		}
 	}
 
 	.splash-center {
@@ -152,10 +188,22 @@
 	}
 
 	.splash-ticker-item {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-sm);
 		margin-bottom: 0.5em;
 		font-size: var(--font-size-sm);
 		line-height: 1.4;
 		color: var(--color-text-tertiary);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.tick-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--color-accent-hover);
+		box-shadow: 0 0 6px var(--color-accent-hover);
 	}
 
 	@keyframes splash-ticker-scroll {
@@ -172,12 +220,13 @@
 		left: 1.25rem;
 		bottom: 1rem;
 		font-size: var(--font-size-xs);
-		color: var(--color-accent-deep);
+		color: var(--color-text-tertiary);
 		text-decoration: none;
+		transition: color var(--transition-fast);
 	}
 
 	.splash-site:hover {
-		color: var(--color-accent-hover);
+		color: var(--color-accent-deep);
 		text-decoration: underline;
 	}
 
@@ -192,6 +241,10 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.splash-ticker-track {
+			animation: none;
+		}
+
+		.splash-mark {
 			animation: none;
 		}
 	}

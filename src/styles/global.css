@@ -232,7 +232,7 @@
   --sidebar-collapsed-width: 60px;
   --right-sidebar-width: 320px;
   --right-sidebar-collapsed-width: 48px;
-  --floating-menu-height: 60px;
+  --floating-menu-height: 64px;
 }
 
 /* =====================================================================
@@ -395,25 +395,117 @@ body {
   overflow: hidden;
 }
 
+/* Floating dock: a detached, translucent, blurred pill. The opaque
+   fallback (if blur proves too costly on WebKitGTK) is a one-token
+   change: raise --surface-overlay alpha to 1. */
 .floating-menu {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1280px, calc(100vw - 24px));
   height: var(--floating-menu-height);
-  background: var(--color-bg-primary);
-  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  padding: 0 var(--spacing-xl);
+  padding: 0 var(--spacing-lg);
+  background: var(--surface-overlay);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-xl);
+  box-shadow: var(--shadow-sm);
   z-index: var(--z-index-fixed);
+}
+
+.menu-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  text-decoration: none;
+  color: inherit;
+}
+
+.menu-brand .brand-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--gradient-brand);
+  box-shadow: var(--glow-accent-soft);
+}
+
+.menu-brand h1 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.01em;
+}
+
+.menu-center {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0 auto;
+}
+
+.menu-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+/* Segmented navigation: the active tab carries a glowing surface and its
+   icon takes the page identity color (turquoise tasks / orange agent). */
+.nav-seg {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--border-radius-full);
+  border: 1px solid var(--color-border-light);
+}
+
+.nav-seg a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.nav-seg a:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.nav-seg a.active {
+  background: var(--surface-1);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-xs), var(--glow-accent-soft);
+}
+
+.nav-seg a.active svg {
+  color: var(--color-accent-deep);
+}
+
+.nav-seg a.active.seg-agent svg {
+  color: var(--color-secondary-deep);
+}
+
+.nav-seg a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-light), 0 0 0 1px var(--color-accent-deep);
 }
 
 .main-content {
   display: flex;
-  margin-top: var(--floating-menu-height);
-  height: calc(100vh - var(--floating-menu-height));
+  margin-top: calc(var(--floating-menu-height) + 20px);
+  height: calc(100vh - var(--floating-menu-height) - 20px);
   overflow: hidden;
 }
 

@@ -16,10 +16,12 @@
 
 <!--
   FloatingMenu Component
-  A fixed top navigation bar with logo, navigation, and theme toggle.
-  Uses backdrop blur for visual depth and stays fixed at the top.
+  A floating, detached dock pill fixed near the top of the viewport, with
+  translucent blurred background (styles in global.css). Brand mark on the
+  left, primary action + segmented navigation in the center, language and
+  theme controls on the right.
 
-  Layout: Logo (left) | Navigation (center) | Theme/Language (right)
+  Layout: Brand + dictation (left) | New task + segmented nav (center) | Language/Theme (right)
 
   @example
   <FloatingMenu />
@@ -58,49 +60,42 @@
 	}
 </script>
 
-<nav class="floating-menu" aria-label={$i18n('layout_main_navigation')}>
-	<!-- Left: Logo/Title + dictation FAB -->
-	<div class="menu-left">
-		<h1 class="floating-menu-title">{title}</h1>
-		<MicButton />
+<header class="floating-menu">
+	<!-- Left: Brand mark + dictation FAB -->
+	<div class="menu-brand">
+		<span class="brand-dot" aria-hidden="true"></span>
+		<h1>{title}</h1>
 	</div>
+	<MicButton />
 
-	<!-- Center: Main Navigation -->
+	<!-- Center: primary action + segmented navigation -->
 	<div class="menu-center">
-		<button type="button" class="btn btn-nav-kanban" onclick={() => cardCreatorStore.open()}>
+		<button type="button" class="btn btn-primary" onclick={() => cardCreatorStore.open()}>
 			<Plus size={16} />
 			<span class="floating-menu-link-text">{$i18n('kanban_new_card')}</span>
 		</button>
 
-		<a
-			href="/settings"
-			class="btn btn-secondary"
-			class:active={isSettings}
-			aria-current={isSettings ? 'page' : undefined}
-		>
-			<Settings size={16} />
-			<span class="floating-menu-link-text">{$i18n('layout_configuration')}</span>
-		</a>
+		<nav class="nav-seg" aria-label={$i18n('layout_main_navigation')}>
+			<a href="/kanban" class:active={isKanban} aria-current={isKanban ? 'page' : undefined}>
+				<KanbanSquare size={16} />
+				<span class="floating-menu-link-text">{$i18n('layout_kanban')}</span>
+			</a>
 
-		<a
-			href="/kanban"
-			class="btn btn-nav-kanban"
-			class:active={isKanban}
-			aria-current={isKanban ? 'page' : undefined}
-		>
-			<KanbanSquare size={16} />
-			<span class="floating-menu-link-text">{$i18n('layout_kanban')}</span>
-		</a>
+			<a
+				href="/agent"
+				class="seg-agent"
+				class:active={isAgent}
+				aria-current={isAgent ? 'page' : undefined}
+			>
+				<Bot size={16} />
+				<span class="floating-menu-link-text">{$i18n('layout_agent')}</span>
+			</a>
 
-		<a
-			href="/agent"
-			class="btn btn-nav-agent"
-			class:active={isAgent}
-			aria-current={isAgent ? 'page' : undefined}
-		>
-			<Bot size={16} />
-			<span class="floating-menu-link-text">{$i18n('layout_agent')}</span>
-		</a>
+			<a href="/settings" class:active={isSettings} aria-current={isSettings ? 'page' : undefined}>
+				<Settings size={16} />
+				<span class="floating-menu-link-text">{$i18n('layout_configuration')}</span>
+			</a>
+		</nav>
 	</div>
 
 	<!-- Right: Language & Theme -->
@@ -122,55 +117,11 @@
 			{/if}
 		</button>
 	</div>
-</nav>
+</header>
 
 <style>
-	.floating-menu {
-		justify-content: space-between;
-	}
-
-	.menu-left {
-		flex: 1;
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-	}
-
-	.menu-center {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-	}
-
-	.menu-right {
-		flex: 1;
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: var(--spacing-md);
-	}
-
-	.floating-menu-title {
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
-	}
-
 	.floating-menu-link-text {
 		display: inline;
-	}
-
-	/* Active-route halo uses the active button's own accent so a blue Kanban
-	   tab gets a blue ring and an orange Agent tab an orange ring (DP-3b),
-	   instead of a single cyan ring for all. Tokens are reused from the palette. */
-	.menu-center .btn-secondary.active {
-		box-shadow: 0 0 0 2px var(--color-secondary);
-	}
-	.menu-center .btn-nav-kanban.active {
-		box-shadow: 0 0 0 2px var(--color-accent-hover);
-	}
-	.menu-center .btn-nav-agent.active {
-		box-shadow: 0 0 0 2px var(--color-secondary);
 	}
 
 	@media (max-width: 640px) {
