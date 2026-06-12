@@ -32,13 +32,21 @@
 {/if}
 
 <style>
+	/* Status pill: compact, on its own surface so it reads as a live step of
+	   the execution thread rather than a bare line of text. */
 	.execution-spinner {
-		display: flex;
+		display: inline-flex;
 		align-items: center;
+		align-self: flex-start;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-sm) var(--spacing-md);
+		padding: 0.35rem 0.8rem;
+		margin: var(--spacing-xs) 0;
 		color: var(--color-text-secondary);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-full);
+		box-shadow: var(--shadow-xs);
 		animation: fadeInOpacity var(--transition-base);
 	}
 

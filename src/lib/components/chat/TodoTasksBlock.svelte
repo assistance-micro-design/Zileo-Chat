@@ -59,6 +59,12 @@ Visible during and after execution.
 	let grouped = $derived(groupByAgent(tasks));
 	let hasMultipleAgents = $derived(grouped.length > 1);
 
+	let completedCount = $derived(tasks.filter((t) => t.status === 'completed').length);
+	/** Completion ratio (0-100) driving the conic-gradient progress ring. */
+	let completionPercent = $derived(
+		tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0
+	);
+
 	/**
 	 * Get CSS class for task status.
 	 */
@@ -86,11 +92,10 @@ Visible during and after execution.
 {#if tasks.length > 0}
 	<div class="todo-tasks-block" role="region" aria-label={$i18n('chat_tasks_arialabel')}>
 		<div class="tasks-header">
+			<span class="progress-ring" style="--p: {completionPercent}" aria-hidden="true"></span>
 			<ListTodo size={14} class="tasks-icon" />
 			<span class="tasks-title">{$i18n('chat_tasks_title')}</span>
-			<span class="tasks-count"
-				>{tasks.filter((t) => t.status === 'completed').length}/{tasks.length}</span
-			>
+			<span class="tasks-count">{completedCount}/{tasks.length}</span>
 		</div>
 
 		<div class="tasks-body">
@@ -135,10 +140,15 @@ Visible during and after execution.
 {/if}
 
 <style>
+	/* The tasks channel (brand turquoise) is published on the block root so
+	   the execution-thread rail can tint its node when threaded. */
 	.todo-tasks-block {
-		background: var(--color-bg-secondary);
+		--blk-channel: var(--channel-tasks);
+		--blk-channel-soft: var(--channel-tasks-soft);
+		background: var(--surface-1);
 		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
+		border-radius: var(--border-radius-lg);
+		box-shadow: var(--shadow-xs);
 		overflow: hidden;
 		animation: fadeIn var(--transition-base);
 	}
@@ -148,12 +158,34 @@ Visible during and after execution.
 		align-items: center;
 		gap: var(--spacing-xs);
 		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg-tertiary);
-		border-bottom: 1px solid var(--color-border);
+		background: var(--blk-channel-soft);
+		border-bottom: 1px solid var(--color-border-light);
+	}
+
+	/* Conic completion ring; the textual count beside it doubles as the
+	   fallback should conic-gradient misbehave on WebKitGTK. */
+	.progress-ring {
+		--p: 0;
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		background: conic-gradient(var(--blk-channel) calc(var(--p) * 1%), var(--color-bg-active) 0);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+
+	.progress-ring::after {
+		content: '';
+		width: 15px;
+		height: 15px;
+		border-radius: 50%;
+		background: var(--surface-1);
 	}
 
 	.tasks-header :global(.tasks-icon) {
-		color: var(--color-accent-deep);
+		color: var(--blk-channel);
 		flex-shrink: 0;
 	}
 
@@ -255,8 +287,9 @@ Visible during and after execution.
 	}
 
 	.priority-high {
-		background: var(--color-danger-bg, rgba(239, 68, 68, 0.1));
-		color: var(--color-danger);
+		background: var(--color-secondary-light);
+		color: var(--color-secondary-deep);
+		font-weight: var(--font-weight-semibold);
 	}
 
 	.task-duration {

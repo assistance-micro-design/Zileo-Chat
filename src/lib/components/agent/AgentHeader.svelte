@@ -19,12 +19,13 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 AgentHeader Component
-Read-only single-line header: workflow title + assigned agent + max iterations + link to Settings.
-Agent and iterations are configured in Settings > Agents (source of truth).
+Read-only single-line header: workflow title + assigned agent + model +
+reasoning badge + max iterations + link to Settings. Agent, model, reasoning
+and iterations are configured in Settings > Agents (source of truth).
 -->
 
 <script lang="ts">
-	import { ExternalLink } from '@lucide/svelte';
+	import { Brain, ExternalLink } from '@lucide/svelte';
 	import { HelpButton } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import type { AgentSummary } from '$types/agent';
@@ -48,7 +49,8 @@ Agent and iterations are configured in Settings > Agents (source of truth).
 		messagesLoading = false
 	}: Props = $props();
 
-	let selectedAgentName = $derived(agents.find((a) => a.id === selectedAgentId)?.name ?? null);
+	let selectedAgent = $derived(agents.find((a) => a.id === selectedAgentId) ?? null);
+	let selectedAgentName = $derived(selectedAgent?.name ?? null);
 </script>
 
 <header class="agent-header">
@@ -72,6 +74,23 @@ Agent and iterations are configured in Settings > Agents (source of truth).
 				<span class="meta-label">{$i18n('agent_header_agent_label')}</span>
 				<span class="meta-value">{selectedAgentName ?? $i18n('agent_header_unknown_agent')}</span>
 			</span>
+			{#if selectedAgent?.model}
+				<span class="separator" aria-hidden="true">·</span>
+				<span class="meta-text">
+					<span class="meta-label">{$i18n('agent_header_model_label')}</span>
+					<span class="meta-value model-value">{selectedAgent.model}</span>
+				</span>
+			{/if}
+			{#if selectedAgent?.reasoning_effort}
+				<span class="separator" aria-hidden="true">·</span>
+				<span class="meta-text" title={$i18n('agent_header_reasoning_tooltip')}>
+					<span class="meta-label">{$i18n('agent_header_reasoning_label')}</span>
+					<span class="badge badge-primary reasoning-badge">
+						<Brain size={12} aria-hidden="true" />
+						{$i18n(`agent_header_reasoning_${selectedAgent.reasoning_effort}`)}
+					</span>
+				</span>
+			{/if}
 			<span class="separator" aria-hidden="true">·</span>
 			<span class="meta-text" title={$i18n('agent_header_iterations_tooltip')}>
 				<span class="meta-label">{$i18n('agent_header_iterations_label')}</span>
@@ -99,8 +118,12 @@ Agent and iterations are configured in Settings > Agents (source of truth).
 <style>
 	.agent-header {
 		padding: var(--spacing-xs) var(--spacing-lg);
-		border-bottom: 1px solid var(--color-border);
-		background: var(--color-bg-secondary);
+		background: var(--surface-overlay);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-lg);
+		box-shadow: var(--shadow-xs);
 		display: flex;
 		justify-content: center;
 		align-items: center;
@@ -157,6 +180,16 @@ Agent and iterations are configured in Settings > Agents (source of truth).
 		font-weight: var(--font-weight-medium);
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.model-value {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+	}
+
+	.reasoning-badge {
+		font-size: var(--font-size-2xs);
+		gap: 4px;
 	}
 
 	.settings-link {

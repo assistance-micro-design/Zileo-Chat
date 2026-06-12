@@ -217,17 +217,23 @@
 		position: relative;
 	}
 
+	/* User bubble sits on the brand gradient with dark ink (site button
+	   convention): white text on the pale turquoise failed AA contrast. */
 	.message-bubble.user {
 		align-self: flex-end;
-		background: var(--color-accent);
-		color: var(--color-text-inverse);
+		background: var(--gradient-brand);
+		color: var(--color-accent-text);
+		border-bottom-right-radius: var(--border-radius-sm);
+		box-shadow: var(--shadow-xs);
 	}
 
 	.message-bubble.assistant {
 		align-self: flex-start;
-		background: var(--color-bg-secondary);
+		background: var(--surface-1);
 		color: var(--color-text-primary);
 		border: 1px solid var(--color-border);
+		border-bottom-left-radius: var(--border-radius-sm);
+		box-shadow: var(--shadow-xs);
 	}
 
 	.message-content {
@@ -262,7 +268,7 @@
 	}
 
 	.message-attachments .attachment-thumb:focus-visible {
-		outline: 2px solid var(--color-accent);
+		outline: 2px solid var(--color-accent-deep);
 		outline-offset: 2px;
 	}
 
@@ -349,7 +355,7 @@
 	}
 
 	.message-bubble.user .message-footer {
-		color: var(--color-text-inverse);
+		color: var(--color-accent-text);
 	}
 
 	.message-bubble.assistant .message-footer {

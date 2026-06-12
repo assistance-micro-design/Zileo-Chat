@@ -86,6 +86,7 @@
 	class="tool-call-block"
 	class:success
 	class:error={!success}
+	class:mcp-tool={toolType === 'mcp'}
 	class:sub-agent={isSubAgent}
 	role="region"
 	aria-label={isSubAgent
@@ -100,7 +101,9 @@
 		aria-controls={blockId}
 		type="button"
 	>
-		<Wrench size={14} class="tool-icon" />
+		<span class="blk-icon" aria-hidden="true">
+			<Wrench size={13} />
+		</span>
 		{#if isSubAgent}
 			<span class="agent-tag" title={agentLabel}>{agentLabel}</span>
 		{/if}
@@ -148,26 +151,34 @@
 </div>
 
 <style>
+	/* The block publishes its channel (blue for local tools, magenta for MCP)
+	   so the execution-thread rail in ChatContainer can tint its node. */
 	.tool-call-block {
-		border-radius: var(--border-radius-md);
+		--blk-channel: var(--channel-tool);
+		--blk-channel-soft: var(--channel-tool-soft);
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-lg);
+		box-shadow: var(--shadow-xs);
 		margin: var(--spacing-xs) 0;
-		background: var(--color-bg-secondary);
 		overflow: hidden;
 	}
 
-	.tool-call-block.success {
-		border-left: 3px solid var(--color-success);
+	.tool-call-block.mcp-tool {
+		--blk-channel: var(--channel-mcp);
+		--blk-channel-soft: var(--channel-mcp-soft);
 	}
 
+	/* Failures keep a loud red rib: the status icon alone is too quiet for
+	   an error that may need user action. Successes rely on the check icon. */
 	.tool-call-block.error {
-		border-left: 3px solid var(--color-danger);
+		border-left: 3px solid var(--color-error);
 	}
 
-	/* Sub-agent visual treatment (spec 2026-05-12 section 'Décisions validées') */
+	/* Sub-agent visual treatment: indented, on the sub-agent (orange) channel */
 	.tool-call-block.sub-agent {
 		margin-left: 16px;
-		border-left-style: dashed;
-		border-left-color: var(--color-info);
+		border-left: 2px dashed var(--channel-agent);
 	}
 
 	.agent-tag {
@@ -175,8 +186,8 @@
 		align-items: center;
 		padding: 2px 6px;
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-		background: color-mix(in srgb, var(--color-info) 10%, transparent);
+		color: var(--channel-agent);
+		background: var(--channel-agent-soft);
 		border-radius: 4px;
 		flex-shrink: 0;
 		max-width: 120px;
@@ -186,7 +197,7 @@
 	}
 
 	.tool-header:hover .agent-tag {
-		background: color-mix(in srgb, var(--color-info) 16%, transparent);
+		background: color-mix(in srgb, var(--channel-agent) 16%, transparent);
 	}
 
 	.tool-header {
@@ -208,12 +219,22 @@
 		background: var(--color-bg-hover);
 	}
 
-	.tool-header :global(.tool-icon) {
+	/* Tinted icon pill carrying the block's channel color */
+	.blk-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: 8px;
+		background: var(--blk-channel-soft);
+		color: var(--blk-channel);
 		flex-shrink: 0;
-		color: var(--color-text-secondary);
 	}
 
 	.tool-name {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		font-weight: var(--font-weight-medium);
 		flex-shrink: 0;
 	}
@@ -223,10 +244,11 @@
 		align-items: center;
 		gap: 2px;
 		padding: 1px var(--spacing-xs);
-		background: var(--color-bg-tertiary);
-		border-radius: var(--border-radius-sm);
+		background: var(--blk-channel-soft);
+		border: 1px solid currentColor;
+		border-radius: var(--border-radius-full);
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
+		color: var(--blk-channel);
 	}
 
 	.tool-status {
@@ -261,7 +283,7 @@
 
 	.tool-body {
 		padding: var(--spacing-xs) var(--spacing-sm) var(--spacing-sm);
-		border-top: 1px solid var(--color-border);
+		border-top: 1px solid var(--color-border-light);
 	}
 
 	.tool-section {
@@ -285,10 +307,11 @@
 	.tool-json {
 		font-family: var(--font-family-mono, monospace);
 		font-size: var(--font-size-xs);
-		line-height: 1.5;
+		line-height: 1.6;
 		color: var(--color-text-primary);
-		background: var(--color-bg-tertiary);
-		border-radius: var(--border-radius-sm);
+		background: var(--surface-2);
+		border: 1px solid var(--color-border-light);
+		border-radius: var(--border-radius-md);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		white-space: pre-wrap;
 		word-break: break-word;

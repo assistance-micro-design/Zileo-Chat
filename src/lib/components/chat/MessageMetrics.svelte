@@ -174,9 +174,11 @@
 		align-items: center;
 		gap: var(--spacing-xs);
 		padding: 2px var(--spacing-sm);
-		background: var(--color-bg-tertiary);
+		background: var(--surface-2);
+		border: 1px solid var(--color-border-light);
 		border-radius: var(--border-radius-full);
 		font-family: var(--font-mono);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.sub-agent-chip.error {

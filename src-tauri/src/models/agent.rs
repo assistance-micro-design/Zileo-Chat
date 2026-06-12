@@ -435,6 +435,11 @@ pub struct AgentSummary {
     pub provider: String,
     /// LLM model name
     pub model: String,
+    /// Reasoning effort configured for the agent, if any. Surfaced so the
+    /// conversation header can show the reasoning badge without loading the
+    /// full agent config.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningEffort>,
     /// Number of enabled tools
     pub tools_count: usize,
     /// Number of configured MCP servers
@@ -471,6 +476,7 @@ impl From<&AgentConfig> for AgentSummary {
             lifecycle: config.lifecycle.clone(),
             provider: config.llm.provider.clone(),
             model: config.llm.model.clone(),
+            reasoning_effort: config.reasoning_effort.clone(),
             tools_count: config.tools.len(),
             mcp_servers_count: config.mcp_servers.len(),
             skills_count: config.skills.len(),
@@ -836,6 +842,25 @@ mod tests {
             auto_analyze_reports: false,
             mcp_tool_allowlist: allowlist,
         }
+    }
+
+    #[test]
+    fn test_summary_propagates_reasoning_effort() {
+        let mut config = summary_test_config(Vec::new());
+        config.reasoning_effort = Some(ReasoningEffort::High);
+        let summary = AgentSummary::from(&config);
+        assert_eq!(summary.reasoning_effort, Some(ReasoningEffort::High));
+    }
+
+    #[test]
+    fn test_summary_reasoning_effort_absent_when_none() {
+        let summary = AgentSummary::from(&summary_test_config(Vec::new()));
+        assert_eq!(summary.reasoning_effort, None);
+
+        // skip_serializing_if: the field must vanish from the JSON payload so
+        // the TS side can model it as an optional (`reasoning_effort?:`).
+        let json = serde_json::to_string(&summary).expect("summary serializes");
+        assert!(!json.contains("reasoning_effort"));
     }
 
     #[test]

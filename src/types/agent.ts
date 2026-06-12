@@ -196,6 +196,13 @@ export interface AgentSummary {
 	provider: string;
 	/** LLM model name */
 	model: string;
+	/**
+	 * Reasoning effort configured for the agent, if any. Mirrors Rust
+	 * `Option<ReasoningEffort>` with skip-when-none, hence optional. Surfaced
+	 * so the conversation header can show the reasoning badge without loading
+	 * the full agent config.
+	 */
+	reasoning_effort?: ReasoningEffort;
 	/** Number of enabled tools */
 	tools_count: number;
 	/** Number of configured MCP servers */

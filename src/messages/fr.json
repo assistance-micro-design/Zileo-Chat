@@ -1052,6 +1052,13 @@
 	"agent_header_unknown_agent": "Inconnu",
 	"agent_header_iterations_label": "Itérations max :",
 	"agent_header_iterations_tooltip": "Itérations maximales des outils configurées pour cet agent",
+	"agent_header_model_label": "Modèle :",
+	"agent_header_reasoning_label": "Raisonnement :",
+	"agent_header_reasoning_tooltip": "Effort de raisonnement configuré pour cet agent",
+	"agent_header_reasoning_low": "Faible",
+	"agent_header_reasoning_medium": "Moyen",
+	"agent_header_reasoning_high": "Élevé",
+	"agent_header_reasoning_xhigh": "Très élevé",
 	"agent_header_edit_link": "Modifier",
 	"agent_header_edit_aria": "Modifier l'agent dans les paramètres",
 

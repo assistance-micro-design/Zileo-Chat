@@ -107,7 +107,9 @@
 		aria-controls={blockId}
 		type="button"
 	>
-		<Users size={14} class="agent-icon" />
+		<span class="blk-icon" aria-hidden="true">
+			<Users size={13} />
+		</span>
 		<span class="agent-name">{agentName}</span>
 
 		{#if collapsed && internalBlockCount > 0}
@@ -185,19 +187,22 @@
 </div>
 
 <style>
+	/* The sub-agent channel (brand orange) is published on the block root so
+	   the execution-thread rail in ChatContainer can tint this block's node. */
 	.sub-agent-block {
-		border-radius: var(--border-radius-md);
+		--blk-channel: var(--channel-agent);
+		--blk-channel-soft: var(--channel-agent-soft);
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-lg);
+		box-shadow: var(--shadow-xs);
 		margin: var(--spacing-xs) 0;
-		background: var(--color-bg-secondary);
 		overflow: hidden;
 	}
 
-	.sub-agent-block.completed {
-		border-left: 3px solid var(--color-info, var(--color-accent));
-	}
-
+	/* Failures keep a loud red rib; success relies on the check icon. */
 	.sub-agent-block.error {
-		border-left: 3px solid var(--color-danger);
+		border-left: 3px solid var(--color-error);
 	}
 
 	.sub-agent-header {
@@ -219,9 +224,17 @@
 		background: var(--color-bg-hover);
 	}
 
-	.sub-agent-header :global(.agent-icon) {
+	/* Tinted icon pill carrying the block's channel color */
+	.blk-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: 8px;
+		background: var(--blk-channel-soft);
+		color: var(--blk-channel);
 		flex-shrink: 0;
-		color: var(--color-info, var(--color-accent));
 	}
 
 	.agent-name {
@@ -231,9 +244,9 @@
 
 	.internal-count {
 		font-size: var(--font-size-xs);
-		color: var(--color-text-tertiary);
+		color: var(--blk-channel);
 		padding: 2px 6px;
-		background: color-mix(in srgb, var(--color-info) 10%, transparent);
+		background: var(--blk-channel-soft);
 		border-radius: 4px;
 		flex-shrink: 0;
 	}
@@ -271,7 +284,7 @@
 
 	.sub-agent-body {
 		padding: var(--spacing-xs) var(--spacing-sm) var(--spacing-sm);
-		border-top: 1px solid var(--color-border);
+		border-top: 1px solid var(--color-border-light);
 	}
 
 	.agent-tokens {

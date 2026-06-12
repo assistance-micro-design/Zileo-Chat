@@ -320,14 +320,18 @@
 </div>
 
 <style>
-	/* Main container - follows MetricsBar pattern */
+	/* Main container: translucent rounded bar, same family as the dock */
 	.token-display {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-md);
 		padding: var(--spacing-sm) var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-top: 1px solid var(--color-border);
+		background: var(--surface-overlay);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-lg);
+		box-shadow: var(--shadow-xs);
 		font-size: var(--font-size-xs);
 		flex-wrap: wrap;
 	}
@@ -400,7 +404,7 @@
 	}
 
 	.cost-icon {
-		color: var(--color-secondary);
+		color: var(--color-secondary-deep);
 	}
 
 	.speed-icon {
@@ -481,18 +485,15 @@
 		height: 6px;
 	}
 
+	/* Healthy context gauge: site green flowing into the brand turquoise */
 	.progress-fill {
 		height: 100%;
-		background: linear-gradient(
-			90deg,
-			var(--color-success),
-			color-mix(in srgb, var(--color-success) 80%, var(--color-accent))
-		);
+		background: linear-gradient(90deg, var(--color-online), var(--color-accent-hover));
 		border-radius: var(--border-radius-full);
 		transition:
 			width var(--transition-base),
 			background var(--transition-base);
-		box-shadow: 0 0 4px color-mix(in srgb, var(--color-success) 50%, transparent);
+		box-shadow: 0 0 4px rgba(74, 222, 128, 0.5);
 	}
 
 	.progress-fill.warning {
@@ -540,7 +541,7 @@
 	.cost-value {
 		font-family: var(--font-mono);
 		font-weight: var(--font-weight-semibold);
-		color: var(--color-secondary);
+		color: var(--color-secondary-deep);
 	}
 
 	/* Option A: a workflow that's still progressing reports a partial cost.

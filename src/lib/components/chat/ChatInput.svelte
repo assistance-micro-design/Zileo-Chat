@@ -549,10 +549,22 @@
 />
 
 <style>
+	/* Composer pill: the frame carries all the chrome (border, radius, glow)
+	   so the textarea inside can stay borderless. */
 	.chat-input-frame {
-		background: var(--color-bg-secondary);
-		border-top: 1px solid var(--color-border);
-		transition: background-color var(--transition-fast);
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-xl);
+		box-shadow: var(--shadow-sm);
+		transition:
+			background-color var(--transition-fast),
+			border-color var(--transition-base),
+			box-shadow var(--transition-base);
+	}
+
+	.chat-input-frame:focus-within {
+		border-color: var(--color-accent-hover);
+		box-shadow: var(--shadow-sm), var(--glow-accent-soft);
 	}
 
 	.chat-input-frame.drag-over {
@@ -625,14 +637,14 @@
 	}
 
 	.attach-button {
-		width: 40px;
-		height: 40px;
+		width: 36px;
+		height: 36px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--color-bg-primary);
-		color: var(--color-accent-deep);
-		border: 1px solid var(--color-border);
+		background: transparent;
+		color: var(--color-text-secondary);
+		border: none;
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
 		transition: all var(--transition-fast);
@@ -640,8 +652,8 @@
 	}
 
 	.attach-button:hover:not(:disabled) {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-accent);
+		background: var(--color-bg-hover);
+		color: var(--color-accent-deep);
 	}
 
 	.attach-button:disabled {
@@ -664,26 +676,25 @@
 		flex-direction: column;
 	}
 
+	/* Borderless inside the pill: the frame's focus-within glow is the
+	   focus affordance. */
 	.chat-input {
 		width: 100%;
 		min-height: 40px;
 		max-height: 200px;
-		padding: var(--spacing-sm) var(--spacing-md);
+		padding: var(--spacing-sm) var(--spacing-sm);
 		font-size: var(--font-size-sm);
 		font-family: inherit;
+		line-height: 1.55;
 		color: var(--color-text-primary);
-		background: var(--color-bg-primary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
+		background: transparent;
+		border: none;
 		resize: none;
 		overflow-y: auto;
-		transition: border-color var(--transition-fast);
 	}
 
 	.chat-input:focus {
 		outline: none;
-		border-color: var(--color-accent);
-		box-shadow: 0 0 0 3px var(--color-accent-light);
 	}
 
 	.chat-input:disabled {
@@ -699,38 +710,13 @@
 	}
 
 	.prompt-button {
-		width: 40px;
-		height: 40px;
+		width: 36px;
+		height: 36px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--color-bg-primary);
-		color: var(--color-accent-deep);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		cursor: pointer;
-		transition: all var(--transition-fast);
-		flex-shrink: 0;
-	}
-
-	.prompt-button:hover:not(:disabled) {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-accent);
-	}
-
-	.prompt-button:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.send-button {
-		width: 40px;
-		height: 40px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--color-accent);
-		color: var(--color-text-inverse);
+		background: transparent;
+		color: var(--color-text-secondary);
 		border: none;
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
@@ -738,8 +724,39 @@
 		flex-shrink: 0;
 	}
 
+	.prompt-button:hover:not(:disabled) {
+		background: var(--color-bg-hover);
+		color: var(--color-accent-deep);
+	}
+
+	.prompt-button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	/* Square gradient send button with dark ink, glowing on hover (site CTA) */
+	.send-button {
+		width: 36px;
+		height: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--gradient-brand);
+		color: var(--color-accent-text);
+		border: none;
+		border-radius: 10px;
+		box-shadow: var(--shadow-xs);
+		cursor: pointer;
+		transition:
+			box-shadow var(--transition-fast),
+			transform var(--transition-fast),
+			filter var(--transition-fast);
+		flex-shrink: 0;
+	}
+
 	.send-button:hover:not(:disabled) {
-		background: var(--color-accent-hover);
+		filter: brightness(1.04);
+		box-shadow: var(--glow-accent);
 	}
 
 	.send-button:disabled {
@@ -748,15 +765,15 @@
 	}
 
 	.stop-button {
-		width: 40px;
-		height: 40px;
+		width: 36px;
+		height: 36px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--color-danger);
-		color: var(--color-text-inverse);
+		background: var(--color-error);
+		color: #fff;
 		border: none;
-		border-radius: var(--border-radius-md);
+		border-radius: 10px;
 		cursor: pointer;
 		transition: all var(--transition-fast);
 		flex-shrink: 0;
@@ -769,9 +786,9 @@
 	.keyboard-hint {
 		display: block;
 		padding: 0 var(--spacing-md) var(--spacing-xs);
-		font-size: var(--font-size-xs);
+		font-size: var(--font-size-2xs);
 		color: var(--color-text-tertiary);
-		text-align: right;
+		text-align: center;
 		pointer-events: none;
 	}
 </style>

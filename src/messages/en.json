@@ -1051,6 +1051,13 @@
 	"agent_header_unknown_agent": "Unknown",
 	"agent_header_iterations_label": "Max iterations:",
 	"agent_header_iterations_tooltip": "Max tool iterations configured for this agent",
+	"agent_header_model_label": "Model:",
+	"agent_header_reasoning_label": "Reasoning:",
+	"agent_header_reasoning_tooltip": "Reasoning effort configured for this agent",
+	"agent_header_reasoning_low": "Low",
+	"agent_header_reasoning_medium": "Medium",
+	"agent_header_reasoning_high": "High",
+	"agent_header_reasoning_xhigh": "Extra high",
 	"agent_header_edit_link": "Edit",
 	"agent_header_edit_aria": "Edit agent in settings",
 

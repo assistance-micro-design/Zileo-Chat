@@ -75,7 +75,9 @@
 		aria-controls={blockId}
 		type="button"
 	>
-		<Brain size={source === 'model_thinking' ? 16 : 14} class="thinking-icon" />
+		<span class="blk-icon" aria-hidden="true">
+			<Brain size={source === 'model_thinking' ? 15 : 13} />
+		</span>
 		{#if isSubAgent}
 			<span class="agent-tag" title={agentLabel}>{agentLabel}</span>
 		{/if}
@@ -96,27 +98,30 @@
 </div>
 
 <style>
+	/* The thinking channel (violet) is published on the block root so the
+	   execution-thread rail in ChatContainer can tint this block's node. */
 	.thinking-block {
-		border-radius: var(--border-radius-md);
+		--blk-channel: var(--channel-thinking);
+		--blk-channel-soft: var(--channel-thinking-soft);
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-lg);
+		box-shadow: var(--shadow-xs);
 		margin: var(--spacing-xs) 0;
 		overflow: hidden;
 	}
 
-	.thinking-block.model-thinking {
-		background: var(--color-bg-tertiary);
-		border-left: 3px solid var(--color-accent);
-	}
-
+	/* Agent-flow reasoning is quieter: no card chrome, just the channel tint */
 	.thinking-block.agent-flow {
 		background: transparent;
-		border-left: 2px solid var(--color-border);
+		border: none;
+		box-shadow: none;
 	}
 
-	/* Sub-agent visual treatment (spec 2026-05-12 section 'Décisions validées') */
+	/* Sub-agent visual treatment: indented, on the sub-agent (orange) channel */
 	.thinking-block.sub-agent {
 		margin-left: 16px;
-		border-left-style: dashed;
-		border-left-color: var(--color-info);
+		border-left: 2px dashed var(--channel-agent);
 	}
 
 	.agent-tag {
@@ -124,8 +129,8 @@
 		align-items: center;
 		padding: 2px 6px;
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-		background: color-mix(in srgb, var(--color-info) 10%, transparent);
+		color: var(--channel-agent);
+		background: var(--channel-agent-soft);
 		border-radius: 4px;
 		flex-shrink: 0;
 		max-width: 120px;
@@ -135,7 +140,7 @@
 	}
 
 	.thinking-header:hover .agent-tag {
-		background: color-mix(in srgb, var(--color-info) 16%, transparent);
+		background: color-mix(in srgb, var(--channel-agent) 16%, transparent);
 	}
 
 	.thinking-header {
@@ -162,16 +167,22 @@
 		font-size: var(--font-size-sm);
 	}
 
-	.thinking-header :global(.thinking-icon) {
+	/* Tinted icon pill carrying the block's channel color */
+	.blk-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: 8px;
+		background: var(--blk-channel-soft);
+		color: var(--blk-channel);
 		flex-shrink: 0;
 	}
 
-	.model-thinking .thinking-header :global(.thinking-icon) {
-		color: var(--color-accent-deep);
-	}
-
-	.agent-flow .thinking-header :global(.thinking-icon) {
-		color: var(--color-text-tertiary);
+	.agent-flow .blk-icon {
+		width: 22px;
+		height: 22px;
 	}
 
 	.thinking-title {
@@ -199,12 +210,14 @@
 
 	.thinking-body {
 		padding: var(--spacing-xs) var(--spacing-sm) var(--spacing-sm);
+		border-top: 1px solid var(--color-border-light);
+		background: linear-gradient(180deg, var(--blk-channel-soft), transparent 38%);
 	}
 
 	.thinking-content {
 		font-family: var(--font-family-mono, monospace);
 		font-size: var(--font-size-xs);
-		line-height: 1.5;
+		line-height: 1.65;
 		color: var(--color-text-secondary);
 		white-space: pre-wrap;
 		word-break: break-word;
