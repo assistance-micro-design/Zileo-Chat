@@ -1415,6 +1415,7 @@
 
 	"onboarding_progress": "Step {current} of {total}",
 	"onboarding_progress_arialabel": "Wizard progress",
+	"onboarding_dialog_arialabel": "Onboarding wizard",
 	"onboarding_step_language": "Language",
 	"onboarding_step_theme": "Appearance",
 	"onboarding_step_welcome": "Welcome",

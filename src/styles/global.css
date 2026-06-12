@@ -672,32 +672,6 @@ body {
   box-shadow: var(--glow-secondary);
 }
 
-/* Navigation buttons of the current full-width top bar. The segmented
-   navigation pill replaces them in the floating dock; these rules stay
-   until the dock migration completes and a usage grep clears them. */
-.btn-nav-kanban {
-  background: var(--color-accent-hover);
-  color: var(--color-accent-text);
-  border-color: var(--color-accent-hover);
-  font-weight: var(--font-weight-semibold);
-}
-
-.btn-nav-kanban:hover:not(:disabled) {
-  filter: brightness(0.95);
-}
-
-.btn-nav-agent {
-  background: var(--color-secondary);
-  color: var(--color-text-inverse);
-  border-color: var(--color-secondary);
-  font-weight: var(--font-weight-semibold);
-}
-
-.btn-nav-agent:hover:not(:disabled) {
-  background: var(--color-secondary-hover);
-  border-color: var(--color-secondary-hover);
-}
-
 .btn-ghost {
   background: transparent;
   color: var(--color-text-secondary);

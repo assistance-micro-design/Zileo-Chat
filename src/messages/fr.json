@@ -1416,6 +1416,7 @@
 
 	"onboarding_progress": "Étape {current} sur {total}",
 	"onboarding_progress_arialabel": "Progression de l'assistant",
+	"onboarding_dialog_arialabel": "Assistant de premiers pas",
 	"onboarding_step_language": "Langue",
 	"onboarding_step_theme": "Apparence",
 	"onboarding_step_welcome": "Bienvenue",

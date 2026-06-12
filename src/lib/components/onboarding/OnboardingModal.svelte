@@ -95,7 +95,7 @@
 	class="onboarding-modal"
 	role="dialog"
 	aria-modal="true"
-	aria-labelledby="onboarding-title"
+	aria-label={$i18n('onboarding_dialog_arialabel')}
 	tabindex="-1"
 	{@attach focusTrap}
 >
