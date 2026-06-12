@@ -25,7 +25,7 @@ Shows agent summary with actions for edit and delete.
 <script lang="ts">
 	import type { AgentSummary } from '$types/agent';
 	import { Card, Badge, Button, StatusIndicator } from '$lib/components/ui';
-	import { Bot, Wrench, Plug, Edit, Trash2 } from '@lucide/svelte';
+	import { Bot, Globe, Wrench, Plug, Pencil, Trash2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**
@@ -95,61 +95,56 @@ Shows agent summary with actions for edit and delete.
 	{:else}
 		<div class="agent-grid">
 			{#each agents as agent (agent.id)}
-				<Card>
+				<Card hover>
+					{#snippet header()}
+						<div class="agent-name-row">
+							<Bot size={20} class="agent-icon" />
+							<span class="agent-name">{agent.name}</span>
+						</div>
+						<div class="agent-badges">
+							<Badge variant={getLifecycleVariant(agent.lifecycle)}>
+								{getLifecycleLabel(agent.lifecycle)}
+							</Badge>
+							{#if agent.kind === 'kanban'}
+								<Badge variant="success">{$i18n('agents_kind_kanban')}</Badge>
+							{/if}
+						</div>
+					{/snippet}
 					{#snippet body()}
-						<div class="agent-card">
-							<div class="agent-header">
-								<div class="agent-name-row">
-									<Bot size={20} class="agent-icon" />
-									<h4 class="agent-name">{agent.name}</h4>
-								</div>
-								<Badge variant={getLifecycleVariant(agent.lifecycle)}>
-									{getLifecycleLabel(agent.lifecycle)}
+						<div class="agent-details">
+							<span class="detail-line">
+								<Globe size={14} />
+								{$i18n('agents_card_provider', { name: formatProvider(agent.provider) })}
+							</span>
+							<span class="detail-line model-line">
+								{$i18n('agents_card_model', { name: agent.model })}
+							</span>
+							<span class="detail-line">
+								<Wrench size={14} />
+								{$i18n('agents_card_tools')}
+								<Badge variant="neutral">
+									{$i18n('agents_tools_enabled', { count: agent.tools_count })}
 								</Badge>
-								{#if agent.kind === 'kanban'}
-									<Badge variant="success">{$i18n('agents_kind_kanban')}</Badge>
-								{/if}
-							</div>
-
-							<div class="agent-details">
-								<div class="detail-row">
-									<span class="detail-label">{$i18n('agents_provider')}</span>
-									<span class="detail-value">{formatProvider(agent.provider)}</span>
-								</div>
-								<div class="detail-row">
-									<span class="detail-label">{$i18n('agents_model')}</span>
-									<span class="detail-value model-value">{agent.model}</span>
-								</div>
-								<div class="detail-row">
-									<span class="detail-label">
-										<Wrench size={14} />
-										{$i18n('agents_tools')}
-									</span>
-									<span class="detail-value"
-										>{$i18n('agents_tools_enabled', { count: agent.tools_count })}</span
-									>
-								</div>
-								<div class="detail-row">
-									<span class="detail-label">
-										<Plug size={14} />
-										{$i18n('agents_mcp_servers')}
-									</span>
-									<span class="detail-value"
-										>{$i18n('agents_mcp_configured', { count: agent.mcp_servers_count })}</span
-									>
-								</div>
-							</div>
-
-							<div class="agent-actions">
-								<Button variant="ghost" size="sm" onclick={() => onedit(agent.id)}>
-									<Edit size={16} />
-									<span>{$i18n('common_edit')}</span>
-								</Button>
-								<Button variant="danger" size="sm" onclick={() => ondelete(agent.id)}>
-									<Trash2 size={16} />
-									<span>{$i18n('common_delete')}</span>
-								</Button>
-							</div>
+							</span>
+							<span class="detail-line">
+								<Plug size={14} />
+								{$i18n('agents_card_mcp')}
+								<Badge variant={agent.mcp_servers_count > 0 ? 'mcp' : 'neutral'}>
+									{$i18n('agents_mcp_configured', { count: agent.mcp_servers_count })}
+								</Badge>
+							</span>
+						</div>
+					{/snippet}
+					{#snippet footer()}
+						<div class="agent-actions">
+							<Button variant="ghost" size="sm" onclick={() => onedit(agent.id)}>
+								<Pencil size={14} />
+								<span>{$i18n('common_edit')}</span>
+							</Button>
+							<Button variant="danger-soft" size="sm" onclick={() => ondelete(agent.id)}>
+								<Trash2 size={14} />
+								<span>{$i18n('common_delete')}</span>
+							</Button>
 						</div>
 					{/snippet}
 				</Card>
@@ -203,74 +198,61 @@ Shows agent summary with actions for edit and delete.
 
 	.agent-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-		gap: var(--spacing-lg);
-		contain: layout style; /* Isolate layout recalculations */
-	}
-
-	.agent-card {
-		display: flex;
-		flex-direction: column;
+		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 		gap: var(--spacing-md);
-	}
-
-	.agent-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
+		contain: layout style; /* Isolate layout recalculations */
 	}
 
 	.agent-name-row {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
+		min-width: 0;
 	}
 
 	.agent-name-row :global(.agent-icon) {
-		color: var(--color-accent-deep);
+		color: var(--channel-agent);
+		flex-shrink: 0;
 	}
 
 	.agent-name {
-		font-size: var(--font-size-base);
+		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
-		margin: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.agent-badges {
+		display: flex;
+		gap: var(--spacing-xs);
+		flex-shrink: 0;
 	}
 
 	.agent-details {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-xs);
+		gap: 5px;
 	}
 
-	.detail-row {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		font-size: var(--font-size-sm);
-	}
-
-	.detail-label {
+	.detail-line {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
+		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 	}
 
-	.detail-value {
-		font-weight: var(--font-weight-medium);
-	}
-
-	.model-value {
+	.model-line {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
 	}
 
 	.agent-actions {
 		display: flex;
 		gap: var(--spacing-sm);
 		justify-content: flex-end;
-		padding-top: var(--spacing-md);
-		border-top: 1px solid var(--color-border);
+		align-items: center;
+		flex: 1;
 	}
 
 	.agent-actions :global(button) {

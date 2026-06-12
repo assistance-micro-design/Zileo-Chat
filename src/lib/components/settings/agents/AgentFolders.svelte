@@ -27,6 +27,7 @@ Uses Tauri's native file dialog to pick folders, validates via backend command.
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Button } from '$lib/components/ui';
+	import { Folder, FolderPlus, X } from '@lucide/svelte';
 
 	/**
 	 * Component props
@@ -111,33 +112,39 @@ Uses Tauri's native file dialog to pick folders, validates via backend command.
 </script>
 
 <div class="agent-folders">
-	{#if folders.length === 0}
-		<div class="empty-state">
-			<p>{$i18n('agents_folder_empty')}</p>
-		</div>
-	{:else}
-		<ul class="folder-list" role="list">
-			{#each folders as folder, index (folder)}
-				<li class="folder-item">
-					<span class="folder-path" title={folder}>{folder}</span>
-					<Button
-						variant="ghost"
-						size="sm"
-						onclick={() => removeFolder(index)}
-						ariaLabel="{$i18n('agents_folder_remove')}: {folder}"
-					>
-						{$i18n('agents_folder_remove')}
-					</Button>
-				</li>
-			{/each}
-		</ul>
-	{/if}
+	<div class="folders-card">
+		{#if folders.length === 0}
+			<p class="folder-empty">{$i18n('agents_folder_empty')}</p>
+		{:else}
+			<ul class="folder-list" role="list">
+				{#each folders as folder, index (folder)}
+					<li class="entity-row">
+						<Folder size={16} class="folder-icon" />
+						<span class="folder-path" title={folder}>{folder}</span>
+						<div class="entity-actions">
+							<Button
+								variant="ghost"
+								size="sm"
+								onclick={() => removeFolder(index)}
+								ariaLabel="{$i18n('agents_folder_remove')}: {folder}"
+							>
+								<X size={14} />
+							</Button>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 
-	<div class="folder-actions">
-		<Button variant="secondary" size="sm" onclick={addFolder} disabled={adding}>
-			{adding ? '...' : $i18n('agents_folder_add')}
-		</Button>
+		<div class="folders-footer">
+			<Button variant="outline" size="sm" onclick={addFolder} disabled={adding}>
+				<FolderPlus size={14} />
+				<span>{adding ? '...' : $i18n('agents_folder_add')}</span>
+			</Button>
+		</div>
 	</div>
+
+	<p class="folder-rules">{$i18n('agents_folder_rules')}</p>
 
 	{#if error}
 		<p class="folder-error" role="alert">{error}</p>
@@ -151,42 +158,44 @@ Uses Tauri's native file dialog to pick folders, validates via backend command.
 		gap: var(--spacing-sm);
 	}
 
-	.empty-state {
+	.folders-card {
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-lg);
+		overflow: hidden;
+	}
+
+	.folder-empty {
+		margin: 0;
 		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-md);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
 		font-style: italic;
-	}
-
-	.empty-state p {
-		margin: 0;
 	}
 
 	.folder-list {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
 	}
 
-	.folder-item {
+	.entity-row {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-md);
-		border: 1px solid var(--color-border);
+		gap: var(--spacing-md);
+		padding: var(--spacing-md);
+		border-bottom: 1px solid var(--color-border-light);
+	}
+
+	.entity-row :global(.folder-icon) {
+		color: var(--color-text-secondary);
+		flex-shrink: 0;
 	}
 
 	.folder-path {
 		flex: 1;
 		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
 		font-family: var(--font-mono);
 		color: var(--color-text-primary);
 		overflow: hidden;
@@ -195,10 +204,30 @@ Uses Tauri's native file dialog to pick folders, validates via backend command.
 		min-width: 0;
 	}
 
-	.folder-actions {
+	.entity-actions {
+		flex-shrink: 0;
+	}
+
+	.folders-footer {
+		display: flex;
+		justify-content: flex-start;
+		align-items: center;
+		padding: var(--spacing-md) var(--spacing-lg);
+		border-top: 1px solid var(--color-border-light);
+		background: var(--surface-2);
+	}
+
+	.folders-footer :global(button),
+	.entity-actions :global(button) {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-xs);
+	}
+
+	.folder-rules {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
 	}
 
 	.folder-error {

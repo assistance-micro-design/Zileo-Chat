@@ -37,7 +37,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import type { ProviderInfo } from '$types/custom-provider';
 	import type { AgentConfig, AgentKind, Lifecycle, ReasoningEffort } from '$types/agent';
 	import type { SkillSummary } from '$types/skill';
-	import { Button, Input, Textarea, Card, Badge, Select } from '$lib/components/ui';
+	import { Button, Input, Textarea, Card, Select, Switch } from '$lib/components/ui';
+	import { TriangleAlert } from '@lucide/svelte';
 	import { tauriInvoke } from '$lib/tauri';
 	import { onMount } from 'svelte';
 	import { i18n, t } from '$lib/i18n';
@@ -52,7 +53,6 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		buildAvailableMcpServers,
 		buildAvailableSkills,
 		buildProviderOptions,
-		formatContextWindow,
 		toProviderType,
 		toggleSelection,
 		validateAgentForm
@@ -290,14 +290,46 @@ Be concise, factual, and conservative in your judgements.`;
 		}
 	]);
 
+	/**
+	 * Help line under the lifecycle select: immutability notice in edit mode,
+	 * description of the currently selected option in create mode.
+	 */
+	const lifecycleHelp = $derived(
+		mode === 'edit'
+			? $i18n('agents_lifecycle_readonly')
+			: (lifecycleOptions.find((option) => option.value === lifecycle)?.description ?? '')
+	);
+
+	/** Agent kind select options - reactive to locale */
+	const kindOptions = $derived([
+		{ value: '', label: $i18n('agents_kind_none') },
+		{ value: 'kanban', label: $i18n('agents_kind_kanban') }
+	]);
+
 	/** Provider options with details - reactive to locale, includes custom providers */
 	const providerOptions = $derived.by(() => buildProviderOptions(providerList, $i18n));
+
+	/** Provider select options: "Name (type)" per the settings mockups */
+	const providerSelectOptions = $derived(
+		providerOptions.map((option) => ({
+			value: option.value,
+			label: `${option.label} (${option.type})`
+		}))
+	);
 
 	/** Reactive model list based on selected provider (full model objects) */
 	const availableModels = $derived.by(() => {
 		const providerType = toProviderType(provider);
 		return getModelsByProvider(llmState, providerType);
 	});
+
+	/** Model select options: monospace api name, builtin marker appended */
+	const modelSelectOptions = $derived(
+		availableModels.map((m) => ({
+			value: m.api_name,
+			label: m.is_builtin ? `${m.api_name} — ${$i18n('agents_model_builtin')}` : m.api_name
+		}))
+	);
 
 	/** Selected model object (for auto-populating temperature/maxTokens) */
 	const selectedModel = $derived.by(() => {
@@ -521,6 +553,13 @@ Be concise, factual, and conservative in your judgements.`;
 </script>
 
 <Card>
+	{#snippet header()}
+		<span class="card-title">
+			{mode === 'create'
+				? $i18n('agents_create_new')
+				: `${$i18n('agents_edit')} — ${agent?.name ?? ''}`}
+		</span>
+	{/snippet}
 	{#snippet body()}
 		<form
 			class="agent-form"
@@ -529,10 +568,6 @@ Be concise, factual, and conservative in your judgements.`;
 				handleSubmit();
 			}}
 		>
-			<h3 class="form-title">
-				{mode === 'create' ? $i18n('agents_create_new') : $i18n('agents_edit')}
-			</h3>
-
 			{#if loadWarnings.length > 0}
 				<div class="load-warnings" role="status">
 					{#each loadWarnings as warning (warning)}
@@ -541,11 +576,11 @@ Be concise, factual, and conservative in your judgements.`;
 				</div>
 			{/if}
 
-			<div class="form-grid">
-				<!-- Basic Information -->
-				<div class="form-section">
-					<h4 class="section-title">{$i18n('agents_basic_info')}</h4>
+			<!-- Basic Information -->
+			<section class="form-section">
+				<h4 class="section-title">{$i18n('agents_basic_info')}</h4>
 
+				<div class="field-grid cols-3">
 					<Input
 						label={$i18n('agents_name_label')}
 						value={name}
@@ -557,118 +592,80 @@ Be concise, factual, and conservative in your judgements.`;
 						help={errors.name || $i18n('agents_name_help')}
 					/>
 
-					<div class="field-group" role="group" aria-label={$i18n('agents_lifecycle')}>
-						<span class="field-label">{$i18n('agents_lifecycle')}</span>
-						<div class="card-selector">
-							{#each lifecycleOptions as option (option.value)}
-								<button
-									type="button"
-									class="selector-card"
-									class:selected={lifecycle === option.value}
-									class:disabled={mode === 'edit'}
-									disabled={mode === 'edit'}
-									onclick={() => {
-										if (mode !== 'edit') lifecycle = option.value;
-									}}
-								>
-									<span class="selector-card-title">{option.label}</span>
-									<span class="selector-card-description">{option.description}</span>
-								</button>
-							{/each}
-						</div>
-						{#if mode === 'edit'}
-							<span class="field-help">{$i18n('agents_lifecycle_readonly')}</span>
-						{/if}
-					</div>
+					<Select
+						id="agent-lifecycle"
+						label={$i18n('agents_lifecycle')}
+						value={lifecycle}
+						options={lifecycleOptions.map((option) => ({
+							value: option.value,
+							label: option.label
+						}))}
+						disabled={mode === 'edit'}
+						onchange={(e) => {
+							lifecycle = e.currentTarget.value as Lifecycle;
+						}}
+						help={lifecycleHelp}
+					/>
 
-					<div class="field-group" role="group" aria-label={$i18n('agents_kind')}>
-						<span class="field-label">{$i18n('agents_kind')}</span>
-						<select class="form-input" bind:value={kind} aria-label={$i18n('agents_kind')}>
-							<option value={undefined}>{$i18n('agents_kind_none')}</option>
-							<option value="kanban">{$i18n('agents_kind_kanban')}</option>
-						</select>
-						<span class="field-help">{$i18n('agents_kind_help')}</span>
-					</div>
-
-					{#if kind === 'kanban'}
-						<label class="checkbox-row">
-							<input type="checkbox" bind:checked={autoAnalyzeReports} />
-							<span class="checkbox-label">{$i18n('agents_auto_analyze')}</span>
-							<span class="field-help">{$i18n('agents_auto_analyze_desc')}</span>
-						</label>
-					{/if}
+					<Select
+						id="agent-kind"
+						label={$i18n('agents_kind')}
+						value={kind ?? ''}
+						options={kindOptions}
+						onchange={(e) => {
+							kind = e.currentTarget.value === 'kanban' ? 'kanban' : undefined;
+						}}
+						help={$i18n('agents_kind_help')}
+					/>
 				</div>
 
-				<!-- LLM Configuration -->
-				<div class="form-section">
-					<h4 class="section-title">{$i18n('agents_llm_config')}</h4>
+				{#if kind === 'kanban'}
+					<div class="toggle-row">
+						<span class="toggle-text">
+							<strong id="agent-auto-analyze-label">{$i18n('agents_auto_analyze')}</strong>
+							<span>{$i18n('agents_auto_analyze_desc')}</span>
+						</span>
+						<Switch
+							checked={autoAnalyzeReports}
+							onchange={(value) => (autoAnalyzeReports = value)}
+							labelledBy="agent-auto-analyze-label"
+						/>
+					</div>
+				{/if}
+			</section>
 
-					<div class="field-group" role="group" aria-label={$i18n('agents_provider')}>
-						<span class="field-label">{$i18n('agents_provider')}</span>
-						<div class="card-selector">
-							{#each providerOptions as option (option.value)}
-								<button
-									type="button"
-									class="selector-card provider-card"
-									class:selected={provider === option.value}
-									onclick={() => {
-										provider = option.value;
-									}}
-								>
-									<span class="selector-card-title">{option.label}</span>
-									<span class="selector-card-type">{option.type}</span>
-								</button>
-							{/each}
+			<!-- LLM Configuration -->
+			<section class="form-section">
+				<h4 class="section-title">{$i18n('agents_llm_config')}</h4>
+
+				<div class="field-grid cols-2">
+					<Select
+						id="agent-provider"
+						label={$i18n('agents_provider')}
+						value={provider}
+						options={providerSelectOptions}
+						onchange={(e) => {
+							provider = e.currentTarget.value;
+						}}
+					/>
+
+					{#if availableModels.length === 0}
+						<div class="no-models-message">
+							<p>{$i18n('agents_no_models', { provider })}</p>
+							<p>{$i18n('agents_no_models_hint')}</p>
 						</div>
-					</div>
-
-					<div class="field-group" role="group" aria-label={$i18n('agents_model')}>
-						<span class="field-label">{$i18n('agents_model')}</span>
-						{#if availableModels.length === 0}
-							<div class="no-models-message">
-								<p>{$i18n('agents_no_models', { provider })}</p>
-								<p>{$i18n('agents_no_models_hint')}</p>
-							</div>
-						{:else}
-							<div class="model-selector">
-								{#each availableModels as m (m.api_name)}
-									<button
-										type="button"
-										class="model-card"
-										class:selected={model === m.api_name}
-										onclick={() => {
-											model = m.api_name;
-										}}
-									>
-										<div class="model-card-header">
-											<span class="model-card-name">{m.name}</span>
-											<div class="model-card-badges">
-												{#if m.is_builtin}
-													<Badge variant="primary">{$i18n('agents_model_builtin')}</Badge>
-												{/if}
-												{#if m.is_reasoning}
-													<Badge variant="warning">{$i18n('agents_model_reasoning')}</Badge>
-												{/if}
-											</div>
-										</div>
-										<code class="model-card-api">{m.api_name}</code>
-										<div class="model-card-specs">
-											<span class="model-card-spec"
-												>{formatContextWindow(m.context_window)} ctx</span
-											>
-											<span class="model-card-spec"
-												>{formatContextWindow(m.max_output_tokens)} out</span
-											>
-											<span class="model-card-spec">T: {m.temperature_default}</span>
-										</div>
-									</button>
-								{/each}
-							</div>
-							{#if errors.model}
-								<span class="field-error">{errors.model}</span>
-							{/if}
-						{/if}
-					</div>
+					{:else}
+						<Select
+							id="agent-model"
+							label={$i18n('agents_model')}
+							value={model}
+							options={modelSelectOptions}
+							onchange={(e) => {
+								model = e.currentTarget.value;
+							}}
+							help={errors.model}
+						/>
+					{/if}
 
 					{#if selectedModel?.is_reasoning}
 						<Select
@@ -686,123 +683,128 @@ Be concise, factual, and conservative in your judgements.`;
 
 					<Input
 						type="number"
+						min={1}
+						max={200}
 						label={$i18n('agents_max_iterations_label')}
 						value={String(maxToolIterations)}
 						oninput={handleMaxToolIterationsInput}
 						help={errors.maxToolIterations || $i18n('agents_max_iterations_help')}
 					/>
 				</div>
+			</section>
 
-				<!-- Tools -->
-				<div class="form-section">
-					<h4 class="section-title">{$i18n('agents_tools_section')}</h4>
-					<p class="section-help">{$i18n('agents_tools_help')}</p>
+			<!-- System Prompt -->
+			<section class="form-section">
+				<h4 class="section-title">{$i18n('agents_system_prompt')}</h4>
 
-					<div class="checkbox-group">
-						{#each visibleTools as tool (tool.value)}
-							<label class="checkbox-item">
-								<input
-									type="checkbox"
-									checked={selectedTools.includes(tool.value)}
-									onchange={() => toggleTool(tool.value)}
+				<Textarea
+					label={$i18n('agents_system_prompt_label')}
+					value={systemPrompt}
+					oninput={handleSystemPromptInput}
+					rows={5}
+					placeholder={$i18n('agents_system_prompt_placeholder')}
+					required
+					help={errors.systemPrompt ||
+						$i18n('agents_system_prompt_chars', { count: systemPrompt.length })}
+				/>
+			</section>
+
+			<!-- Tools -->
+			<section class="form-section">
+				<h4 class="section-title">{$i18n('agents_tools_section')}</h4>
+				<p class="section-help">{$i18n('agents_tools_help')}</p>
+
+				<div class="toggle-grid">
+					{#each visibleTools as tool (tool.value)}
+						<div class="toggle-row">
+							<span class="toggle-text">
+								<strong id="agent-tool-{tool.value}">{tool.label}</strong>
+								<span>{tool.description}</span>
+							</span>
+							<Switch
+								checked={selectedTools.includes(tool.value)}
+								onchange={() => toggleTool(tool.value)}
+								labelledBy="agent-tool-{tool.value}"
+							/>
+						</div>
+					{/each}
+				</div>
+			</section>
+
+			<!-- Folders -->
+			<section class="form-section">
+				<h4 class="section-title">{$i18n('agents_section_folders')}</h4>
+
+				<AgentFolders
+					folders={selectedFolders}
+					onchange={(f) => {
+						selectedFolders = f;
+					}}
+				/>
+			</section>
+
+			<!-- MCP Servers -->
+			<section class="form-section">
+				<h4 class="section-title">{$i18n('agents_mcp_section')}</h4>
+				<p class="section-help">{$i18n('agents_mcp_help')}</p>
+
+				{#if availableMcpServers.length === 0}
+					<p class="no-servers">
+						{$i18n('agents_mcp_none')}
+					</p>
+				{:else}
+					<div class="toggle-list">
+						{#each availableMcpServers as server, index (server.value)}
+							<div class="toggle-row">
+								<span class="toggle-text">
+									<strong id="agent-mcp-{index}">{server.label}</strong>
+									<span>{server.description}</span>
+								</span>
+								<Switch
+									checked={selectedMcpServers.includes(server.value)}
+									onchange={() => toggleMcpServer(server.value)}
+									labelledBy="agent-mcp-{index}"
 								/>
-								<div class="checkbox-content">
-									<span class="checkbox-label">{tool.label}</span>
-									<span class="checkbox-description">{tool.description}</span>
-								</div>
-							</label>
+							</div>
 						{/each}
 					</div>
-				</div>
+				{/if}
+			</section>
 
-				<!-- MCP Servers -->
-				<div class="form-section">
-					<h4 class="section-title">{$i18n('agents_mcp_section')}</h4>
-					<p class="section-help">{$i18n('agents_mcp_help')}</p>
+			<!-- Skills -->
+			<section class="form-section">
+				<h4 class="section-title">{$i18n('agents_skills_section')}</h4>
+				<p class="section-help">{$i18n('agents_skills_help')}</p>
 
-					{#if availableMcpServers.length === 0}
-						<p class="no-servers">
-							{$i18n('agents_mcp_none')}
-						</p>
-					{:else}
-						<div class="checkbox-group">
-							{#each availableMcpServers as server (server.value)}
-								<label class="checkbox-item">
-									<input
-										type="checkbox"
-										checked={selectedMcpServers.includes(server.value)}
-										onchange={() => toggleMcpServer(server.value)}
-									/>
-									<div class="checkbox-content">
-										<span class="checkbox-label">{server.label}</span>
-										<span class="checkbox-description">{server.description}</span>
-									</div>
-								</label>
-							{/each}
-						</div>
-					{/if}
-				</div>
-
-				<!-- Skills -->
-				<div class="form-section">
-					<h4 class="section-title">{$i18n('agents_skills_section')}</h4>
-					<p class="section-help">{$i18n('agents_skills_help')}</p>
-
-					{#if availableSkills.length === 0}
-						<p class="no-servers">
-							{$i18n('agents_skills_none')}
-						</p>
-					{:else}
-						<div class="checkbox-group">
-							{#each availableSkills as skill (skill.value)}
-								<label class="checkbox-item">
-									<input
-										type="checkbox"
-										checked={selectedSkills.includes(skill.value)}
-										onchange={() => toggleSkill(skill.value)}
-									/>
-									<div class="checkbox-content">
-										<span class="checkbox-label">{skill.label}</span>
-										<span class="checkbox-description">{skill.description}</span>
-									</div>
-								</label>
-							{/each}
-						</div>
-					{/if}
-				</div>
-
-				<!-- Folders -->
-				<div class="form-section">
-					<h4 class="section-title">{$i18n('agents_section_folders')}</h4>
-
-					<AgentFolders
-						folders={selectedFolders}
-						onchange={(f) => {
-							selectedFolders = f;
-						}}
-					/>
-				</div>
-
-				<!-- System Prompt -->
-				<div class="form-section full-width">
-					<h4 class="section-title">{$i18n('agents_system_prompt')}</h4>
-
-					<Textarea
-						label={$i18n('agents_system_prompt_label')}
-						value={systemPrompt}
-						oninput={handleSystemPromptInput}
-						rows={8}
-						placeholder={$i18n('agents_system_prompt_placeholder')}
-						required
-						help={errors.systemPrompt ||
-							$i18n('agents_system_prompt_chars', { count: systemPrompt.length })}
-					/>
-				</div>
-			</div>
+				{#if availableSkills.length === 0}
+					<p class="no-servers">
+						{$i18n('agents_skills_none')}
+					</p>
+				{:else}
+					<div class="toggle-list">
+						{#each availableSkills as skill, index (skill.value)}
+							<div class="toggle-row">
+								<span class="toggle-text">
+									<strong id="agent-skill-{index}">{skill.label}</strong>
+									<span>{skill.description}</span>
+								</span>
+								<Switch
+									checked={selectedSkills.includes(skill.value)}
+									onchange={() => toggleSkill(skill.value)}
+									labelledBy="agent-skill-{index}"
+								/>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</section>
 
 			<div class="form-actions">
 				{#if dirty && !saving}
-					<span class="dirty-hint" role="status">{$i18n('settings_unsaved_changes')}</span>
+					<span class="dirty-hint" role="status">
+						<TriangleAlert size={14} aria-hidden="true" />
+						{$i18n('settings_unsaved_changes')}
+					</span>
 				{/if}
 				<Button variant="ghost" type="button" onclick={oncancel} disabled={saving}>
 					{$i18n('common_cancel')}
@@ -823,13 +825,7 @@ Be concise, factual, and conservative in your judgements.`;
 	.agent-form {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-lg);
-	}
-
-	.form-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
+		gap: var(--spacing-xl);
 	}
 
 	.load-warnings {
@@ -847,224 +843,71 @@ Be concise, factual, and conservative in your judgements.`;
 		border-radius: var(--border-radius-sm);
 	}
 
-	.form-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-xl);
-	}
-
 	.form-section {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
-	.form-section.full-width {
-		grid-column: 1 / -1;
+		gap: var(--spacing-sm);
 	}
 
 	.section-title {
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-secondary);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		color: var(--color-accent-deep);
 		margin: 0;
 	}
 
 	.section-help {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
 		margin: 0;
 	}
 
-	/* Field Group */
-	.field-group {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
+	.field-grid {
+		display: grid;
+		gap: var(--spacing-md);
+		align-items: start;
 	}
 
-	.field-label {
+	.field-grid.cols-3 {
+		grid-template-columns: repeat(3, 1fr);
+	}
+
+	.field-grid.cols-2 {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	/* Toggle rows (auto-analyze, tools, MCP servers, skills) */
+	.toggle-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--spacing-lg);
+		padding: var(--spacing-sm) 0;
+	}
+
+	.toggle-list .toggle-row + .toggle-row {
+		border-top: 1px solid var(--color-border-light);
+	}
+
+	.toggle-text strong {
+		display: block;
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 	}
 
-	.field-help {
+	.toggle-text span {
+		display: block;
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
 	}
 
-	.field-error {
-		font-size: var(--font-size-xs);
-		color: var(--color-error);
-	}
-
-	/* Card Selector (Provider, Lifecycle) */
-	.card-selector {
+	.toggle-grid {
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-sm);
-	}
-
-	.selector-card {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border: 2px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		cursor: pointer;
-		transition:
-			border-color var(--transition-fast),
-			background-color var(--transition-fast);
-		text-align: left;
-	}
-
-	.selector-card:hover:not(.disabled) {
-		border-color: var(--color-primary);
-		background: var(--color-bg-hover);
-	}
-
-	.selector-card.selected {
-		border-color: var(--color-primary);
-		background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-	}
-
-	.selector-card.disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
-
-	.selector-card-title {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
-	}
-
-	.selector-card-description,
-	.selector-card-type {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-	}
-
-	/* Model Selector */
-	.model-selector {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
-		max-height: 300px;
-		overflow-y: auto;
-	}
-
-	.model-card {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border: 2px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		cursor: pointer;
-		transition:
-			border-color var(--transition-fast),
-			background-color var(--transition-fast);
-		text-align: left;
-	}
-
-	.model-card:hover {
-		border-color: var(--color-primary);
-		background: var(--color-bg-hover);
-	}
-
-	.model-card.selected {
-		border-color: var(--color-primary);
-		background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-	}
-
-	.model-card-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--spacing-sm);
-	}
-
-	.model-card-name {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
-	}
-
-	.model-card-badges {
-		display: flex;
-		gap: var(--spacing-xs);
-	}
-
-	.model-card-api {
-		font-size: var(--font-size-xs);
-		font-family: var(--font-mono);
-		color: var(--color-text-tertiary);
-		background: var(--color-bg-tertiary);
-		padding: 2px var(--spacing-xs);
-		border-radius: var(--border-radius-sm);
-	}
-
-	.model-card-specs {
-		display: flex;
-		gap: var(--spacing-md);
-		margin-top: var(--spacing-xs);
-	}
-
-	.model-card-spec {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-	}
-
-	/* Checkbox Group (Tools, MCP Servers) */
-	.checkbox-group {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
-	}
-
-	.checkbox-item {
-		display: flex;
-		align-items: flex-start;
-		gap: var(--spacing-sm);
-		cursor: pointer;
-		padding: var(--spacing-sm);
-		border-radius: var(--border-radius-md);
-		transition: background var(--transition-fast);
-	}
-
-	.checkbox-item:hover {
-		background: var(--color-bg-hover);
-	}
-
-	.checkbox-item input {
-		width: 16px;
-		height: 16px;
-		margin-top: 2px;
-		cursor: pointer;
-	}
-
-	.checkbox-content {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-
-	.checkbox-label {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-	}
-
-	.checkbox-description {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
+		column-gap: var(--spacing-xl);
 	}
 
 	/* Empty States */
@@ -1088,8 +931,9 @@ Be concise, factual, and conservative in your judgements.`;
 	}
 
 	/* Form Actions: sticky save bar pinned to the bottom of the scrolling
-	   form. Opaque surface, no backdrop blur: a blurred sticky bar forces
-	   WebKitGTK to re-blur the content scrolling behind it on every frame. */
+	   form. Opaque card surface, no backdrop blur: a blurred sticky bar
+	   forces WebKitGTK to re-blur the content scrolling behind it on every
+	   frame. */
 	.form-actions {
 		position: sticky;
 		bottom: 0;
@@ -1099,22 +943,28 @@ Be concise, factual, and conservative in your judgements.`;
 		justify-content: flex-end;
 		padding: var(--spacing-md) 0;
 		border-top: 1px solid var(--color-border);
-		background: var(--color-bg-primary);
+		background: var(--surface-1);
 	}
 
 	.dirty-hint {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-xs);
 		margin-right: auto;
 		font-size: var(--font-size-xs);
 		color: var(--color-warning);
 	}
 
 	/* Responsive */
-	@media (max-width: 768px) {
-		.form-grid {
+	@media (max-width: 900px) {
+		.field-grid.cols-3 {
 			grid-template-columns: 1fr;
 		}
+	}
 
-		.card-selector {
+	@media (max-width: 768px) {
+		.field-grid.cols-2,
+		.toggle-grid {
 			grid-template-columns: 1fr;
 		}
 	}

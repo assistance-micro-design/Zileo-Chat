@@ -964,6 +964,13 @@ a:hover {
   border-color: var(--color-border);
 }
 
+/* MCP counts and labels read on the magenta MCP channel. */
+.badge-mcp {
+  background: var(--channel-mcp-soft);
+  color: var(--channel-mcp);
+  border-color: currentColor;
+}
+
 .status-indicator {
   width: 8px;
   height: 8px;

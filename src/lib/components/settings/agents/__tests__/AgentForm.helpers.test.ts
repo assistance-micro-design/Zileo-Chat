@@ -10,7 +10,6 @@ import {
 	buildAvailableMcpServers,
 	buildAvailableSkills,
 	buildProviderOptions,
-	formatContextWindow,
 	toProviderType,
 	toggleSelection,
 	validateAgentForm,
@@ -58,14 +57,6 @@ describe('AgentForm helpers', () => {
 	it('normalizes provider names to provider types', () => {
 		expect(toProviderType('MISTRAL')).toBe('mistral');
 		expect(toProviderType('Custom-Provider')).toBe('custom-provider');
-	});
-
-	it('formats context windows with current K/M display rules', () => {
-		expect(formatContextWindow(999)).toBe('999');
-		expect(formatContextWindow(1000)).toBe('1K');
-		expect(formatContextWindow(128000)).toBe('128K');
-		expect(formatContextWindow(1000000)).toBe('1.0M');
-		expect(formatContextWindow(1500000)).toBe('1.5M');
 	});
 
 	it('toggles selections immutably while preserving order', () => {

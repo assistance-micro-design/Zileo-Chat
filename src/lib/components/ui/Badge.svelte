@@ -31,7 +31,7 @@
 	 */
 	interface Props {
 		/** Visual variant for semantic meaning */
-		variant?: 'primary' | 'success' | 'warning' | 'error' | 'neutral';
+		variant?: 'primary' | 'success' | 'warning' | 'error' | 'neutral' | 'mcp';
 		/** Badge content */
 		children: Snippet;
 	}

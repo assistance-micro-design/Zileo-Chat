@@ -39,16 +39,6 @@ export function toProviderType(providerName: string): ProviderType {
 	return providerName.toLowerCase() as ProviderType;
 }
 
-export function formatContextWindow(tokens: number): string {
-	if (tokens >= 1_000_000) {
-		return `${(tokens / 1_000_000).toFixed(1)}M`;
-	}
-	if (tokens >= 1_000) {
-		return `${Math.round(tokens / 1_000)}K`;
-	}
-	return tokens.toLocaleString();
-}
-
 export function toggleSelection(values: string[], value: string): string[] {
 	if (values.includes(value)) {
 		return values.filter((existing) => existing !== value);

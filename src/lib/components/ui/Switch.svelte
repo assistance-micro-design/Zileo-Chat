@@ -16,11 +16,11 @@
 
 <!--
   Switch Component
-  Accessible on/off toggle for boolean settings ("enable X"), replacing bare
-  checkboxes on settings surfaces. Built on a native button with
-  role="switch" + aria-checked, so Space/Enter activation comes for free —
-  no custom keyboard state machine. List-selection checkboxes (tool
-  allowlists, export entity pickers) stay checkboxes by design.
+  Accessible on/off toggle for boolean settings ("enable X") and per-agent
+  grants (tools, MCP servers, skills), replacing bare checkboxes on settings
+  surfaces. Built on a native button with role="switch" + aria-checked, so
+  Space/Enter activation comes for free — no custom keyboard state machine.
+  Multi-selection pickers (export entity pickers) stay checkboxes by design.
 
   @example
   <Switch checked={enabled} onchange={(v) => (enabled = v)} ariaLabel="Enable dictation" />
