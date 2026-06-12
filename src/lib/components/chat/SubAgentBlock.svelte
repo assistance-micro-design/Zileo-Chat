@@ -7,10 +7,10 @@
 -->
 
 <script lang="ts">
-	import { Users, ChevronDown, CircleCheckBig, CircleX } from '@lucide/svelte';
+	import type { Snippet } from 'svelte';
+	import { Users, ChevronDown, CircleCheckBig, CircleX, ArrowRightLeft } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { formatDuration } from '$lib/utils/duration';
-	import { truncateThinkingContent } from '$types/thinking';
 
 	interface Props {
 		agentName: string;
@@ -42,10 +42,15 @@
 		sequence?: number;
 		/**
 		 * Number of internal blocks (tool_call/thinking) attributable to this
-		 * sub-agent. Displayed as a count in the collapsed header so the user
-		 * can preview the sub-agent's activity without expanding the block.
+		 * sub-agent. Displayed as a count in the header so the user can gauge
+		 * the sub-agent's activity without expanding the block.
 		 */
 		internalBlockCount?: number;
+		/**
+		 * Internal execution thread (nested ThinkingBlock/ToolCallBlock
+		 * components) rendered inside the expanded body, hidden on collapse.
+		 */
+		children?: Snippet;
 	}
 
 	let {
@@ -61,7 +66,8 @@
 		reportSummary,
 		collapsed = true,
 		sequence,
-		internalBlockCount = 0
+		internalBlockCount = 0,
+		children
 	}: Props = $props();
 
 	const hasCacheRow = $derived(
@@ -77,8 +83,6 @@
 	const blockId = $derived(`subagent-${sequence ?? 'tmp'}`);
 
 	const formattedDuration = $derived(durationMs ? formatDuration(durationMs) : null);
-
-	const preview = $derived(reportSummary ? truncateThinkingContent(reportSummary, 100) : null);
 
 	function toggle(): void {
 		collapsed = !collapsed;
@@ -112,7 +116,7 @@
 		</span>
 		<span class="agent-name">{agentName}</span>
 
-		{#if collapsed && internalBlockCount > 0}
+		{#if internalBlockCount > 0}
 			<span class="internal-count">
 				{internalBlockCount === 1
 					? $i18n('sub_agent_block_internal_actions_count_one').replace('{count}', '1')
@@ -144,31 +148,36 @@
 
 	{#if !collapsed}
 		<div class="sub-agent-body" id={blockId}>
-			{#if tokensInput || tokensOutput}
-				<div class="agent-tokens">
+			{#if tokensInput || tokensOutput || hasCacheRow}
+				<div class="metric-chips">
 					{#if tokensInput}
-						<span class="token-label"
-							>{$i18n('chat_tokens_in')}: {tokensInput.toLocaleString()}</span
-						>
+						<span class="metric-chip">
+							<ArrowRightLeft size={12} aria-hidden="true" />
+							{$i18n('chat_tokens_in')}
+							{tokensInput.toLocaleString()}
+						</span>
 					{/if}
 					{#if tokensOutput}
-						<span class="token-label"
-							>{$i18n('chat_tokens_out')}: {tokensOutput.toLocaleString()}</span
+						<span class="metric-chip">
+							<ArrowRightLeft size={12} aria-hidden="true" />
+							{$i18n('chat_tokens_out')}
+							{tokensOutput.toLocaleString()}
+						</span>
+					{/if}
+					{#if cachedTokens != null && cachedTokens > 0}
+						<span class="metric-chip"
+							>{$i18n('chat_tokens_cache')} {cachedTokens.toLocaleString()}</span
 						>
 					{/if}
-				</div>
-			{/if}
-
-			{#if hasCacheRow}
-				<div class="agent-tokens agent-cache-row">
-					{#if cachedTokens != null && cachedTokens > 0}
-						<span class="token-label">cache: {cachedTokens.toLocaleString()}</span>
-					{/if}
 					{#if cacheWriteTokens != null && cacheWriteTokens > 0}
-						<span class="token-label">+write: {cacheWriteTokens.toLocaleString()}</span>
+						<span class="metric-chip"
+							>{$i18n('chat_tokens_cache_write')} {cacheWriteTokens.toLocaleString()}</span
+						>
 					{/if}
 					{#if thinkingTokens != null && thinkingTokens > 0}
-						<span class="token-label">thinking: {thinkingTokens.toLocaleString()}</span>
+						<span class="metric-chip"
+							>{$i18n('chat_tokens_thinking')} {thinkingTokens.toLocaleString()}</span
+						>
 					{/if}
 				</div>
 			{/if}
@@ -178,10 +187,12 @@
 					{reportSummary}
 				</div>
 			{/if}
-		</div>
-	{:else if preview}
-		<div class="sub-agent-preview">
-			{preview}
+
+			{#if children && internalBlockCount > 0}
+				<div class="sub-agent-thread">
+					{@render children()}
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -244,10 +255,7 @@
 
 	.internal-count {
 		font-size: var(--font-size-xs);
-		color: var(--blk-channel);
-		padding: 2px 6px;
-		background: var(--blk-channel-soft);
-		border-radius: 4px;
+		color: var(--color-text-tertiary);
 		flex-shrink: 0;
 	}
 
@@ -287,32 +295,74 @@
 		border-top: 1px solid var(--color-border-light);
 	}
 
-	.agent-tokens {
+	/* Pill chips matching the execution-thread metric chips */
+	.metric-chips {
 		display: flex;
-		gap: var(--spacing-md);
-		margin-bottom: var(--spacing-xs);
+		flex-wrap: wrap;
+		gap: var(--spacing-xs);
+		margin-bottom: var(--spacing-sm);
 	}
 
-	.token-label {
-		font-size: var(--font-size-xs);
+	.metric-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 0.14rem 0.5rem;
+		font-size: var(--font-size-2xs);
+		font-variant-numeric: tabular-nums;
 		color: var(--color-text-secondary);
+		background: var(--surface-2);
+		border: 1px solid var(--color-border-light);
+		border-radius: var(--border-radius-full);
 	}
 
 	.agent-report {
 		font-size: var(--font-size-sm);
 		line-height: 1.5;
-		color: var(--color-text-primary);
+		color: var(--color-text-secondary);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
 
-	.sub-agent-preview {
-		padding: 0 var(--spacing-sm) var(--spacing-xs);
-		font-size: var(--font-size-xs);
-		color: var(--color-text-tertiary);
-		font-style: italic;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	/*
+	  Internal execution thread: same rail-and-nodes pattern as the main
+	  thread in ChatContainer, but on the sub-agent (orange) channel fading
+	  out. Each nested block publishes --blk-channel on its root, which the
+	  node pseudo-element reads.
+	*/
+	.sub-agent-thread {
+		position: relative;
+		margin-top: var(--spacing-sm);
+		padding-left: 26px;
+	}
+
+	.sub-agent-thread::before {
+		content: '';
+		position: absolute;
+		left: 9px;
+		top: 6px;
+		bottom: 6px;
+		width: 2px;
+		border-radius: 2px;
+		background: linear-gradient(180deg, var(--channel-agent), transparent);
+		opacity: 0.5;
+	}
+
+	.sub-agent-thread > :global(*) {
+		position: relative;
+	}
+
+	.sub-agent-thread > :global(*)::before {
+		content: '';
+		position: absolute;
+		left: -21px;
+		top: 14px;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: var(--blk-channel, var(--color-text-tertiary));
+		box-shadow:
+			0 0 0 3px var(--blk-channel-soft, transparent),
+			0 0 10px var(--blk-channel, transparent);
 	}
 </style>

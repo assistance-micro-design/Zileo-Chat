@@ -45,7 +45,7 @@ Main chat area with message display, execution blocks inline, and input controls
 		SubAgentBlockData,
 		TodoTaskDisplay
 	} from '$types/chat-block';
-	import { countInternalBlocks } from './chat-container-helpers';
+	import { groupBlocksBySubAgent, type BlockGroup } from './chat-container-helpers';
 
 	interface Props {
 		messages: Message[];
@@ -184,7 +184,7 @@ Main chat area with message display, execution blocks inline, and input controls
 		{#if messagesLoading}
 			<MessageListSkeleton count={3} />
 		{:else}
-			{#snippet renderBlock(block: ChatBlock, allBlocks: ChatBlock[])}
+			{#snippet renderLeafBlock(block: ChatBlock)}
 				{#if block.block_type === 'thinking'}
 					{@const data = block.data as ThinkingBlockData}
 					<ThinkingBlock
@@ -211,7 +211,14 @@ Main chat area with message display, execution blocks inline, and input controls
 						agentName={data.agent_name}
 						{primaryAgentId}
 					/>
-				{:else if block.block_type === 'sub_agent'}
+				{/if}
+			{/snippet}
+
+			{#snippet renderGroup(group: BlockGroup)}
+				{@const block = group.block}
+				{#if block.block_type !== 'sub_agent'}
+					{@render renderLeafBlock(block)}
+				{:else}
 					{@const data = block.data as SubAgentBlockData}
 					<SubAgentBlock
 						agentName={data.agent_name}
@@ -225,8 +232,12 @@ Main chat area with message display, execution blocks inline, and input controls
 						thinkingTokens={data.thinking_tokens}
 						reportSummary={data.report_summary}
 						sequence={block.sequence}
-						internalBlockCount={countInternalBlocks(allBlocks, data._sub_agent_id)}
-					/>
+						internalBlockCount={group.internals.length}
+					>
+						{#each group.internals as inner (`${inner.block_type}-${inner.sequence}`)}
+							{@render renderLeafBlock(inner)}
+						{/each}
+					</SubAgentBlock>
 				{/if}
 			{/snippet}
 
@@ -257,8 +268,8 @@ Main chat area with message display, execution blocks inline, and input controls
 						-->
 						{#if message.role === 'assistant' && getBlocksForMessage(message.id).length > 0}
 							<div class="persisted-blocks">
-								{#each getBlocksForMessage(message.id) as block (`${block.block_type}-${block.sequence}`)}
-									{@render renderBlock(block, getBlocksForMessage(message.id))}
+								{#each groupBlocksBySubAgent(getBlocksForMessage(message.id)) as group (`${group.block.block_type}-${group.block.sequence}`)}
+									{@render renderGroup(group)}
 								{/each}
 							</div>
 						{/if}
@@ -269,8 +280,8 @@ Main chat area with message display, execution blocks inline, and input controls
 			<!-- Real-time execution blocks (current execution) -->
 			{#if isExecuting || executionBlocks.length > 0}
 				<div class="execution-blocks">
-					{#each executionBlocks as block (`${block.block_type}-${block.sequence}`)}
-						{@render renderBlock(block, executionBlocks)}
+					{#each groupBlocksBySubAgent(executionBlocks) as group (`${group.block.block_type}-${group.block.sequence}`)}
+						{@render renderGroup(group)}
 					{/each}
 
 					{#if isExecuting}
@@ -447,7 +458,7 @@ Main chat area with message display, execution blocks inline, and input controls
 		height: 36px;
 		border-radius: 50%;
 		border: 1px solid var(--color-border);
-		background: var(--color-bg-secondary);
+		background: var(--surface-1);
 		color: var(--color-text-secondary);
 		display: flex;
 		align-items: center;
@@ -455,7 +466,7 @@ Main chat area with message display, execution blocks inline, and input controls
 		cursor: pointer;
 		z-index: 5;
 		animation: fadeIn var(--transition-base);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+		box-shadow: var(--shadow-md);
 	}
 
 	.scroll-to-bottom:hover {

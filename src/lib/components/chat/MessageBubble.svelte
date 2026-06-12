@@ -118,7 +118,7 @@
 	}
 </script>
 
-<div class="message-bubble" class:user={isUserMessage} class:assistant={!isUserMessage}>
+<div class="message-row" class:user={isUserMessage} class:assistant={!isUserMessage}>
 	{#if message.attachments && message.attachments.length > 0}
 		<ul class="message-attachments">
 			{#each message.attachments as att, i (i)}
@@ -140,12 +140,14 @@
 		</ul>
 	{/if}
 	{#if message.content}
-		<div class="message-content">
-			{#if isUserMessage}
-				{message.content}
-			{:else}
-				<MarkdownRenderer content={message.content} />
-			{/if}
+		<div class="message-bubble" class:user={isUserMessage} class:assistant={!isUserMessage}>
+			<div class="message-content">
+				{#if isUserMessage}
+					{message.content}
+				{:else}
+					<MarkdownRenderer content={message.content} />
+				{/if}
+			</div>
 		</div>
 	{/if}
 	<div class="message-footer">
@@ -209,18 +211,33 @@
 {/if}
 
 <style>
-	.message-bubble {
-		max-width: 80%;
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-lg);
+	/* Row: bubble + footer stacked; timestamp and actions live OUTSIDE the
+	   bubble so the bubble only carries the message ink. */
+	.message-row {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
 		animation: fadeIn var(--transition-base);
+	}
+
+	.message-row.user {
+		align-items: flex-end;
+	}
+
+	.message-row.assistant {
+		align-items: stretch;
+	}
+
+	.message-bubble {
+		padding: 0.7rem 1rem;
+		border-radius: var(--border-radius-lg);
 		position: relative;
 	}
 
 	/* User bubble sits on the brand gradient with dark ink (site button
 	   convention): white text on the pale turquoise failed AA contrast. */
 	.message-bubble.user {
-		align-self: flex-end;
+		max-width: 72ch;
 		background: var(--gradient-brand);
 		color: var(--color-accent-text);
 		border-bottom-right-radius: var(--border-radius-sm);
@@ -228,7 +245,6 @@
 	}
 
 	.message-bubble.assistant {
-		align-self: flex-start;
 		background: var(--surface-1);
 		color: var(--color-text-primary);
 		border: 1px solid var(--color-border);
@@ -341,25 +357,19 @@
 	.message-footer {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: var(--spacing-md);
-		margin-top: var(--spacing-sm);
-		font-size: var(--font-size-xs);
-		opacity: 0.7;
+		gap: var(--spacing-sm);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-tertiary);
+	}
+
+	.message-row.user .message-footer {
+		justify-content: flex-end;
 	}
 
 	.message-time {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
-	}
-
-	.message-bubble.user .message-footer {
-		color: var(--color-accent-text);
-	}
-
-	.message-bubble.assistant .message-footer {
-		color: var(--color-text-tertiary);
 	}
 
 	.copy-button {
@@ -379,7 +389,8 @@
 			background-color 0.2s ease;
 	}
 
-	.message-bubble.assistant:hover .copy-button {
+	.message-row.assistant:hover .copy-button,
+	.copy-button:focus-visible {
 		opacity: 1;
 	}
 

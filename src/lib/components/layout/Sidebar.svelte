@@ -116,6 +116,13 @@
 		background: none;
 	}
 
+	/* Beat the global `.sidebar.collapsed .sidebar-footer` padding rule:
+	   the toggle must stay a flush full-width band in collapsed mode too,
+	   not a padded box floating inside the card. */
+	:global(.sidebar.collapsed) .sidebar-footer.sidebar-toggle-footer {
+		padding: 0;
+	}
+
 	.sidebar-toggle {
 		width: 100%;
 		display: flex;

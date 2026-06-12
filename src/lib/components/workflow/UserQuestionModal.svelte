@@ -255,7 +255,7 @@
 	}
 
 	.question-text {
-		font-size: var(--font-size-lg);
+		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 		margin: 0;

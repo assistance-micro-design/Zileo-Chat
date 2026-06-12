@@ -24,7 +24,7 @@ use crate::{
     constants::commands as cmd_const,
     db::extract_count,
     models::{
-        merge_into_chat_blocks, sub_agent::SubAgentExecution, ChatBlock, Message,
+        merge_into_chat_blocks, shift_sequences, sub_agent::SubAgentExecution, ChatBlock, Message,
         MessageAttachment, MessageCreate, MessageMetrics, PaginatedMessages, ThinkingStep,
         ToolExecution,
     },
@@ -933,24 +933,16 @@ pub(crate) async fn load_workflow_blocks_core(
         let mut seq_offset = primary_max_seq + 1;
 
         // Re-sequence each sub-agent's internal blocks so they appear after
-        // the primary blocks but before later sub-agents.
+        // the primary blocks but before later sub-agents. Tools and thinking
+        // steps of one sub-agent share its tracker's sequence space, so both
+        // families shift by the SAME offset — separate offsets would push
+        // every thinking step after every tool and destroy the interleaving.
         for sa in &owned_sub_agents {
-            if let Some(mut sa_tools) = sub_agent_tools.remove(&sa.id) {
-                for t in &mut sa_tools {
-                    t.sequence += seq_offset;
-                }
-                let max = sa_tools.iter().map(|t| t.sequence).max().unwrap_or(0);
-                seq_offset = max + 1;
-                all_tools.extend(sa_tools);
-            }
-            if let Some(mut sa_thinking) = sub_agent_thinking.remove(&sa.id) {
-                for t in &mut sa_thinking {
-                    t.sequence += seq_offset;
-                }
-                let max = sa_thinking.iter().map(|t| t.sequence).max().unwrap_or(0);
-                seq_offset = max + 1;
-                all_thinking.extend(sa_thinking);
-            }
+            let mut sa_tools = sub_agent_tools.remove(&sa.id).unwrap_or_default();
+            let mut sa_thinking = sub_agent_thinking.remove(&sa.id).unwrap_or_default();
+            seq_offset = shift_sequences(&mut sa_tools, &mut sa_thinking, seq_offset);
+            all_tools.extend(sa_tools);
+            all_thinking.extend(sa_thinking);
         }
 
         let blocks = merge_into_chat_blocks(

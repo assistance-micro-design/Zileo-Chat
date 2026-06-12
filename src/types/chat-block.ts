@@ -134,7 +134,11 @@ export interface SubAgentBlockData {
 	thinking_tokens?: number | null;
 	/** Summary of the sub-agent report */
 	report_summary?: string;
-	/** Internal: sub-agent ID for deduplication (not persisted) */
+	/**
+	 * Sub-agent ID used to nest internal blocks (matching `agent_id`) inside
+	 * this summary and to deduplicate live upserts. Carried on live chunks
+	 * and projected by the replay path; absent only on legacy data.
+	 */
 	_sub_agent_id?: string;
 }
 

@@ -24,6 +24,7 @@ Extracted from AgentSettings and PromptSettings.
 
 <script lang="ts">
 	import { Button, Modal } from '$lib/components/ui';
+	import { TriangleAlert } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	interface Props {
@@ -90,7 +91,8 @@ Extracted from AgentSettings and PromptSettings.
 		</p>
 		{#if warningMessageKey}
 			<p class="delete-warning" class:warning-primary={variant === 'primary'}>
-				{$i18n(warningMessageKey)}
+				<TriangleAlert size={16} />
+				<span>{$i18n(warningMessageKey)}</span>
 			</p>
 		{/if}
 	{/snippet}
@@ -123,19 +125,30 @@ Extracted from AgentSettings and PromptSettings.
 		color: var(--color-accent-deep);
 	}
 
+	/* Amber alert pattern shared with the validation modal: pale tinted
+	   surface + matching border, icon leading the message. */
 	.delete-warning {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--spacing-sm);
 		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin: 0;
-		margin-top: var(--spacing-sm);
-		padding: var(--spacing-sm) var(--spacing-md);
-		background: var(--color-bg-secondary);
+		color: var(--color-warning);
+		margin: var(--spacing-sm) 0 0;
+		padding: var(--spacing-md);
+		background: var(--color-warning-light);
+		border: 1px solid rgba(217, 144, 12, 0.35);
 		border-radius: var(--border-radius-md);
-		border-left: 3px solid var(--color-error);
+	}
+
+	.delete-warning :global(svg) {
+		flex-shrink: 0;
+		margin-top: 2px;
 	}
 
 	.warning-primary {
-		border-left-color: var(--color-accent);
+		color: var(--color-text-secondary);
+		background: var(--color-accent-light);
+		border-color: var(--color-accent);
 	}
 
 	.modal-actions {

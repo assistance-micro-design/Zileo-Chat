@@ -31,7 +31,7 @@
 	 */
 	interface Props {
 		/** Visual variant of the button */
-		variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+		variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-soft';
 		/** Size of the button */
 		size?: 'sm' | 'md' | 'lg' | 'icon';
 		/** Whether the button is disabled */

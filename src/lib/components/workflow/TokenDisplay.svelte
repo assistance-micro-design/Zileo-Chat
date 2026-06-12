@@ -445,7 +445,7 @@
 
 	/* Context Progress Section */
 	.context-metric {
-		min-width: 140px;
+		min-width: 170px;
 	}
 
 	.compact .context-metric {
@@ -578,7 +578,7 @@
 	.speed-metric {
 		gap: 2px;
 		padding: var(--spacing-xs) var(--spacing-sm);
-		background: color-mix(in srgb, var(--color-status-running) 15%, transparent);
+		background: var(--color-info-light);
 		border-radius: var(--border-radius-md);
 	}
 
@@ -636,8 +636,8 @@
 		gap: 2px;
 		margin-top: var(--spacing-xs);
 		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg-primary);
-		border: 1px solid var(--color-border);
+		background: var(--surface-2);
+		border: 1px solid var(--color-border-light);
 		border-radius: var(--border-radius-md);
 		font-family: var(--font-mono);
 	}
@@ -671,29 +671,29 @@
 	}
 
 	.details-cost {
-		color: var(--color-secondary);
+		color: var(--color-secondary-deep);
 	}
 
 	.cache-rate {
 		font-size: var(--font-size-2xs);
 		font-weight: var(--font-weight-semibold);
-		padding: 1px 4px;
+		padding: 1px 6px;
 		border-radius: var(--border-radius-sm);
 	}
 
 	.cache-rate-high {
 		color: var(--color-success);
-		background: color-mix(in srgb, var(--color-success) 15%, transparent);
+		background: var(--color-success-light);
 	}
 
 	.cache-rate-medium {
 		color: var(--color-warning);
-		background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+		background: var(--color-warning-light);
 	}
 
 	.cache-rate-low {
 		color: var(--color-text-tertiary);
-		background: color-mix(in srgb, var(--color-text-tertiary) 10%, transparent);
+		background: var(--color-bg-tertiary);
 	}
 
 	/* Animations */

@@ -61,7 +61,6 @@
 	class="thinking-block"
 	class:model-thinking={source === 'model_thinking'}
 	class:agent-flow={source === 'agent_flow'}
-	class:sub-agent={isSubAgent}
 	role="region"
 	aria-label={isSubAgent
 		? `${$i18n('block_thinking_sub_agent_label')}: ${agentLabel}`
@@ -116,12 +115,6 @@
 		background: transparent;
 		border: none;
 		box-shadow: none;
-	}
-
-	/* Sub-agent visual treatment: indented, on the sub-agent (orange) channel */
-	.thinking-block.sub-agent {
-		margin-left: 16px;
-		border-left: 2px dashed var(--channel-agent);
 	}
 
 	.agent-tag {

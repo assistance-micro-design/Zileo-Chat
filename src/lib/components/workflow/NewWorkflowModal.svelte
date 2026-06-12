@@ -205,6 +205,7 @@
 									</button>
 								{/each}
 							</div>
+							<p class="form-hint">{$i18n('workflow_modal_agent_hint')}</p>
 						{/if}
 					</div>
 				</div>

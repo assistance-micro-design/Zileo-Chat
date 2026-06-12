@@ -210,7 +210,7 @@
 		{:else}
 			<span class="folder-name">{folder.name}</span>
 		{/if}
-		<span class="folder-count">({workflowCount})</span>
+		<span class="folder-count">{workflowCount}</span>
 		<div class="folder-actions">
 			<button
 				type="button"
@@ -254,11 +254,15 @@
 		background: var(--color-accent-light);
 	}
 
+	/* Folder headers read as thread group labels (same type treatment as
+	   .section-header in WorkflowList), with the chevron/dot/actions kept
+	   for the collapse + management affordances. */
 	.folder-header {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
-		padding: var(--spacing-xs) var(--spacing-md);
+		margin-top: var(--spacing-sm);
+		padding: var(--spacing-xs) 0.4rem;
 		cursor: pointer;
 		border-radius: var(--border-radius-md);
 		transition: background var(--transition-fast);
@@ -282,17 +286,19 @@
 	}
 
 	.folder-color-dot {
-		width: 10px;
-		height: 10px;
-		min-width: 10px;
+		width: 8px;
+		height: 8px;
+		min-width: 8px;
 		border-radius: var(--border-radius-full);
 	}
 
 	.folder-name {
 		flex: 1;
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-2xs);
 		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--color-text-tertiary);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -311,8 +317,10 @@
 	}
 
 	.folder-count {
-		font-size: var(--font-size-xs);
+		font-size: var(--font-size-2xs);
+		font-variant-numeric: tabular-nums;
 		color: var(--color-text-tertiary);
+		opacity: 0.75;
 	}
 
 	.folder-actions {
@@ -344,7 +352,10 @@
 		color: var(--color-text-primary);
 	}
 
+	/* Items align full-width under the group label, like the date sections */
 	.folder-children {
-		padding-left: var(--spacing-lg);
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
 	}
 </style>

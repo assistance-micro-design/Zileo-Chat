@@ -209,7 +209,40 @@ Left sidebar for workflow management with search and CRUD operations.
 	}, 300);
 </script>
 
-<Sidebar bind:collapsed>
+{#snippet footerActions()}
+	<div class="footer-actions">
+		<button type="button" class="btn btn-primary footer-create-btn" onclick={oncreate}>
+			<Plus size={16} />
+			{$i18n('workflow_new')}
+		</button>
+		<div class="footer-secondary">
+			{#if onfoldercreate}
+				<button
+					type="button"
+					class="btn btn-ghost btn-sm footer-ghost-btn"
+					onclick={onfoldercreate}
+				>
+					<FolderPlus size={14} />
+					{$i18n('sidebar_folder_create')}
+				</button>
+			{/if}
+			{#if onbatchdelete}
+				<button
+					type="button"
+					class="btn btn-ghost btn-sm footer-ghost-btn"
+					class:selection-active={selectionMode}
+					onclick={toggleSelectionMode}
+					aria-pressed={selectionMode}
+				>
+					<CheckSquare size={14} />
+					{$i18n('sidebar_selection_toggle')}
+				</button>
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
+<Sidebar bind:collapsed footer={collapsed ? undefined : footerActions}>
 	{#snippet header(isCollapsed)}
 		<div class="sidebar-header-content" class:collapsed={isCollapsed}>
 			{#if isCollapsed}
@@ -223,57 +256,23 @@ Left sidebar for workflow management with search and CRUD operations.
 					<Plus size={16} />
 				</Button>
 			{:else}
-				<div class="title-row">
-					<h2 class="sidebar-title">{$i18n('workflow_title')}</h2>
-					<Button
-						variant="primary"
-						size="icon"
-						onclick={oncreate}
-						ariaLabel={$i18n('workflow_new')}
-					>
-						<Plus size={14} />
-					</Button>
-				</div>
-				<div class="secondary-actions">
+				<div class="search-row">
+					<div class="search-input-wrapper">
+						<span class="search-icon-container">
+							<Search size={16} />
+						</span>
+						<input
+							type="search"
+							class="search-input"
+							placeholder={$i18n('workflow_filter_placeholder')}
+							value={searchFilter}
+							oninput={handleSearchInput}
+						/>
+					</div>
 					<HelpButton
 						titleKey="help_workflow_sidebar_title"
 						descriptionKey="help_workflow_sidebar_description"
 						tutorialKey="help_workflow_sidebar_tutorial"
-					/>
-					{#if onfoldercreate}
-						<button
-							type="button"
-							class="action-btn"
-							onclick={onfoldercreate}
-							title={$i18n('sidebar_folder_create')}
-							aria-label={$i18n('sidebar_folder_create')}
-						>
-							<FolderPlus size={14} />
-						</button>
-					{/if}
-					{#if onbatchdelete}
-						<button
-							type="button"
-							class={['action-btn', selectionMode && 'active']}
-							onclick={toggleSelectionMode}
-							title={$i18n('sidebar_selection_toggle')}
-							aria-label={$i18n('sidebar_selection_toggle')}
-							aria-pressed={selectionMode}
-						>
-							<CheckSquare size={14} />
-						</button>
-					{/if}
-				</div>
-				<div class="search-input-wrapper">
-					<span class="search-icon-container">
-						<Search size={16} />
-					</span>
-					<input
-						type="search"
-						class="search-input"
-						placeholder={$i18n('workflow_filter_placeholder')}
-						value={searchFilter}
-						oninput={handleSearchInput}
 					/>
 				</div>
 				{#if onstatusfilterchange}
@@ -360,30 +359,17 @@ Left sidebar for workflow management with search and CRUD operations.
 		gap: 0;
 	}
 
-	.title-row {
+	.search-row {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		gap: var(--spacing-sm);
-	}
-
-	.sidebar-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
-		margin: 0;
-	}
-
-	.secondary-actions {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
 	}
 
 	.search-input-wrapper {
 		position: relative;
 		display: flex;
 		align-items: center;
+		flex: 1;
 	}
 
 	.search-icon-container {
@@ -435,29 +421,28 @@ Left sidebar for workflow management with search and CRUD operations.
 		cursor: pointer;
 	}
 
-	.action-btn {
+	/* Bottom action stack: full-width primary CTA + two ghost shortcuts */
+	.footer-actions {
 		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		padding: 0;
-		background: transparent;
-		border: 1px solid transparent;
-		border-radius: var(--border-radius-md);
-		color: var(--color-text-tertiary);
-		cursor: pointer;
-		transition: all var(--transition-fast);
+		flex-direction: column;
+		gap: var(--spacing-xs);
 	}
 
-	.action-btn:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
+	.footer-create-btn {
+		width: 100%;
 	}
 
-	.action-btn.active {
+	.footer-secondary {
+		display: flex;
+		gap: var(--spacing-xs);
+	}
+
+	.footer-ghost-btn {
+		flex: 1;
+	}
+
+	.footer-ghost-btn.selection-active {
 		background: var(--color-accent-light);
-		border-color: var(--color-accent);
 		color: var(--color-accent-deep);
 	}
 

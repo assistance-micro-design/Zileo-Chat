@@ -72,14 +72,14 @@
 	.status-chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		padding: 2px var(--spacing-sm);
+		gap: var(--spacing-xs);
+		padding: 0.22rem 0.7rem;
 		font-size: var(--font-size-xs);
 		font-family: var(--font-family);
 		font-weight: var(--font-weight-medium);
 		color: var(--color-text-secondary);
-		background: var(--color-bg-tertiary);
-		border: 1px solid transparent;
+		background: transparent;
+		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-full);
 		cursor: pointer;
 		transition:
@@ -91,14 +91,14 @@
 	}
 
 	.status-chip:hover {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-border);
+		border-color: var(--color-border-dark);
+		color: var(--color-text-primary);
 	}
 
 	.status-chip.active {
-		color: var(--color-accent-text);
-		background: var(--color-accent);
-		border-color: var(--color-accent);
+		color: var(--color-accent-deep);
+		background: var(--color-accent-light);
+		border-color: var(--color-accent-deep);
 	}
 
 	.status-chip.active:hover {
@@ -115,7 +115,8 @@
 
 	.chip-count {
 		font-size: var(--font-size-2xs);
-		opacity: 0.8;
+		font-variant-numeric: tabular-nums;
+		opacity: 0.75;
 	}
 
 	.status-chip.active .chip-count {

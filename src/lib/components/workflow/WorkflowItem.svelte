@@ -370,11 +370,13 @@
 	.workflow-item {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-md);
-		padding: var(--spacing-md);
+		gap: var(--spacing-sm);
+		padding: 0.5rem 0.65rem;
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: all var(--transition-fast);
+		transition:
+			background-color var(--transition-fast),
+			border-color var(--transition-fast);
 		border: 1px solid transparent;
 		position: relative;
 	}
@@ -389,8 +391,9 @@
 	}
 
 	.workflow-item.active {
-		background: var(--color-accent-light);
-		border-color: var(--color-accent);
+		background: var(--surface-1);
+		border-color: var(--color-border);
+		box-shadow: var(--shadow-xs), var(--glow-accent-soft);
 	}
 
 	.workflow-item.selected {
@@ -415,14 +418,15 @@
 		flex: 1;
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
-		color: var(--color-text-primary);
+		color: var(--color-text-secondary);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
+	.workflow-item:hover .workflow-name,
 	.workflow-item.active .workflow-name {
-		color: var(--color-accent-deep);
+		color: var(--color-text-primary);
 	}
 
 	.workflow-name-input {

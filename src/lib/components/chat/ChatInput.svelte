@@ -28,7 +28,7 @@
   <ChatInput value={inputValue} disabled={sending} onsend={handleSend} />
 -->
 <script lang="ts">
-	import { Send, BookOpen, CircleStop, Paperclip, X } from '@lucide/svelte';
+	import { Send, BookOpen, CircleStop, Paperclip, X, Clock } from '@lucide/svelte';
 	import { openDialog, tauriInvoke as invoke } from '$lib/tauri';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import PromptSelectorModal from './PromptSelectorModal.svelte';
@@ -491,6 +491,12 @@
 			<Paperclip size={18} />
 		</button>
 		<div class="textarea-wrapper">
+			{#if showPendingHint}
+				<span id="chat-input-pending-hint" class="pending-hint" role="status" aria-live="polite">
+					<Clock size={12} />
+					{$i18n('chat_input_workflow_in_progress_hint')}
+				</span>
+			{/if}
 			<textarea
 				bind:this={textareaRef}
 				bind:value
@@ -504,43 +510,36 @@
 				aria-label={$i18n('chat_input_arialabel')}
 				aria-describedby={showPendingHint ? 'chat-input-pending-hint' : undefined}
 			></textarea>
-			{#if showPendingHint}
-				<span id="chat-input-pending-hint" class="pending-hint" role="status" aria-live="polite">
-					{$i18n('chat_input_workflow_in_progress_hint')}
-				</span>
-			{/if}
 		</div>
 		{#if oncancel}
 			<button
 				type="button"
-				class="stop-button"
+				class="cancel-button"
 				onclick={oncancel}
+				title={$i18n('chat_cancel_arialabel')}
 				aria-label={$i18n('chat_cancel_arialabel')}
 			>
 				<CircleStop size={20} />
 			</button>
-		{:else}
-			<button
-				type="button"
-				class="send-button"
-				onclick={handleSend}
-				disabled={disabled || loading || (!value.trim() && !hasAttachments)}
-				aria-disabled={disabled || loading || (!value.trim() && !hasAttachments)}
-				title={loading ? $i18n('chat_input_send_disabled_tooltip') : undefined}
-				aria-label={$i18n('chat_send_arialabel')}
-			>
-				{#if loading}
-					<Spinner size="sm" />
-				{:else}
-					<Send size={20} />
-				{/if}
-			</button>
 		{/if}
+		<button
+			type="button"
+			class="send-button"
+			onclick={handleSend}
+			disabled={disabled || loading || (!value.trim() && !hasAttachments)}
+			aria-disabled={disabled || loading || (!value.trim() && !hasAttachments)}
+			title={loading ? $i18n('chat_input_send_disabled_tooltip') : undefined}
+			aria-label={$i18n('chat_send_arialabel')}
+		>
+			{#if loading && !oncancel}
+				<Spinner size="sm" />
+			{:else}
+				<Send size={20} />
+			{/if}
+		</button>
 	</div>
-	{#if (value.trim() || hasAttachments) && !loading}
-		<span class="keyboard-hint">{$i18n('chat_keyboard_hint')}</span>
-	{/if}
 </div>
+<span class="keyboard-hint">{$i18n('chat_keyboard_hint')}</span>
 
 <PromptSelectorModal
 	open={showPromptSelector}
@@ -702,11 +701,19 @@
 		cursor: not-allowed;
 	}
 
+	/* Queued-message pill: warning tint, sits above the textarea inside the
+	   composer so the user sees the deferred-send state before typing more. */
 	.pending-hint {
-		margin-top: 2px;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-tertiary);
-		font-style: italic;
+		display: inline-flex;
+		align-items: center;
+		align-self: flex-start;
+		gap: var(--spacing-xs);
+		padding: 0.1rem 0.5rem;
+		margin-bottom: var(--spacing-xs);
+		font-size: var(--font-size-2xs);
+		color: var(--color-warning);
+		background: var(--color-warning-light);
+		border-radius: var(--border-radius-full);
 	}
 
 	.prompt-button {
@@ -764,28 +771,30 @@
 		cursor: not-allowed;
 	}
 
-	.stop-button {
+	/* Ghost cancel button with red stop icon, next to the always-visible
+	   send button (which stays disabled while the workflow runs). */
+	.cancel-button {
 		width: 36px;
 		height: 36px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--color-error);
-		color: #fff;
+		background: transparent;
+		color: var(--color-error);
 		border: none;
-		border-radius: 10px;
+		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: all var(--transition-fast);
+		transition: background-color var(--transition-fast);
 		flex-shrink: 0;
 	}
 
-	.stop-button:hover {
-		opacity: 0.85;
+	.cancel-button:hover {
+		background: var(--color-bg-hover);
 	}
 
 	.keyboard-hint {
 		display: block;
-		padding: 0 var(--spacing-md) var(--spacing-xs);
+		margin-top: var(--spacing-xs);
 		font-size: var(--font-size-2xs);
 		color: var(--color-text-tertiary);
 		text-align: center;

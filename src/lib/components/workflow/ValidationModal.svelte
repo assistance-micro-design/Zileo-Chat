@@ -160,11 +160,6 @@
 								{$i18n('workflow_validation_risk').replace('{level}', request.risk_level)}
 							</Badge>
 							<Badge variant="primary">{$i18n('workflow_validation_badge_attached')}</Badge>
-							{#if queueCount > 1}
-								<Badge variant="warning">
-									{$i18n('workflow_validation_queue_count').replace('{count}', String(queueCount))}
-								</Badge>
-							{/if}
 						</div>
 					</div>
 				</div>
@@ -202,7 +197,10 @@
 					{/if}
 				{/if}
 
-				<div class="validation-warning">
+				<div
+					class="validation-warning"
+					class:error={request.risk_level === 'critical' || request.risk_level === 'high'}
+				>
 					{#if request.risk_level === 'critical'}
 						<TriangleAlert size={16} />
 						<span>{$i18n('workflow_validation_critical_warning')}</span>
@@ -233,7 +231,14 @@
 	{/snippet}
 
 	{#snippet footer()}
-		<Button variant="danger" onclick={handleReject} disabled={processing}
+		{#if queueCount > 1}
+			<span class="queue-count">
+				<Badge variant="neutral">
+					{$i18n('workflow_validation_queue_count').replace('{count}', String(queueCount))}
+				</Badge>
+			</span>
+		{/if}
+		<Button variant="danger-soft" onclick={handleReject} disabled={processing}
 			>{$i18n('workflow_validation_reject')}</Button
 		>
 		<Button variant="primary" onclick={handleApprove} disabled={processing}
@@ -361,14 +366,26 @@
 		align-items: flex-start;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-md);
-		background: var(--color-warning-bg);
+		background: var(--color-warning-light);
+		border: 1px solid rgba(217, 144, 12, 0.35);
 		border-radius: var(--border-radius-md);
 		font-size: var(--font-size-sm);
 		color: var(--color-warning);
 	}
 
+	.validation-warning.error {
+		background: var(--color-error-light);
+		border-color: var(--color-error-border);
+		color: var(--color-error);
+	}
+
 	.validation-warning:empty {
 		display: none;
+	}
+
+	.queue-count {
+		margin-right: auto;
+		align-self: center;
 	}
 
 	.reject-reason {

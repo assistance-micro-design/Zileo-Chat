@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { countInternalBlocks } from '../chat-container-helpers';
+import { groupBlocksBySubAgent } from '../chat-container-helpers';
 import type { ChatBlock } from '$types/chat-block';
 
 function thinking(agent_id: string, sequence: number): ChatBlock {
@@ -45,44 +45,98 @@ function subAgent(sub_agent_id: string, sequence: number): ChatBlock {
 	};
 }
 
-describe('countInternalBlocks', () => {
-	it('returns 0 when sub-agent id is undefined', () => {
-		expect(countInternalBlocks([], undefined)).toBe(0);
+describe('groupBlocksBySubAgent', () => {
+	it('returns an empty list for no blocks', () => {
+		expect(groupBlocksBySubAgent([])).toEqual([]);
 	});
 
-	it('returns 0 for no internal blocks', () => {
-		const blocks: ChatBlock[] = [tool('agent_primary', 0), subAgent('agent_sub', 1)];
-		expect(countInternalBlocks(blocks, 'agent_sub')).toBe(0);
+	it('keeps every block top-level when there is no sub-agent summary', () => {
+		const blocks: ChatBlock[] = [tool('agent_primary', 0), thinking('agent_primary', 1)];
+		const groups = groupBlocksBySubAgent(blocks);
+		expect(groups.map((g) => g.block)).toEqual(blocks);
+		expect(groups.every((g) => g.internals.length === 0)).toBe(true);
 	});
 
-	it('counts matching agent_id only', () => {
-		const blocks: ChatBlock[] = [
-			tool('agent_sub_001', 0),
-			thinking('agent_sub_001', 1),
-			tool('agent_primary', 2),
-			subAgent('agent_sub_001', 3)
-		];
-		expect(countInternalBlocks(blocks, 'agent_sub_001')).toBe(2);
+	it('nests internal blocks inside their sub-agent summary', () => {
+		const inner1 = tool('agent_sub_001', 0);
+		const inner2 = thinking('agent_sub_001', 1);
+		const primary = tool('agent_primary', 2);
+		const summary = subAgent('agent_sub_001', 3);
+		const groups = groupBlocksBySubAgent([inner1, inner2, primary, summary]);
+		expect(groups.map((g) => g.block)).toEqual([primary, summary]);
+		expect(groups[1]!.internals).toEqual([inner1, inner2]);
 	});
 
-	it('stops counting once the sub-agent summary block is reached', () => {
-		// Blocks attributed to agent_sub_001 AFTER its own summary block
-		// must NOT be counted — they belong to a later turn or another
-		// branch of execution.
-		const blocks: ChatBlock[] = [
-			tool('agent_sub_001', 0),
-			subAgent('agent_sub_001', 1),
-			tool('agent_sub_001', 2)
-		];
-		expect(countInternalBlocks(blocks, 'agent_sub_001')).toBe(1);
+	it('keeps internal blocks top-level while their summary has not arrived yet (live streaming)', () => {
+		const inner = tool('agent_sub_001', 0);
+		const groups = groupBlocksBySubAgent([inner]);
+		expect(groups.map((g) => g.block)).toEqual([inner]);
+		expect(groups[0]!.internals).toEqual([]);
 	});
 
-	it('ignores blocks from a different sub-agent', () => {
-		const blocks: ChatBlock[] = [
-			tool('agent_sub_other', 0),
-			tool('agent_sub_001', 1),
-			subAgent('agent_sub_001', 2)
-		];
-		expect(countInternalBlocks(blocks, 'agent_sub_001')).toBe(1);
+	it('attaches each invocation of the same sub-agent to its own summary', () => {
+		const run1 = tool('agent_sub_001', 0);
+		const summary1 = subAgent('agent_sub_001', 1);
+		const run2 = tool('agent_sub_001', 2);
+		const summary2 = subAgent('agent_sub_001', 3);
+		const groups = groupBlocksBySubAgent([run1, summary1, run2, summary2]);
+		expect(groups.map((g) => g.block)).toEqual([summary1, summary2]);
+		expect(groups[0]!.internals).toEqual([run1]);
+		expect(groups[1]!.internals).toEqual([run2]);
+	});
+
+	it('falls back to the preceding summary when no later summary exists (live upsert)', () => {
+		// During live streaming the sub_agent_complete chunk UPSERTS the
+		// summary in place, so internals of a repeated invocation arrive
+		// AFTER the (already rendered) summary. They must nest into that
+		// preceding summary instead of rendering flat.
+		const run1 = tool('agent_sub_001', 0);
+		const summary = subAgent('agent_sub_001', 1);
+		const lateInner = tool('agent_sub_001', 2);
+		const groups = groupBlocksBySubAgent([run1, summary, lateInner]);
+		expect(groups.map((g) => g.block)).toEqual([summary]);
+		expect(groups[0]!.internals).toEqual([run1, lateInner]);
+	});
+
+	it('prefers the next summary over a preceding one', () => {
+		// An internal block between two summaries of the same agent belongs
+		// to the NEXT one (the stream emits the summary after its slice).
+		const summary1 = subAgent('agent_sub_001', 0);
+		const inner = tool('agent_sub_001', 1);
+		const summary2 = subAgent('agent_sub_001', 2);
+		const groups = groupBlocksBySubAgent([summary1, inner, summary2]);
+		expect(groups.map((g) => g.block)).toEqual([summary1, summary2]);
+		expect(groups[0]!.internals).toEqual([]);
+		expect(groups[1]!.internals).toEqual([inner]);
+	});
+
+	it('does not attach blocks from a different sub-agent', () => {
+		const other = tool('agent_sub_other', 0);
+		const inner = tool('agent_sub_001', 1);
+		const summary = subAgent('agent_sub_001', 2);
+		const groups = groupBlocksBySubAgent([other, inner, summary]);
+		expect(groups.map((g) => g.block)).toEqual([other, summary]);
+		expect(groups[1]!.internals).toEqual([inner]);
+	});
+
+	it('preserves the timeline order of nested internals', () => {
+		const a = thinking('agent_sub_001', 0);
+		const b = tool('agent_sub_001', 1);
+		const c = tool('agent_sub_001', 2);
+		const summary = subAgent('agent_sub_001', 3);
+		const groups = groupBlocksBySubAgent([a, b, c, summary]);
+		expect(groups[0]!.internals).toEqual([a, b, c]);
+	});
+
+	it('handles a summary without _sub_agent_id (legacy rows) as a plain block', () => {
+		const inner = tool('agent_sub_001', 0);
+		const legacySummary: ChatBlock = {
+			block_type: 'sub_agent',
+			sequence: 1,
+			data: { agent_name: 'X', status: 'completed' }
+		};
+		const groups = groupBlocksBySubAgent([inner, legacySummary]);
+		expect(groups.map((g) => g.block)).toEqual([inner, legacySummary]);
+		expect(groups[1]!.internals).toEqual([]);
 	});
 });

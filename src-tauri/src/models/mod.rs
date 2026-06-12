@@ -55,7 +55,7 @@ pub use agent::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentKind, AgentSummary, LLMConfig,
     Lifecycle,
 };
-pub use chat_block::{merge_into_chat_blocks, ChatBlock};
+pub use chat_block::{merge_into_chat_blocks, shift_sequences, ChatBlock};
 pub use embedding::{
     CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat, ImportResult,
     MemoryStats, MemoryTokenStats, ReindexJobStatus,

@@ -509,12 +509,16 @@ body {
   overflow: hidden;
 }
 
+/* Floating card detached from the viewport edges (the page provides the
+   surrounding gutter), matching the site's panel treatment. */
 .sidebar {
   width: var(--sidebar-width);
-  background: transparent;
-  border-right: 1px solid var(--color-border-light);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   transition: width var(--transition-base);
   overflow: hidden;
 }
@@ -689,6 +693,17 @@ body {
 
 .btn-danger:hover:not(:disabled) {
   filter: brightness(1.08);
+}
+
+/* Soft destructive action: pale red surface, used when the destructive
+   choice shares the footer with a primary CTA (e.g. Reject vs Approve). */
+.btn-danger-soft {
+  background: var(--color-danger-light);
+  color: var(--color-error);
+}
+
+.btn-danger-soft:hover:not(:disabled) {
+  background: var(--color-danger-bg);
 }
 
 .btn-sm {
@@ -917,6 +932,12 @@ a:hover {
   background: var(--color-error-light);
   color: var(--color-error);
   border-color: var(--color-error-border);
+}
+
+.badge-neutral {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
 }
 
 .status-indicator {

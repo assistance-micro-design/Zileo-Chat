@@ -61,15 +61,49 @@ pub struct ChatBlock {
     pub data: serde_json::Value,
 }
 
+/// Re-bases a sub-agent's internal tool/thinking sequences into the global
+/// replay sequence space using a SINGLE shared offset for both families.
+///
+/// A sub-agent's tools and thinking steps share one sequence space (its own
+/// tracker), so shifting them by the same amount preserves their interleaved
+/// order. Returns the next free offset (max shifted sequence + 1), or the
+/// unchanged `offset` when both families are empty.
+pub fn shift_sequences(
+    tools: &mut [ToolExecution],
+    thinking: &mut [ThinkingStep],
+    offset: u32,
+) -> u32 {
+    let mut max_shifted: Option<u32> = None;
+    for te in tools.iter_mut() {
+        te.sequence += offset;
+        max_shifted = Some(max_shifted.map_or(te.sequence, |m| m.max(te.sequence)));
+    }
+    for ts in thinking.iter_mut() {
+        ts.sequence += offset;
+        max_shifted = Some(max_shifted.map_or(ts.sequence, |m| m.max(ts.sequence)));
+    }
+    max_shifted.map_or(offset, |m| m + 1)
+}
+
 /// Merges tool executions, thinking steps, and sub-agent executions into a unified,
 /// chronologically ordered list of ChatBlocks.
 ///
-/// Sorting is primarily by `created_at`, with `sequence` as a stable tie-breaker
-/// for tool/thinking records that share the same timestamp. Sub-agent records use
-/// `created_at` only (they have no shared sequence numbering with tool/thinking).
+/// Tool and thinking records share one sequence space (the stream tracker), so
+/// sorting is primarily by `sequence` — the live emission order — with
+/// `created_at` as a tie-breaker. `created_at` CANNOT drive the primary sort:
+/// both families are batch-inserted at run completion, so their insert
+/// timestamps cluster by family (all tools, then all thinking) instead of
+/// reflecting execution order.
 ///
-/// After sorting, the final `sequence` field on each ChatBlock is re-assigned as a
-/// dense 0..n index so the frontend can use it as a stable rendering key.
+/// Sub-agent summary rows carry no shared sequence (their `created_at` is the
+/// sub-agent's START time). Each summary is inserted right AFTER the last
+/// block attributable to it (`agent_id == sub_agent_id`), matching the live
+/// stream where `sub_agent_complete` fires after the sub-agent's internal
+/// sequence. A summary with no persisted internals falls back to
+/// `created_at` interleaving.
+///
+/// After ordering, the final `sequence` field on each ChatBlock is re-assigned
+/// as a dense 0..n index so the frontend can use it as a stable rendering key.
 ///
 /// # Arguments
 /// * `tool_executions` - Tool execution records for a message
@@ -94,22 +128,41 @@ pub fn merge_into_chat_blocks(
         SubAgent(&'a SubAgentExecution),
     }
 
-    let mut items: Vec<(chrono::DateTime<chrono::Utc>, u32, SourceItem)> = Vec::with_capacity(
+    let mut items: Vec<(u32, chrono::DateTime<chrono::Utc>, SourceItem)> = Vec::with_capacity(
         tool_executions.len() + thinking_steps.len() + sub_agent_executions.len(),
     );
 
     for te in tool_executions {
-        items.push((te.created_at, te.sequence, SourceItem::Tool(te)));
+        items.push((te.sequence, te.created_at, SourceItem::Tool(te)));
     }
     for ts in thinking_steps {
-        items.push((ts.created_at, ts.sequence, SourceItem::Thinking(ts)));
-    }
-    for sa in sub_agent_executions {
-        // Sub-agents share no sequence space with tool/thinking; tie-break by 0
-        items.push((sa.created_at, 0, SourceItem::SubAgent(sa)));
+        items.push((ts.sequence, ts.created_at, SourceItem::Thinking(ts)));
     }
 
+    // Live emission order: shared sequence first, created_at as tie-breaker.
     items.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+
+    // Insert each sub-agent summary after the last block attributable to it
+    // (its internals, or an earlier summary of the same sub-agent so repeated
+    // invocations keep their created_at order between them). Without any
+    // related block, interleave by created_at.
+    let mut sub_agents: Vec<&SubAgentExecution> = sub_agent_executions.iter().collect();
+    sub_agents.sort_by_key(|sa| sa.created_at);
+    for sa in sub_agents {
+        let last_related = items.iter().rposition(|(_, _, item)| match item {
+            SourceItem::Tool(te) => te.agent_id == sa.sub_agent_id,
+            SourceItem::Thinking(ts) => ts.agent_id == sa.sub_agent_id,
+            SourceItem::SubAgent(prev) => prev.sub_agent_id == sa.sub_agent_id,
+        });
+        let pos = match last_related {
+            Some(idx) => idx + 1,
+            None => items
+                .iter()
+                .position(|(_, created_at, _)| *created_at > sa.created_at)
+                .unwrap_or(items.len()),
+        };
+        items.insert(pos, (0, sa.created_at, SourceItem::SubAgent(sa)));
+    }
 
     items
         .into_iter()
@@ -184,6 +237,11 @@ pub fn merge_into_chat_blocks(
                         "cache_write_tokens": sa.cache_write_tokens,
                         "thinking_tokens": sa.thinking_tokens,
                         "report_summary": sa.result_summary,
+                        // The frontend nests internal blocks inside this
+                        // summary by matching their agent_id against this id;
+                        // the live stream carries it on its chunks, so the
+                        // replay projection must carry it too.
+                        "_sub_agent_id": sa.sub_agent_id,
                     });
 
                     ChatBlock {
@@ -603,6 +661,131 @@ mod tests {
         assert_eq!(blocks[0].sequence, 0);
         assert_eq!(blocks[1].block_type, ChatBlockType::ToolCall);
         assert_eq!(blocks[1].sequence, 1);
+    }
+
+    #[test]
+    fn test_merge_projects_sub_agent_id_for_frontend_grouping() {
+        // The frontend nests a sub-agent's internal blocks inside its summary
+        // by matching `internal.agent_id == summary._sub_agent_id`. The live
+        // stream carries `_sub_agent_id` on its chunks; the replay projection
+        // must carry it too, or persisted workflows render the internals flat.
+        let sub_agents = vec![make_sub_agent_execution(
+            "Scout",
+            SubAgentStatus::Completed,
+            base_time(),
+        )];
+
+        let blocks = merge_into_chat_blocks(&[], &[], &sub_agents, &HashMap::new());
+
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(
+            blocks[0].data["_sub_agent_id"], "agent_Scout",
+            "_sub_agent_id must be projected at replay"
+        );
+    }
+
+    #[test]
+    fn test_merge_orders_by_sequence_not_created_at() {
+        // Tool executions and thinking steps are persisted in two separate
+        // batches at the END of the run, so their created_at reflects insert
+        // order (all tools first, then all thinking), NOT execution order.
+        // The shared stream `sequence` is the source of truth: a thinking
+        // step with a lower sequence must render before a tool with a higher
+        // sequence even when its created_at is later.
+        let t = base_time();
+        let ms = |n: i64| t + chrono::Duration::milliseconds(n);
+        // Tool batch inserted first (earlier created_at) but executed second.
+        let tools = vec![make_tool_execution("Tool", 5, true, ms(0))];
+        // Thinking batch inserted second (later created_at) but executed first.
+        let steps = vec![make_thinking_step(
+            "First reasoning",
+            2,
+            "agent_flow",
+            ms(100),
+        )];
+
+        let blocks = merge_into_chat_blocks(&tools, &steps, &[], &HashMap::new());
+
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(
+            blocks[0].block_type,
+            ChatBlockType::Thinking,
+            "lower sequence must come first regardless of created_at"
+        );
+        assert_eq!(blocks[1].block_type, ChatBlockType::ToolCall);
+    }
+
+    #[test]
+    fn test_merge_places_sub_agent_summary_after_its_internals() {
+        // The sub_agent_execution row is created when the sub-agent STARTS,
+        // so its created_at predates its internal blocks. On replay the
+        // summary must still land right AFTER its last internal block —
+        // matching the live stream where sub_agent_complete fires last.
+        let t = base_time();
+        let ms = |n: i64| t + chrono::Duration::milliseconds(n);
+
+        let mut inner_tool = make_tool_execution("browser_snapshot", 3, true, ms(200));
+        inner_tool.agent_id = "agent_Scout".to_string();
+        let mut inner_think = make_thinking_step("Scout reasoning", 4, "agent_flow", ms(300));
+        inner_think.agent_id = "agent_Scout".to_string();
+
+        let primary_tool = make_tool_execution("file_manager", 1, true, ms(250));
+
+        // Summary row created BEFORE every block (start of the sub-agent run).
+        let sub_agents = vec![make_sub_agent_execution(
+            "Scout",
+            SubAgentStatus::Completed,
+            ms(0),
+        )];
+
+        let blocks = merge_into_chat_blocks(
+            &[primary_tool, inner_tool],
+            &[inner_think],
+            &sub_agents,
+            &HashMap::new(),
+        );
+
+        assert_eq!(blocks.len(), 4);
+        assert_eq!(blocks[0].data["tool_name"], "file_manager");
+        assert_eq!(blocks[1].data["tool_name"], "browser_snapshot");
+        assert_eq!(blocks[2].block_type, ChatBlockType::Thinking);
+        assert_eq!(
+            blocks[3].block_type,
+            ChatBlockType::SubAgent,
+            "summary must come after its last internal block, got {:?}",
+            blocks
+                .iter()
+                .map(|b| b.block_type.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_shift_sequences_preserves_interleaving_with_common_offset() {
+        // A sub-agent's tools and thinking steps share one sequence space
+        // (its own tracker). Re-basing them into the replay space must use a
+        // SINGLE offset for both families, or the interleaved order breaks.
+        let t = base_time();
+        let mut tools = vec![
+            make_tool_execution("ToolA", 0, true, t),
+            make_tool_execution("ToolB", 2, true, t),
+        ];
+        let mut thinking = vec![make_thinking_step("Between", 1, "agent_flow", t)];
+
+        let next = shift_sequences(&mut tools, &mut thinking, 10);
+
+        assert_eq!(tools[0].sequence, 10);
+        assert_eq!(thinking[0].sequence, 11, "interleaving must be preserved");
+        assert_eq!(tools[1].sequence, 12);
+        assert_eq!(next, 13, "next offset must be max shifted sequence + 1");
+    }
+
+    #[test]
+    fn test_shift_sequences_empty_families_return_offset() {
+        let mut tools: Vec<ToolExecution> = vec![];
+        let mut thinking: Vec<ThinkingStep> = vec![];
+        let next = shift_sequences(&mut tools, &mut thinking, 7);
+        assert_eq!(next, 7, "no blocks shifted, offset unchanged");
     }
 
     #[test]

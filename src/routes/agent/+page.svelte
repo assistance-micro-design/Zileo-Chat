@@ -820,11 +820,11 @@ Uses extracted components, services, and stores for clean architecture.
 			<!-- Empty State -->
 			<div class="empty-state">
 				{#if $agentsLoading}
-					<Bot size={64} class="empty-icon" />
+					<Bot size={44} class="empty-icon" />
 					<h3>{$i18n('agent_loading')}</h3>
 					<p class="empty-description">{$i18n('agent_loading_description')}</p>
 				{:else if $agents.length === 0}
-					<Settings size={64} class="empty-icon" />
+					<Settings size={44} class="empty-icon" />
 					<h3>{$i18n('agent_no_agents')}</h3>
 					<p class="empty-description">
 						{$i18n('agent_no_agents_description')}
@@ -836,7 +836,7 @@ Uses extracted components, services, and stores for clean architecture.
 						</Button>
 					</a>
 				{:else}
-					<MessageSquare size={64} class="empty-icon" />
+					<MessageSquare size={44} class="empty-icon" />
 					<h3>{$i18n('agent_select_or_create')}</h3>
 					<p class="empty-description">
 						{$i18n('agent_select_description')}
@@ -880,27 +880,30 @@ Uses extracted components, services, and stores for clean architecture.
 </div>
 
 <style>
-	/* Essential layout styles only - components handle their own styling */
+	/* Essential layout styles only - components handle their own styling.
+	   The gutter + gap detach the floating sidebar card and the conversation
+	   column from the viewport edges. */
 	.agent-page {
 		display: flex;
 		flex: 1;
 		min-height: 0;
 		overflow: hidden;
+		gap: var(--spacing-md);
+		padding: 0 var(--spacing-md) var(--spacing-md);
 	}
 
 	.agent-main {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
+		gap: var(--spacing-sm);
 		min-width: 0;
 		overflow: hidden;
 	}
 
 	.token-display {
 		flex-shrink: 0;
-		padding: var(--spacing-xs) var(--spacing-md);
-		border-top: 1px solid var(--color-border);
-		background: var(--color-bg-secondary);
+		padding: 0 var(--spacing-md) var(--spacing-xs);
 	}
 
 	.empty-state {
@@ -909,26 +912,28 @@ Uses extracted components, services, and stores for clean architecture.
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		padding: var(--spacing-2xl);
+		gap: var(--spacing-sm);
+		padding: var(--spacing-2xl) var(--spacing-xl);
 		text-align: center;
+		color: var(--color-text-tertiary);
 	}
 
 	.empty-state :global(.empty-icon) {
 		color: var(--color-text-tertiary);
-		margin-bottom: var(--spacing-lg);
+		opacity: 0.6;
 	}
 
 	.empty-state h3 {
-		font-size: var(--font-size-xl);
+		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-text-primary);
-		margin-bottom: var(--spacing-sm);
+		margin: 0;
 	}
 
 	.empty-description {
-		color: var(--color-text-secondary);
-		margin-bottom: var(--spacing-lg);
-		max-width: 400px;
+		font-size: var(--font-size-sm);
+		margin: 0;
+		max-width: 46ch;
 	}
 
 	.empty-state a {

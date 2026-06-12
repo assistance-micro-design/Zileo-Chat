@@ -192,14 +192,6 @@
 	function handleFolderDrop(workflowIds: string[], folderId: string): void {
 		onworkflowmove?.(workflowIds, folderId);
 	}
-
-	/** Whether there are any sections above the date groups */
-	const hasSectionsAbove = $derived(
-		pinnedWorkflows.length > 0 ||
-			runningWorkflows.length > 0 ||
-			completedWorkflows.length > 0 ||
-			folders.length > 0
-	);
 </script>
 
 {#snippet workflowItemSnippet(workflow: Workflow, isRunning?: boolean)}
@@ -297,9 +289,6 @@
 
 		<!-- Running section -->
 		{#if runningWorkflows.length > 0}
-			{#if pinnedWorkflows.length > 0}
-				<div class="section-divider"></div>
-			{/if}
 			<h3 class="section-header running">{$i18n('workflow_section_running')}</h3>
 			{#each runningWorkflows as workflow (workflow.id)}
 				{@render workflowItemSnippet(workflow, true)}
@@ -308,9 +297,6 @@
 
 		<!-- Recently completed section -->
 		{#if completedWorkflows.length > 0}
-			{#if pinnedWorkflows.length > 0 || runningWorkflows.length > 0}
-				<div class="section-divider"></div>
-			{/if}
 			<h3 class="section-header completed">{$i18n('workflow_section_recently_completed')}</h3>
 			{#each completedWorkflows as workflow (workflow.id)}
 				{@render workflowItemSnippet(workflow)}
@@ -318,10 +304,7 @@
 		{/if}
 
 		<!-- Folder sections -->
-		{#each folders as folder, folderIdx (folder.id)}
-			{#if pinnedWorkflows.length > 0 || runningWorkflows.length > 0 || completedWorkflows.length > 0 || folderIdx > 0}
-				<div class="section-divider"></div>
-			{/if}
+		{#each folders as folder (folder.id)}
 			<FolderItem
 				{folder}
 				expanded={expandedFolderIds.has(folder.id)}
@@ -353,10 +336,7 @@
 				ondragleave={handleUncategorizedDragLeave}
 				ondrop={handleUncategorizedDrop}
 			>
-				{#each dateGroups as group, groupIdx (group.label)}
-					{#if hasSectionsAbove || groupIdx > 0}
-						<div class="section-divider"></div>
-					{/if}
+				{#each dateGroups as group (group.label)}
 					<h3 class="section-header">{$i18n(DATE_GROUP_I18N[group.label] ?? group.label)}</h3>
 					{#each group.items as workflow (workflow.id)}
 						{@render workflowItemSnippet(workflow)}
@@ -484,13 +464,13 @@
 	}
 
 	.section-header {
-		font-size: var(--font-size-xs);
+		font-size: var(--font-size-2xs);
 		color: var(--color-text-tertiary);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		margin: var(--spacing-xs) 0 0 0;
-		padding: 0 var(--spacing-md);
-		font-weight: var(--font-weight-medium);
+		letter-spacing: 0.08em;
+		margin: var(--spacing-sm) 0 0 0;
+		padding: var(--spacing-xs) 0.4rem var(--spacing-2xs);
+		font-weight: var(--font-weight-semibold);
 	}
 
 	.section-header.pinned {
@@ -503,12 +483,6 @@
 
 	.section-header.completed {
 		color: var(--color-text-secondary);
-	}
-
-	.section-divider {
-		height: 1px;
-		background: var(--color-border);
-		margin: var(--spacing-sm) var(--spacing-md);
 	}
 
 	.uncategorized-drop-zone {

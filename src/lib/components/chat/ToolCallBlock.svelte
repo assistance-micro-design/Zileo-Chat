@@ -8,6 +8,7 @@
 
 <script lang="ts">
 	import { Wrench, ChevronDown, CircleCheckBig, CircleX, Server } from '@lucide/svelte';
+	import { untrack } from 'svelte';
 	import { i18n } from '$lib/i18n';
 	import { formatDuration } from '$lib/utils/duration';
 
@@ -61,6 +62,24 @@
 	const formattedInput = $derived(formatJson(inputParams));
 	const formattedOutput = $derived(formatJson(outputResult));
 
+	// Failed calls open on the output tab so the error is visible immediately;
+	// successful calls open on the input tab (what the tool was asked to do).
+	let activeTab = $state<'input' | 'output'>(untrack(() => success) ? 'input' : 'output');
+	let inputTabRef = $state<HTMLButtonElement | null>(null);
+	let outputTabRef = $state<HTMLButtonElement | null>(null);
+
+	function selectTab(tab: 'input' | 'output'): void {
+		activeTab = tab;
+	}
+
+	function handleTabKeydown(event: KeyboardEvent): void {
+		if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+			event.preventDefault();
+			activeTab = activeTab === 'input' ? 'output' : 'input';
+			(activeTab === 'input' ? inputTabRef : outputTabRef)?.focus();
+		}
+	}
+
 	function formatJson(raw: string): string {
 		try {
 			const parsed = JSON.parse(raw);
@@ -87,7 +106,6 @@
 	class:success
 	class:error={!success}
 	class:mcp-tool={toolType === 'mcp'}
-	class:sub-agent={isSubAgent}
 	role="region"
 	aria-label={isSubAgent
 		? `${$i18n('block_tool_call_sub_agent_label')}: ${agentLabel} — ${toolName} — ${success ? $i18n('chat_tool_success') : $i18n('chat_tool_error')}`
@@ -131,14 +149,43 @@
 
 	{#if !collapsed}
 		<div class="tool-body" id={blockId}>
-			<div class="tool-section">
-				<span class="section-label">{$i18n('chat_tool_input')}</span>
-				<pre class="tool-json">{formattedInput}</pre>
+			<div class="io-tabs" role="tablist" aria-label={toolName}>
+				<button
+					bind:this={inputTabRef}
+					type="button"
+					class="io-tab"
+					class:active={activeTab === 'input'}
+					role="tab"
+					aria-selected={activeTab === 'input'}
+					aria-controls="{blockId}-panel"
+					tabindex={activeTab === 'input' ? 0 : -1}
+					onclick={() => selectTab('input')}
+					onkeydown={handleTabKeydown}
+				>
+					{$i18n('chat_tool_input')}
+				</button>
+				<button
+					bind:this={outputTabRef}
+					type="button"
+					class="io-tab"
+					class:active={activeTab === 'output'}
+					role="tab"
+					aria-selected={activeTab === 'output'}
+					aria-controls="{blockId}-panel"
+					tabindex={activeTab === 'output' ? 0 : -1}
+					onclick={() => selectTab('output')}
+					onkeydown={handleTabKeydown}
+				>
+					{$i18n('chat_tool_output')}
+				</button>
 			</div>
 
-			<div class="tool-section">
-				<span class="section-label">{$i18n('chat_tool_output')}</span>
-				<pre class="tool-json" class:error-text={!success}>{formattedOutput}</pre>
+			<div id="{blockId}-panel" role="tabpanel">
+				{#if activeTab === 'input'}
+					<pre class="tool-json">{formattedInput}</pre>
+				{:else}
+					<pre class="tool-json" class:error-text={!success}>{formattedOutput}</pre>
+				{/if}
 			</div>
 
 			{#if errorMessage}
@@ -173,12 +220,6 @@
 	   an error that may need user action. Successes rely on the check icon. */
 	.tool-call-block.error {
 		border-left: 3px solid var(--color-error);
-	}
-
-	/* Sub-agent visual treatment: indented, on the sub-agent (orange) channel */
-	.tool-call-block.sub-agent {
-		margin-left: 16px;
-		border-left: 2px dashed var(--channel-agent);
 	}
 
 	.agent-tag {
@@ -286,22 +327,29 @@
 		border-top: 1px solid var(--color-border-light);
 	}
 
-	.tool-section {
-		margin-bottom: var(--spacing-sm);
-	}
-
-	.tool-section:last-child {
-		margin-bottom: 0;
-	}
-
-	.section-label {
-		display: block;
-		font-size: var(--font-size-xs);
-		font-weight: var(--font-weight-medium);
-		color: var(--color-text-secondary);
+	.io-tabs {
+		display: flex;
+		gap: 2px;
 		margin-bottom: var(--spacing-xs);
+	}
+
+	.io-tab {
+		padding: 0.2rem 0.7rem;
+		font-size: var(--font-size-2xs);
+		font-family: var(--font-family);
+		font-weight: var(--font-weight-semibold);
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.07em;
+		color: var(--color-text-tertiary);
+		background: transparent;
+		border: none;
+		border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;
+		cursor: pointer;
+	}
+
+	.io-tab.active {
+		background: var(--surface-2);
+		color: var(--blk-channel, var(--color-text-primary));
 	}
 
 	.tool-json {
@@ -312,7 +360,7 @@
 		background: var(--surface-2);
 		border: 1px solid var(--color-border-light);
 		border-radius: var(--border-radius-md);
-		padding: var(--spacing-xs) var(--spacing-sm);
+		padding: 0.7rem 0.85rem;
 		white-space: pre-wrap;
 		word-break: break-word;
 		margin: 0;
@@ -321,7 +369,8 @@
 	}
 
 	.tool-json.error-text {
-		color: var(--color-danger);
+		color: var(--color-error);
+		border-color: var(--color-error-border);
 	}
 
 	.tool-error {
