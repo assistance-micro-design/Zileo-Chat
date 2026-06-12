@@ -1088,7 +1088,8 @@ Be concise, factual, and conservative in your judgements.`;
 	}
 
 	/* Form Actions: sticky save bar pinned to the bottom of the scrolling
-	   form, on a translucent surface so content scrolls beneath it. */
+	   form. Opaque surface, no backdrop blur: a blurred sticky bar forces
+	   WebKitGTK to re-blur the content scrolling behind it on every frame. */
 	.form-actions {
 		position: sticky;
 		bottom: 0;
@@ -1098,9 +1099,7 @@ Be concise, factual, and conservative in your judgements.`;
 		justify-content: flex-end;
 		padding: var(--spacing-md) 0;
 		border-top: 1px solid var(--color-border);
-		background: var(--surface-overlay);
-		backdrop-filter: blur(10px);
-		-webkit-backdrop-filter: blur(10px);
+		background: var(--color-bg-primary);
 	}
 
 	.dirty-hint {

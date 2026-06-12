@@ -316,19 +316,35 @@ Each section is now a separate route for better performance and UX.
 		overflow-y: auto;
 		padding: var(--spacing-xl);
 		-webkit-overflow-scrolling: touch;
+		/* Opaque background: a transparent scroll container over the body
+		   gradient forces WebKitGTK to repaint the whole visible area on
+		   every scrolled frame (it cannot blit the moving pixels), which made
+		   the settings pages scroll visibly slower than the chat or kanban
+		   surfaces, whose scroll containers are opaque. */
+		background: var(--color-bg-primary);
+		/* Promote the scroller for accelerated scrolling. Unlike the chat
+		   (whose animated rail nodes force composited layers, pulling its
+		   scroller onto the async path), settings pages have no composited
+		   descendant, so WebKitGTK keeps them on main-thread scrolling where
+		   every frame repaints shadowed cards. scroll-position is the one
+		   will-change value that does NOT create a containing block, so the
+		   fixed-position modal backdrops rendered inside the pages are safe. */
+		will-change: scroll-position;
 	}
 
-	/**
-	 * Disable pointer events during scroll
-	 * This prevents expensive hover state recalculations in WebKit2GTK
-	 * The technique is used by major apps like Twitter/X for smooth scrolling
-	 * Removed :global(*) selector - parent is sufficient
-	 */
-	/* The is-scrolling class is toggled at runtime by the pauseOnScroll
+	/* Disable pointer events on the CHILDREN during scroll to avoid expensive
+	   hover-state recalculations in WebKitGTK (Twitter/X technique). The
+	   is-scrolling class is toggled at runtime by the pauseOnScroll
 	   attachment, so it must be :global() or the compiler would prune the
-	   selector as unused. Disabling pointer events during scroll avoids
-	   expensive hover-state recalculations in WebKitGTK. */
-	.content-area:global(.is-scrolling) {
+	   selector as unused.
+
+	   NEVER put pointer-events: none on the scroll container itself: it makes
+	   the whole subtree transparent to hit-testing, so the wheel events that
+	   follow the first scrolled notch target the overflow:hidden ancestors
+	   and nothing scrolls until the 250 ms idle timer clears the class --
+	   the page then only advances one notch per ~250 ms window ("stuck,
+	   point-by-point" mouse-wheel scrolling). */
+	.content-area:global(.is-scrolling) > :global(*) {
 		pointer-events: none;
 	}
 </style>

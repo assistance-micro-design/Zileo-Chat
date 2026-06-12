@@ -339,11 +339,14 @@ body {
   font-size: var(--font-size-base);
   line-height: var(--line-height-base);
   color: var(--color-text-primary);
-  /* Barely perceptible turquoise veil at the top of the page, like the site */
+  /* Barely perceptible turquoise veil at the top of the page, like the site.
+     No background-attachment: fixed — the body never scrolls (the app shell
+     is 100vh/overflow:hidden) so it changes nothing visually, while the
+     property is documented to force full repaints and disable compositing
+     optimizations during scrolling in WebKit. */
   background:
     linear-gradient(180deg, rgba(148, 239, 238, 0.07), transparent 380px),
     var(--color-bg-primary);
-  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100%;
@@ -354,7 +357,6 @@ body {
   background:
     linear-gradient(145deg, rgba(31, 41, 55, 0.85), transparent 60%),
     var(--color-bg-primary);
-  background-attachment: fixed;
 }
 
 ::selection {

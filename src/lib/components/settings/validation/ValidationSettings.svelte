@@ -840,7 +840,9 @@
 	}
 
 	/* Actions */
-	/* Sticky save bar: stays visible while the long form scrolls beneath it. */
+	/* Sticky save bar: stays visible while the long form scrolls beneath it.
+	   Opaque surface, no backdrop blur: a blurred sticky bar forces WebKitGTK
+	   to re-blur the content scrolling behind it on every frame. */
 	.settings-actions {
 		position: sticky;
 		bottom: 0;
@@ -850,9 +852,7 @@
 		gap: var(--spacing-md);
 		padding: var(--spacing-md) 0;
 		border-top: 1px solid var(--color-border);
-		background: var(--surface-overlay);
-		backdrop-filter: blur(10px);
-		-webkit-backdrop-filter: blur(10px);
+		background: var(--color-bg-primary);
 	}
 
 	.unsaved-hint {

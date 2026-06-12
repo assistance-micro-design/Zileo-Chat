@@ -356,9 +356,9 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		gap: var(--spacing-md);
 		padding: var(--spacing-md) 0;
 		border-top: 1px solid var(--color-border);
-		background: var(--surface-overlay);
-		backdrop-filter: blur(10px);
-		-webkit-backdrop-filter: blur(10px);
+		/* Opaque surface, no backdrop blur: a blurred sticky bar forces
+		   WebKitGTK to re-blur the scrolled content behind it every frame. */
+		background: var(--color-bg-primary);
 	}
 
 	.auth-dirty {
