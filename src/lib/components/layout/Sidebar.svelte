@@ -130,7 +130,7 @@
 		transition:
 			background-color var(--transition-fast),
 			color var(--transition-fast);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 	}

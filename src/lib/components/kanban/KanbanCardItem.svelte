@@ -352,7 +352,7 @@
 		white-space: nowrap;
 	}
 	.card-purge-countdown.imminent {
-		color: var(--color-warning, #b45309);
+		color: var(--color-warning);
 	}
 	.card-meta {
 		margin: 0;
@@ -372,7 +372,7 @@
 	.card-progress {
 		margin: 0;
 		font-size: var(--font-size-xs);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		font-style: italic;
 	}
 	.card-analyzing {
@@ -381,7 +381,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		font-size: var(--font-size-xs);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		font-style: italic;
 	}
 	.card-error {

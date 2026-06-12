@@ -227,7 +227,7 @@ Shows agent summary with actions for edit and delete.
 	}
 
 	.agent-name-row :global(.agent-icon) {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.agent-name {

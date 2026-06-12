@@ -422,7 +422,7 @@
 	}
 
 	.workflow-item.active .workflow-name {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.workflow-name-input {
@@ -477,7 +477,7 @@
 	}
 
 	:global(.pin-icon) {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		min-width: 12px;
 	}
 

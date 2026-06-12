@@ -34,7 +34,17 @@ export default [
     }
   },
   {
-    ignores: ['build/', '.svelte-kit/', 'dist/', 'node_modules/', 'src-tauri/', 'src/lib/i18n/generated/']
+    // docs/ holds documentation and local-only review artifacts (mockup
+    // HTML/JS under gitignored subfolders), not application code.
+    ignores: [
+      'build/',
+      '.svelte-kit/',
+      'dist/',
+      'node_modules/',
+      'src-tauri/',
+      'src/lib/i18n/generated/',
+      'docs/'
+    ]
   },
   {
     rules: {

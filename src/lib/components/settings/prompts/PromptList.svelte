@@ -294,7 +294,7 @@ Shows prompt summary with actions for edit and delete.
 	}
 
 	.prompt-name-row :global(.prompt-icon) {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.prompt-name {

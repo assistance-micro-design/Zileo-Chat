@@ -172,7 +172,7 @@
 		left: 1.25rem;
 		bottom: 1rem;
 		font-size: var(--font-size-xs);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		text-decoration: none;
 	}
 

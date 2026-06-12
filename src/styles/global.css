@@ -1,6 +1,12 @@
-/* ===================================
-   Zileo Chat 3 - Design System
-   =================================== */
+/* =====================================================================
+   Zileo Chat 3 - Design System « Lueur » v2
+   Aligne sur l'identite visuelle de assistancemicrodesign.net :
+   theme clair par defaut (blanc + creme), gris froids, rayons 4/8/12/16,
+   ombres neutres douces et larges, halos de marque turquoise/orange.
+   Conserve : canaux de couleur par type de bloc d'execution, encre accent
+   --color-accent-deep lisible AA (le turquoise de marque echoue le
+   contraste AA en texte sur fond clair, il reste reserve aux fonds).
+   ===================================================================== */
 
 /* Self-hosted fonts (CSP: no external font-src needed) */
 @font-face {
@@ -46,84 +52,117 @@
   box-sizing: border-box;
 }
 
+/* =====================================================================
+   Tokens - Light theme (default, site palette)
+   ===================================================================== */
 :root {
   /* Tell browser to use light mode for form controls */
   color-scheme: light;
 
-  /* Colors - Light Theme */
+  /* Backgrounds: site white, cool greys for secondary zones */
   --color-bg-primary: #ffffff;
-  --color-bg-secondary: #f8f9fa;
-  --color-bg-tertiary: #f1f3f5;
-  --color-bg-hover: #e9ecef;
-  --color-bg-active: #dee2e6;
+  --color-bg-secondary: #f9fafb;
+  --color-bg-tertiary: #f3f4f6;
+  --color-bg-hover: #f3f4f6;
+  --color-bg-active: #e5e7eb;
 
-  --color-text-primary: #212529;
-  --color-text-secondary: #495057;
-  --color-text-tertiary: #6c757d;
+  --surface-1: #ffffff;            /* card, panel */
+  --surface-2: #f9fafb;            /* sub-surface (code, recap) */
+  --surface-overlay: rgba(255, 255, 255, 0.88);
+  --surface-cream: #fffdf1;        /* site signature cream (sections) */
+
+  --color-text-primary: #1f2937;
+  --color-text-secondary: #6b7280;
+  --color-text-tertiary: #9ca3af;
   --color-text-inverse: #ffffff;
 
-  --color-border: rgba(33, 37, 41, 0.15);
-  --color-border-light: rgba(33, 37, 41, 0.1);
-  --color-border-dark: rgba(33, 37, 41, 0.25);
+  --color-border: #e5e7eb;
+  --color-border-light: #f3f4f6;
+  --color-border-dark: #d1d5db;
 
-  --color-accent: #94EFEE;
-  --color-accent-hover: #7de6e5;
-  --color-accent-light: rgba(148, 239, 238, 0.2);
-  --color-accent-text: #212529;
+  /* Brand (exact site values). --color-accent-deep is the AA-readable
+     accent ink: the brand turquoise fails AA contrast as text on light
+     backgrounds, so text uses the deep ink and turquoise stays on fills. */
+  --color-accent: #94efee;
+  --color-accent-hover: #7edcdb;
+  --color-accent-light: rgba(148, 239, 238, 0.25);
+  --color-accent-deep: #0b7c7b;
+  --color-accent-text: #212529;    /* text on turquoise, like site buttons */
+  --color-link: #25dedc;
 
-  --color-secondary: #FE7254;
+  --color-secondary: #fe7254;
   --color-secondary-hover: #fe5a3d;
+  --color-secondary-deep: #c23a13;
+  --color-secondary-light: rgba(254, 114, 84, 0.14);
 
-  --color-success: #10b981;
-  --color-success-light: #d1fae5;
-  --color-success-bg: #d1fae5;
-  --color-success-border: #86efac;
-  --color-warning: #b45309;
-  /* Pale amber surface meant for backgrounds (badges, banners), following the
-     same convention as --color-success-light / --color-error-light. Must stay
+  --color-success: #15803d;
+  --color-success-light: rgba(74, 222, 128, 0.16);
+  --color-success-bg: rgba(74, 222, 128, 0.16);
+  --color-success-border: rgba(74, 222, 128, 0.5);
+  --color-online: #4ade80;         /* site status green, for glowing dots */
+  --color-warning: #9a5b00;
+  /* Pale amber surface meant for backgrounds (badges, banners); must stay
      readable with --color-warning used as the text color on top of it. */
-  --color-warning-light: rgba(180, 83, 9, 0.12);
-  --color-warning-bg: rgba(234, 179, 8, 0.1);
-  --color-error: #ef4444;
-  --color-error-light: #fee2e2;
-  --color-error-bg: #fee2e2;
-  --color-error-border: #fca5a5;
+  --color-warning-light: rgba(217, 144, 12, 0.16);
+  --color-warning-bg: rgba(217, 144, 12, 0.12);
+  --color-error: #dc2626;
+  --color-error-light: rgba(220, 38, 38, 0.10);
+  --color-error-bg: rgba(220, 38, 38, 0.10);
+  --color-error-border: rgba(220, 38, 38, 0.4);
 
   /* Semantic aliases for consistency across components */
   --color-primary: var(--color-accent);
   --color-primary-hover: var(--color-accent-hover);
   --color-primary-light: var(--color-accent-light);
-  --color-primary-dark: #5ec7c6;
+  --color-primary-dark: #45b5b3;
   --color-danger: var(--color-error);
-  --color-danger-bg: rgba(239, 68, 68, 0.1);
+  --color-danger-bg: rgba(220, 38, 38, 0.08);
   /* Subtle danger surface for emphasis elements (badges, error banners) — a
      touch stronger than --color-danger-bg so they read as accented, not flat. */
-  --color-danger-light: rgba(239, 68, 68, 0.12);
-  --color-info: var(--color-status-running);
+  --color-danger-light: rgba(220, 38, 38, 0.12);
+  --color-info: #3b82f6;
+  /* Subtle info surface, same convention as --color-danger-light. */
+  --color-info-light: rgba(59, 130, 246, 0.10);
   --color-text-on-accent: var(--color-accent-text);
-  /* Subtle info surface, same convention as --color-danger-light: a pale tint
-     of --color-status-running that works as a background in both themes. */
-  --color-info-light: rgba(59, 130, 246, 0.12);
 
   /* Compatibility aliases: the kanban and versions-history surfaces were
-     authored against a parallel naming scheme (surface/bg/text-muted) that was
-     never defined, so those rules silently resolved to transparent backgrounds
-     and inherited text colors. Map the names onto the canonical tokens above so
-     a single palette drives the whole app; they follow the dark theme
-     automatically because their targets are redefined there. New components
-     should use the canonical token names directly. */
-  --color-surface: var(--color-bg-primary);
-  --color-surface-alt: var(--color-bg-secondary);
+     authored against a parallel naming scheme (surface/bg/text-muted). Map
+     the names onto the canonical tokens above so a single palette drives
+     the whole app; they follow the dark theme automatically because their
+     targets are redefined there. New components should use the canonical
+     token names directly. */
+  --color-surface: var(--surface-1);
+  --color-surface-alt: var(--surface-2);
   --color-bg: var(--color-bg-secondary);
-  --color-bg-elevated: var(--color-bg-primary);
+  --color-bg-elevated: var(--surface-1);
   --color-text: var(--color-text-primary);
   --color-text-muted: var(--color-text-tertiary);
   --color-accent-dark: var(--color-primary-dark);
 
-  --color-status-idle: #6c757d;
+  --color-status-idle: #9ca3af;
   --color-status-running: #3b82f6;
-  --color-status-completed: #10b981;
-  --color-status-error: #ef4444;
+  --color-status-completed: #15803d;
+  --color-status-error: #dc2626;
+
+  /* Color channels for execution-block types (thinking / local tool / MCP /
+     sub-agent / tasks), consumed by the chat blocks via --blk-channel. */
+  --channel-thinking: #7c4fd0;
+  --channel-thinking-soft: rgba(139, 92, 246, 0.10);
+  --channel-tool: #3b82f6;
+  --channel-tool-soft: rgba(59, 130, 246, 0.08);
+  --channel-mcp: #b0269c;
+  --channel-mcp-soft: rgba(192, 38, 211, 0.08);
+  --channel-agent: #d14a24;
+  --channel-agent-soft: rgba(254, 114, 84, 0.10);
+  --channel-tasks: var(--color-accent-deep);
+  --channel-tasks-soft: rgba(148, 239, 238, 0.18);
+
+  /* Glows - values lifted from the site */
+  --glow-accent: 0 0 0 1px rgba(148, 239, 238, 0.4), 0 10px 30px rgba(148, 239, 238, 0.2);
+  --glow-accent-soft: 0 6px 20px rgba(148, 239, 238, 0.18);
+  --glow-secondary: 0 4px 14px rgba(254, 114, 84, 0.3);
+  --gradient-brand: linear-gradient(135deg, #94efee 0%, #7edcdb 100%);
+  --gradient-rail: linear-gradient(180deg, rgba(126, 220, 219, 0.65), rgba(148, 239, 238, 0.08));
 
   /* Spacing */
   --spacing-2xs: 0.125rem;
@@ -157,19 +196,19 @@
   --line-height-base: 1.5;
   --line-height-relaxed: 1.75;
 
-  /* Borders */
+  /* Borders - site radii: 4 / 8 / 12 / 16, pill for badges */
   --border-radius-sm: 0.25rem;
   --border-radius-md: 0.5rem;
   --border-radius-lg: 0.75rem;
   --border-radius-xl: 1rem;
   --border-radius-full: 9999px;
 
-  /* Shadows */
-  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  /* Shadows - soft, wide and neutral, like the site */
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 50px rgba(0, 0, 0, 0.15);
 
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -196,44 +235,103 @@
   --floating-menu-height: 60px;
 }
 
+/* =====================================================================
+   Tokens - Dark theme (range of the site's dark sections)
+   ===================================================================== */
 [data-theme="dark"] {
   /* Tell browser to use dark mode for form controls */
   color-scheme: dark;
 
-  --color-bg-primary: #2b2d31;
-  --color-bg-secondary: #1e1f22;
-  --color-bg-tertiary: #161719;
-  --color-bg-hover: #35373c;
-  --color-bg-active: #3f4147;
+  --color-bg-primary: #111827;
+  --color-bg-secondary: #1a2232;
+  --color-bg-tertiary: #1f2937;
+  --color-bg-hover: #273349;
+  --color-bg-active: #374151;
 
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #b5bac1;
-  --color-text-tertiary: #80848e;
-  --color-text-inverse: #212529;
+  --surface-1: #1f2937;
+  --surface-2: #18202e;
+  --surface-overlay: rgba(31, 41, 55, 0.88);
+  --surface-cream: rgba(255, 253, 241, 0.04);
 
-  --color-border: #3f4147;
-  --color-border-light: #35373c;
-  --color-border-dark: #4e5058;
+  --color-text-primary: #f3f4f6;
+  --color-text-secondary: #9ca3af;
+  --color-text-tertiary: #6b7280;
+  --color-text-inverse: #1f2937;
 
-  --color-accent: #94EFEE;
-  --color-accent-hover: #7de6e5;
-  --color-accent-light: rgba(148, 239, 238, 0.15);
+  --color-border: rgba(229, 231, 235, 0.14);
+  --color-border-light: rgba(229, 231, 235, 0.08);
+  --color-border-dark: rgba(229, 231, 235, 0.28);
 
-  /* Semantic aliases (dark) */
-  --color-primary-light: rgba(148, 239, 238, 0.15);
-  --color-success-bg: rgba(16, 185, 129, 0.15);
-  --color-success-border: rgba(16, 185, 129, 0.35);
-  --color-error-bg: rgba(239, 68, 68, 0.15);
-  --color-error-border: rgba(239, 68, 68, 0.4);
+  /* On dark backgrounds the brand turquoise passes AA as text, so the
+     deep accent ink converges onto the brand color itself. */
+  --color-accent: #94efee;
+  --color-accent-hover: #aef5f4;
+  --color-accent-light: rgba(148, 239, 238, 0.13);
+  --color-accent-deep: #94efee;
+  --color-accent-text: #06302f;
+  --color-link: #94efee;
+
+  --color-secondary: #fe7254;
+  --color-secondary-hover: #ff8a70;
+  --color-secondary-deep: #ff9c86;
+  --color-secondary-light: rgba(254, 114, 84, 0.16);
+
+  --color-success: #4ade80;
+  --color-success-light: rgba(74, 222, 128, 0.15);
+  --color-success-bg: rgba(74, 222, 128, 0.15);
+  --color-success-border: rgba(74, 222, 128, 0.38);
   --color-warning: #fbbf24;
   /* Dark counterpart of the pale warning surface; a translucent tint of the
      dark-theme amber so badge text in --color-warning stays readable. */
-  --color-warning-light: rgba(251, 191, 36, 0.16);
+  --color-warning-light: rgba(251, 191, 36, 0.15);
   --color-warning-bg: rgba(234, 179, 8, 0.15);
-  --color-danger-bg: rgba(239, 68, 68, 0.15);
+  --color-error: #fb7185;
+  --color-error-light: rgba(251, 113, 133, 0.14);
+  --color-error-bg: rgba(251, 113, 133, 0.14);
+  --color-error-border: rgba(251, 113, 133, 0.42);
+
+  --color-primary-dark: #5ec7c6;
+  --color-danger-bg: rgba(251, 113, 133, 0.14);
   /* Subtle danger surface for emphasis elements (badges, error banners) — a
      touch stronger than --color-danger-bg so they read as accented, not flat. */
-  --color-danger-light: rgba(239, 68, 68, 0.18);
+  --color-danger-light: rgba(251, 113, 133, 0.18);
+  --color-info: #60a5fa;
+  --color-info-light: rgba(96, 165, 250, 0.13);
+
+  --color-status-idle: #6b7280;
+  --color-status-running: #60a5fa;
+  --color-status-completed: #4ade80;
+  --color-status-error: #fb7185;
+
+  /* Lighter channel variants for dark backgrounds */
+  --channel-thinking: #b79bff;
+  --channel-thinking-soft: rgba(167, 139, 250, 0.12);
+  --channel-tool: #60a5fa;
+  --channel-tool-soft: rgba(96, 165, 250, 0.10);
+  --channel-mcp: #e879f9;
+  --channel-mcp-soft: rgba(232, 121, 249, 0.10);
+  --channel-agent: #fe8a6a;
+  --channel-agent-soft: rgba(254, 138, 106, 0.11);
+  --channel-tasks: #94efee;
+  --channel-tasks-soft: rgba(148, 239, 238, 0.10);
+
+  --glow-accent: 0 0 0 1px rgba(148, 239, 238, 0.35), 0 10px 30px rgba(148, 239, 238, 0.18);
+  --glow-accent-soft: 0 6px 20px rgba(148, 239, 238, 0.12);
+  --glow-secondary: 0 4px 14px rgba(254, 114, 84, 0.28);
+  --gradient-rail: linear-gradient(180deg, rgba(148, 239, 238, 0.55), rgba(148, 239, 238, 0.04));
+
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-xl: 0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+/* =====================================================================
+   Base
+   ===================================================================== */
+html {
+  height: 100%;
 }
 
 body {
@@ -241,14 +339,54 @@ body {
   font-size: var(--font-size-base);
   line-height: var(--line-height-base);
   color: var(--color-text-primary);
-  background: var(--color-bg-primary);
+  /* Barely perceptible turquoise veil at the top of the page, like the site */
+  background:
+    linear-gradient(180deg, rgba(148, 239, 238, 0.07), transparent 380px),
+    var(--color-bg-primary);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  min-height: 100%;
 }
 
-/* ===================================
+[data-theme="dark"] body {
+  /* Site dark section: 145deg gradient over the dark background */
+  background:
+    linear-gradient(145deg, rgba(31, 41, 55, 0.85), transparent 60%),
+    var(--color-bg-primary);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: var(--color-accent-light);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-dark) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border-dark);
+  border-radius: var(--border-radius-full);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+/* =====================================================================
    Layout Components
-   =================================== */
+   ===================================================================== */
 
 .app-container {
   display: flex;
@@ -281,13 +419,12 @@ body {
 
 .sidebar {
   width: var(--sidebar-width);
-  background: var(--color-bg-secondary);
-  border-right: 1px solid var(--color-border);
+  background: transparent;
+  border-right: 1px solid var(--color-border-light);
   display: flex;
   flex-direction: column;
   transition: width var(--transition-base);
   overflow: hidden;
-  box-shadow: inset -1px 0 0 0 var(--color-border-light);
 }
 
 .sidebar.collapsed {
@@ -296,43 +433,23 @@ body {
 
 .sidebar-header {
   padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border);
-  background: linear-gradient(180deg, var(--color-bg-secondary) 0%, var(--color-bg-tertiary) 100%);
-  min-height: 72px;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .sidebar.collapsed .sidebar-header {
   padding: var(--spacing-md) var(--spacing-sm);
-  display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: var(--spacing-sm);
 }
 
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-md);
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
-}
-
-.sidebar-nav::-webkit-scrollbar {
-  width: 6px;
-}
-
-.sidebar-nav::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sidebar-nav::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: var(--border-radius-full);
-}
-
-.sidebar-nav::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-dark);
 }
 
 .sidebar.collapsed .sidebar-nav {
@@ -342,8 +459,7 @@ body {
 
 .sidebar-footer {
   padding: var(--spacing-md);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg-tertiary);
+  border-top: 1px solid var(--color-border-light);
 }
 
 .sidebar.collapsed .sidebar-footer {
@@ -359,27 +475,27 @@ body {
   padding: var(--spacing-xl);
 }
 
-/* ===================================
+/* =====================================================================
    Card Component
-   =================================== */
+   ===================================================================== */
 
 .card {
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-primary);
+  background: var(--surface-1);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  transform: translateZ(0); /* GPU layer - shadow rasterized once */
 }
 
 .card-header {
   padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--spacing-md);
 }
 
 .card-title {
@@ -400,21 +516,21 @@ body {
 }
 
 .card-footer {
-  padding: var(--spacing-lg);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg-secondary);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--color-border-light);
+  background: var(--surface-2);
 }
 
-/* ===================================
-   Button Component
-   =================================== */
+/* =====================================================================
+   Button Component - solid turquoise with dark text, like the site
+   ===================================================================== */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 0.5rem 0.95rem;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   font-family: var(--font-family);
@@ -422,46 +538,51 @@ body {
   border-radius: var(--border-radius-md);
   border: 1px solid transparent;
   cursor: pointer;
-  /* Remove box-shadow from transition - expensive repaint */
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  /* Anchors styled as buttons must not pick up the global link color;
+     variant rules below override this as they come later in the cascade. */
+  color: inherit;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), filter var(--transition-fast);
   text-decoration: none;
   white-space: nowrap;
 }
 
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.65;
   cursor: not-allowed;
+  filter: none;
 }
 
 .btn-primary {
-  background: var(--color-accent);
+  background: var(--gradient-brand);
   color: var(--color-accent-text);
-  border-color: var(--color-accent);
   font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-xs);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-  border-color: var(--color-accent-hover);
+  filter: brightness(1.04);
+  box-shadow: var(--glow-accent);
 }
 
 .btn-secondary {
   background: var(--color-secondary);
-  color: var(--color-text-inverse);
-  border-color: var(--color-secondary);
+  color: #fff;
   font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-xs);
 }
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--color-secondary-hover);
-  border-color: var(--color-secondary-hover);
+  box-shadow: var(--glow-secondary);
 }
 
-/* Navigation buttons reuse EXISTING palette tokens (no new colors): the Kanban
-   task board reads blue (the project's blue is --color-accent-hover, dark text
-   like .btn-primary) and the Agent workspace reuses the secondary (orange)
-   accent. The blue hover darkens via brightness so no extra hover token is
-   invented; orange uses its existing hover token. */
+/* Navigation buttons of the current full-width top bar. The segmented
+   navigation pill replaces them in the floating dock; these rules stay
+   until the dock migration completes and a usage grep clears them. */
 .btn-nav-kanban {
   background: var(--color-accent-hover);
   color: var(--color-accent-text);
@@ -497,16 +618,17 @@ body {
 
 .btn-danger {
   background: var(--color-error);
-  color: var(--color-text-inverse);
+  color: #fff;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #dc2626;
+  filter: brightness(1.08);
 }
 
 .btn-sm {
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding: 0.3rem 0.6rem;
   font-size: var(--font-size-xs);
+  border-radius: var(--border-radius-sm);
 }
 
 .btn-lg {
@@ -519,9 +641,19 @@ body {
   aspect-ratio: 1;
 }
 
-/* ===================================
+/* Links use the AA-readable accent ink; the brand turquoise only appears
+   on hover, as a decorative highlight. */
+a {
+  color: var(--color-accent-deep);
+}
+
+a:hover {
+  color: var(--color-link);
+}
+
+/* =====================================================================
    Form Components
-   =================================== */
+   ===================================================================== */
 
 .form-group {
   margin-bottom: var(--spacing-lg);
@@ -538,71 +670,59 @@ body {
 .form-help {
   display: block;
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
   margin-top: var(--spacing-xs);
 }
 
 .form-input,
-.form-textarea {
+.form-textarea,
+.form-select {
   width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 0.55rem 0.8rem;
   font-size: var(--font-size-sm);
   font-family: var(--font-family);
   line-height: var(--line-height-tight);
   color: var(--color-text-primary);
-  background: var(--color-bg-primary);
+  background: var(--surface-1);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
-  /* Only transition border-color, box-shadow on focus is instant */
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
 }
 
 .form-select {
-  width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
   padding-right: 2.5rem;
-  font-size: var(--font-size-sm);
-  font-family: var(--font-family);
-  line-height: var(--line-height-tight);
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-primary);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right var(--spacing-sm) center;
   background-size: 16px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  /* Only transition border-color */
-  transition: border-color var(--transition-fast);
 }
 
-/* Dark theme arrow color */
-[data-theme="dark"] .form-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b5bac1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-}
+/* The #9ca3af arrow stroke doubles as text-tertiary (light) and
+   text-secondary (dark), so a single SVG serves both themes. */
 
 .form-input:focus,
 .form-select:focus,
 .form-textarea:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--color-accent-hover);
   box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 
 .form-input:disabled,
 .form-select:disabled,
 .form-textarea:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
+  background: var(--color-bg-tertiary);
 }
 
 /* Explicit option styling for cross-browser dark mode support */
 .form-select option {
-  background: var(--color-bg-primary);
+  background: var(--surface-1);
   color: var(--color-text-primary);
   padding: var(--spacing-sm);
 }
@@ -611,6 +731,8 @@ body {
   min-height: 100px;
   resize: vertical;
   font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
 }
 
 .form-checkbox,
@@ -618,7 +740,7 @@ body {
   width: 1rem;
   height: 1rem;
   cursor: pointer;
-  accent-color: var(--color-accent);
+  accent-color: var(--color-accent-deep);
 }
 
 .form-range {
@@ -628,24 +750,26 @@ body {
   border-radius: var(--border-radius-full);
   outline: none;
   cursor: pointer;
-  accent-color: var(--color-accent);
+  accent-color: var(--color-accent-deep);
 }
 
-/* ===================================
+/* =====================================================================
    Navigation Components
-   =================================== */
+   ===================================================================== */
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  padding: var(--spacing-md);
+  padding: 0.6rem var(--spacing-md);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   border-radius: var(--border-radius-md);
   cursor: pointer;
   transition: background-color var(--transition-fast), color var(--transition-fast);
   text-decoration: none;
+  margin-bottom: 2px;
 }
 
 .nav-item:hover {
@@ -655,13 +779,26 @@ body {
 
 .nav-item.active {
   background: var(--color-accent-light);
-  color: var(--color-accent);
-  font-weight: var(--font-weight-medium);
+  color: var(--color-accent-deep);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Glowing gradient bar marking the active nav entry */
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  border-radius: var(--border-radius-full);
+  background: var(--gradient-brand);
+  box-shadow: var(--glow-accent-soft);
 }
 
 .nav-icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
 }
 
@@ -673,29 +810,32 @@ body {
   display: none;
 }
 
-/* ===================================
+/* =====================================================================
    Badge & Status Components
-   =================================== */
+   ===================================================================== */
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding: 0.16rem 0.55rem;
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   border-radius: var(--border-radius-full);
   white-space: nowrap;
+  border: 1px solid transparent;
 }
 
 .badge-primary {
   background: var(--color-accent-light);
-  color: var(--color-accent);
+  color: var(--color-accent-deep);
+  border-color: rgba(126, 220, 219, 0.55);
 }
 
 .badge-success {
   background: var(--color-success-light);
   color: var(--color-success);
+  border-color: var(--color-success-border);
 }
 
 /* Same pale-surface + tinted-text pattern as .badge-success / .badge-error;
@@ -704,11 +844,13 @@ body {
 .badge-warning {
   background: var(--color-warning-light);
   color: var(--color-warning);
+  border-color: rgba(217, 144, 12, 0.35);
 }
 
 .badge-error {
   background: var(--color-error-light);
   color: var(--color-error);
+  border-color: var(--color-error-border);
 }
 
 .status-indicator {
@@ -725,10 +867,13 @@ body {
 .status-running {
   background: var(--color-status-running);
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  box-shadow: 0 0 6px var(--color-status-running);
 }
 
+/* Green site glow for settled/active statuses */
 .status-completed {
-  background: var(--color-status-completed);
+  background: var(--color-online);
+  box-shadow: 0 0 4px var(--color-online);
 }
 
 .status-error {
@@ -737,15 +882,19 @@ body {
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.45; }
 }
 
-/* ===================================
+/* =====================================================================
    Table Component
-   =================================== */
+   ===================================================================== */
 
 .table-container {
   overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-xs);
 }
 
 .table {
@@ -755,79 +904,39 @@ body {
 }
 
 .table th {
-  padding: var(--spacing-md);
+  padding: 0.7rem var(--spacing-md);
   text-align: left;
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-  border-bottom: 2px solid var(--color-border);
-  background: var(--color-bg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--surface-2);
 }
 
 .table td {
-  padding: var(--spacing-md);
+  padding: 0.7rem var(--spacing-md);
   border-bottom: 1px solid var(--color-border-light);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .table tbody tr:hover {
   background: var(--color-bg-hover);
 }
 
-/* ===================================
-   Filter & Search Components
-   =================================== */
-
-.filter-bar {
-  display: flex;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md);
-  background: var(--color-bg-secondary);
-  border-radius: var(--border-radius-md);
-  flex-wrap: wrap;
-}
-
-.search-box {
-  position: relative;
-  flex: 1;
-  min-width: 200px;
-}
-
-.search-icon {
-  position: absolute;
-  left: var(--spacing-md);
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-text-tertiary);
-  width: 16px;
-  height: 16px;
-}
-
-.search-input {
-  width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 2.5rem;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  /* Only transition border-color */
-  transition: border-color var(--transition-fast);
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-light);
-}
-
-/* ===================================
+/* =====================================================================
    Modal Component
-   =================================== */
+   ===================================================================== */
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  /* Remove expensive blur for better scroll performance */
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(17, 24, 39, 0.5);
+  backdrop-filter: blur(3px);
   z-index: var(--z-index-modal-backdrop);
   display: flex;
   align-items: center;
@@ -843,7 +952,8 @@ body {
 }
 
 .modal {
-  background: var(--color-bg-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius-xl);
   box-shadow: var(--shadow-xl);
   max-width: 600px;
@@ -864,10 +974,11 @@ body {
 
 .modal-header {
   padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--spacing-md);
 }
 
 .modal-title {
@@ -881,39 +992,41 @@ body {
 }
 
 .modal-footer {
-  padding: var(--spacing-lg);
-  border-top: 1px solid var(--color-border);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--color-border-light);
   display: flex;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   justify-content: flex-end;
+  background: var(--surface-2);
 }
 
-/* ===================================
+/* =====================================================================
    Progress & Loading
-   =================================== */
+   ===================================================================== */
 
 .progress-bar {
   width: 100%;
-  height: 8px;
-  background: var(--color-bg-tertiary);
+  height: 7px;
+  background: var(--color-bg-active);
   border-radius: var(--border-radius-full);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: var(--color-accent);
+  background: var(--gradient-brand);
   border-radius: var(--border-radius-full);
   transition: width var(--transition-base);
 }
 
 .spinner {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   border: 2px solid var(--color-border);
-  border-top-color: var(--color-accent);
+  border-top-color: var(--color-accent-deep);
   border-radius: var(--border-radius-full);
   animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
 }
 
 @keyframes spin {
@@ -930,9 +1043,9 @@ body {
   to { transform: translateY(0); opacity: 1; }
 }
 
-/* ===================================
+/* =====================================================================
    Utility Classes
-   =================================== */
+   =====================================================================*/
 
 .grid { display: grid; }
 .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
@@ -981,42 +1094,35 @@ body {
 
 .hidden { display: none; }
 
-/* ===================================
+/* =====================================================================
    Accessibility - Focus Styles
-   =================================== */
+   ===================================================================== */
 
-/* Global focus outline for keyboard navigation */
+/* Global focus outline for keyboard navigation, on the AA accent ink */
 *:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-accent-deep);
   outline-offset: 2px;
 }
 
-/* Button focus */
-.btn:focus-visible {
+/* Button and nav focus: glow ring instead of outline */
+.btn:focus-visible,
+.nav-item:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--color-accent-light);
+  box-shadow: 0 0 0 3px var(--color-accent-light), 0 0 0 1px var(--color-accent-deep);
 }
 
 /* Link focus */
 a:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-accent-deep);
   outline-offset: 2px;
   border-radius: var(--border-radius-sm);
-}
-
-/* Form element focus handled in form styles above */
-
-/* Nav item focus */
-.nav-item:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 
 /* Interactive card focus */
 .theme-card:focus-visible,
 .workflow-item:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--color-accent-light);
+  box-shadow: 0 0 0 3px var(--color-accent-light), 0 0 0 1px var(--color-accent-deep);
 }
 
 /* Skip to main content link (for screen readers) */

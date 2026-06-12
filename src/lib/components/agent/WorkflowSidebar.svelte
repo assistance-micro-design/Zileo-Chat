@@ -458,7 +458,7 @@ Left sidebar for workflow management with search and CRUD operations.
 	.action-btn.active {
 		background: var(--color-accent-light);
 		border-color: var(--color-accent);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.batch-action-bar {

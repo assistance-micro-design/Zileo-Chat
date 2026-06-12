@@ -387,7 +387,7 @@
 	}
 
 	.context-icon {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.context-icon.warning {
@@ -619,7 +619,7 @@
 	}
 
 	.details-toggle.open {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		transform: rotate(180deg);
 	}
 

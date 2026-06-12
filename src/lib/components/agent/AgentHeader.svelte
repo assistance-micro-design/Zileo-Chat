@@ -160,7 +160,7 @@ Agent and iterations are configured in Settings > Agents (source of truth).
 	}
 
 	.settings-link {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		text-decoration: none;
 		font-size: var(--font-size-sm);
 	}

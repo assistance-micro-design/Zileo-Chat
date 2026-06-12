@@ -690,7 +690,7 @@
 	}
 
 	.pricing-help a {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		text-decoration: none;
 	}
 

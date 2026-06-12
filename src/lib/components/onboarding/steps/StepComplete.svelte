@@ -67,9 +67,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--color-success-bg, #d1fae5);
+		background: var(--color-success-bg);
 		border-radius: 50%;
-		color: var(--color-success, #059669);
+		color: var(--color-success);
 	}
 
 	.success-icon svg {

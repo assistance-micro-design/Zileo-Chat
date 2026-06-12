@@ -167,7 +167,7 @@
 	}
 
 	.model-thinking .thinking-header :global(.thinking-icon) {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.agent-flow .thinking-header :global(.thinking-icon) {

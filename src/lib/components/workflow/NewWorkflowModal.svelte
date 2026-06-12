@@ -290,7 +290,7 @@
 	}
 
 	.modal-title-wrapper :global(.modal-icon) {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.modal-title {

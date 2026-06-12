@@ -427,7 +427,7 @@
 		padding: var(--spacing-xs) var(--spacing-md);
 		font-size: var(--font-size-sm);
 		font-family: var(--font-family);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		background: transparent;
 		border: 1px solid var(--color-accent);
 		border-radius: var(--border-radius-md);
@@ -494,7 +494,7 @@
 	}
 
 	.section-header.pinned {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.section-header.running {

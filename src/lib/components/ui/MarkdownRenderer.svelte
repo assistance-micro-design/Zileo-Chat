@@ -258,7 +258,7 @@
 	}
 
 	.markdown-content :global(a) {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		text-decoration: underline;
 		cursor: pointer;
 	}

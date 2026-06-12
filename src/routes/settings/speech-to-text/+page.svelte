@@ -263,7 +263,7 @@
 		gap: var(--spacing-xs);
 		background: transparent;
 		border: none;
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		cursor: pointer;
 		padding: 0;
 		font-size: var(--font-size-sm);

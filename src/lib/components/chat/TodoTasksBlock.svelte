@@ -153,7 +153,7 @@ Visible during and after execution.
 	}
 
 	.tasks-header :global(.tasks-icon) {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		flex-shrink: 0;
 	}
 
@@ -215,7 +215,7 @@ Visible during and after execution.
 	}
 
 	.status-in-progress .task-status-icon {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.status-blocked .task-status-icon {

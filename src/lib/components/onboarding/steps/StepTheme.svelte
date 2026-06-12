@@ -131,6 +131,10 @@
 		flex-direction: column;
 	}
 
+	/* Theme previews intentionally hardcode each palette's colors: they must
+	   render the light and dark looks side by side regardless of the theme
+	   currently active, so tokens (which follow the active theme) cannot be
+	   used here. Values mirror the global.css light/dark backgrounds. */
 	.theme-preview-light {
 		background: #ffffff;
 		border: 1px solid #e5e7eb;

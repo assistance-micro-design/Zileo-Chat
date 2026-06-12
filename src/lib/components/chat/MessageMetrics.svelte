@@ -156,7 +156,7 @@
 	}
 
 	.metric.thinking {
-		color: var(--color-warning, #f59e0b);
+		color: var(--color-warning);
 	}
 
 	.sub-agents-bar {
@@ -201,6 +201,6 @@
 	}
 
 	.agent-thinking {
-		color: var(--color-warning, #f59e0b);
+		color: var(--color-warning);
 	}
 </style>

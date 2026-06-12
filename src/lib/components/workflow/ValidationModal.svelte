@@ -309,7 +309,7 @@
 	.authority-op {
 		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.validation-untrusted pre.untrusted {

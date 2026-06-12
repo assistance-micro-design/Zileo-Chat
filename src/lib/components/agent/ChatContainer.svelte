@@ -397,7 +397,7 @@ Main chat area with message display, execution blocks inline, and input controls
 
 	.scroll-to-bottom:hover {
 		background: var(--color-accent);
-		color: var(--color-text-on-accent, #fff);
+		color: var(--color-text-on-accent);
 		border-color: var(--color-accent);
 	}
 

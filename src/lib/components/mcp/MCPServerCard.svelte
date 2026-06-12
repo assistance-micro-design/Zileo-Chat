@@ -237,7 +237,7 @@ Displays an MCP server with status, command info, and action buttons.
 	}
 
 	.server-info :global(.server-icon) {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		flex-shrink: 0;
 		margin-top: 2px;
 	}

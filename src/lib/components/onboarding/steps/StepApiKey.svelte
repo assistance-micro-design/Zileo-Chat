@@ -243,13 +243,13 @@
 		align-items: center;
 		justify-content: center;
 		gap: var(--spacing-xs);
-		background: var(--color-success-bg, #d1fae5);
-		color: var(--color-success, #059669);
+		background: var(--color-success-bg);
+		color: var(--color-success);
 	}
 
 	.status.error {
-		background: var(--color-error-bg, #fee2e2);
-		color: var(--color-error, #dc2626);
+		background: var(--color-error-bg);
+		color: var(--color-error);
 	}
 
 	.skip-step {

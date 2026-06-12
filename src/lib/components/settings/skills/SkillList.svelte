@@ -328,7 +328,7 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 	}
 
 	.skill-name-row :global(.skill-icon) {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.skill-name {

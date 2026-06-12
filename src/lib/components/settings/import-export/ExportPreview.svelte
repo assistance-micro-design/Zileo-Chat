@@ -342,8 +342,8 @@ Uses ExportEntitySection for collapsible entity sections.
 		margin: 0;
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-xs);
-		color: var(--color-warning, #92400e);
-		background: var(--color-warning-bg, #fef3c7);
+		color: var(--color-warning);
+		background: var(--color-warning-bg);
 		border-radius: var(--border-radius-sm);
 	}
 

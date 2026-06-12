@@ -134,7 +134,7 @@
 	}
 
 	.workflow-compact.active .workflow-avatar {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.workflow-status {

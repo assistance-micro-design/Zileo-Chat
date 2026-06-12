@@ -103,7 +103,7 @@
 		margin: 0;
 		padding: 0.5rem 0.7rem;
 		font-size: var(--font-size-xs);
-		color: var(--color-warning, #b45309);
+		color: var(--color-warning);
 		background: var(--color-warning-bg);
 		border-radius: 6px;
 	}

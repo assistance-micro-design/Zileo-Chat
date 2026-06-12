@@ -183,7 +183,7 @@ Each section is now a separate route for better performance and UX.
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		padding: var(--spacing-xs);
 	}
 
@@ -226,7 +226,7 @@ Each section is now a separate route for better performance and UX.
 
 	.nav-button.active {
 		background: var(--color-accent-light);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		font-weight: var(--font-weight-medium);
 	}
 
@@ -253,7 +253,7 @@ Each section is now a separate route for better performance and UX.
 
 	.nav-button-icon.active {
 		background: var(--color-accent-light);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.security-badge {

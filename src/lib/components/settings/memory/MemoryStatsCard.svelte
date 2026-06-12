@@ -177,7 +177,7 @@ Extracted from MemorySettings.svelte.
 	.summary-value {
 		font-size: var(--font-size-xl);
 		font-weight: var(--font-weight-bold);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.summary-label {

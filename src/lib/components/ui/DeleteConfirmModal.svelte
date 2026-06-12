@@ -120,7 +120,7 @@ Extracted from AgentSettings and PromptSettings.
 	}
 
 	.item-name-primary {
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 	}
 
 	.delete-warning {

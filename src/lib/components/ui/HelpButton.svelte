@@ -115,7 +115,7 @@
 
 	.help-button:hover {
 		background: var(--color-accent-light);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		transform: scale(1.1);
 	}
 

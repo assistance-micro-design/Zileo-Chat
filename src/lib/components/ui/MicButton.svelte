@@ -178,7 +178,7 @@
 
 	.mic-fab.active {
 		opacity: 1;
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		border-color: var(--color-accent);
 	}
 
@@ -188,16 +188,16 @@
 	}
 
 	.mic-fab.recording {
-		background: var(--color-error, #dc2626);
+		background: var(--color-error);
 		color: #fff;
-		border-color: var(--color-error, #dc2626);
+		border-color: var(--color-error);
 		opacity: 1;
 		animation: pulse 1.2s ease-in-out infinite;
 	}
 
 	.mic-fab.transcribing {
 		background: var(--color-accent-light);
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		cursor: progress;
 		opacity: 1;
 	}
@@ -211,7 +211,7 @@
 		top: -8px;
 		right: -10px;
 		background: #fff;
-		color: var(--color-error, #dc2626);
+		color: var(--color-error);
 		font-size: var(--font-size-2xs);
 		font-weight: var(--font-weight-bold, 700);
 		padding: 2px 5px;

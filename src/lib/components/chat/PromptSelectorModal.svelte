@@ -296,7 +296,7 @@
 		align-self: flex-start;
 		background: none;
 		border: none;
-		color: var(--color-accent);
+		color: var(--color-accent-deep);
 		cursor: pointer;
 		font-size: var(--font-size-sm);
 		padding: 0;
