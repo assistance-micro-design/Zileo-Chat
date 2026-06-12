@@ -34,13 +34,15 @@
 	interface FeatureCard {
 		key: string;
 		icon: Component;
+		/** Execution-channel token suffix tinting the card's icon pill. */
+		channel: 'agent' | 'tasks' | 'thinking' | 'tool';
 	}
 
 	const features: FeatureCard[] = [
-		{ key: 'chat', icon: MessageSquare },
-		{ key: 'kanban', icon: LayoutDashboard },
-		{ key: 'memory', icon: Brain },
-		{ key: 'voice', icon: Mic }
+		{ key: 'chat', icon: MessageSquare, channel: 'agent' },
+		{ key: 'kanban', icon: LayoutDashboard, channel: 'tasks' },
+		{ key: 'memory', icon: Brain, channel: 'thinking' },
+		{ key: 'voice', icon: Mic, channel: 'tool' }
 	];
 
 	/** Staggered per-card entrance delay (ms), disabled under reduced-motion. */
@@ -58,10 +60,11 @@
 			{@const Icon = feature.icon}
 			<div
 				class="feature-card"
+				style="--feat-channel: var(--channel-{feature.channel}); --feat-channel-soft: var(--channel-{feature.channel}-soft)"
 				in:fly={{ y: 16, duration: motionDuration(300), delay: cardDelay(index) }}
 			>
 				<div class="feature-icon">
-					<Icon size={28} aria-hidden="true" />
+					<Icon size={20} aria-hidden="true" />
 				</div>
 				<h3 class="feature-name">{$i18n(`onboarding_features_${feature.key}_title`)}</h3>
 				<p class="feature-text">{$i18n(`onboarding_features_${feature.key}_description`)}</p>
@@ -107,9 +110,10 @@
 		align-items: center;
 		gap: var(--spacing-xs);
 		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
+		background: var(--surface-1);
 		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-lg);
+		box-shadow: var(--shadow-xs);
 		text-align: center;
 		transition:
 			transform 0.2s ease,
@@ -119,8 +123,8 @@
 
 	.feature-card:hover {
 		transform: translateY(-3px) scale(1.02);
-		border-color: var(--color-primary);
-		box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+		border-color: var(--color-accent-hover);
+		box-shadow: var(--shadow-md);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -133,11 +137,16 @@
 		}
 	}
 
+	/* Icon pill tinted by the feature's execution channel */
 	.feature-icon {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: var(--color-primary);
+		width: 36px;
+		height: 36px;
+		border-radius: 10px;
+		background: var(--feat-channel-soft);
+		color: var(--feat-channel);
 		margin-bottom: var(--spacing-xs);
 	}
 

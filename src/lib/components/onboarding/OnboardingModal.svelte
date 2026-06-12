@@ -99,42 +99,53 @@
 	tabindex="-1"
 	{@attach focusTrap}
 >
-	<div class="onboarding-container">
-		<OnboardingProgress currentStep={$currentStep} />
+	<div class="onboarding-window">
+		<!-- Brand panel: cream surface with turquoise veil + vertical stepper -->
+		<aside class="onboarding-side">
+			<div class="side-brand">
+				<span class="brand-dot" aria-hidden="true"></span>
+				<strong>Zileo Chat</strong>
+			</div>
+			<OnboardingProgress currentStep={$currentStep} />
+		</aside>
 
-		<div class="onboarding-content">
-			{#key $currentStep}
-				<div class="step-wrapper" in:fly={{ x: 24, duration: motionDuration(280) }}>
-					<CurrentStep onNext={handleNext} onComplete={handleComplete} />
+		<div class="onboarding-main">
+			<div class="onboarding-content">
+				{#key $currentStep}
+					<div class="step-wrapper" in:fly={{ x: 24, duration: motionDuration(280) }}>
+						<CurrentStep onNext={handleNext} onComplete={handleComplete} />
+					</div>
+				{/key}
+			</div>
+
+			<footer class="onboarding-footer">
+				<div class="footer-left">
+					{#if $canGoBack}
+						<Button variant="ghost" onclick={handlePrev}>
+							{$i18n('onboarding_previous')}
+						</Button>
+					{/if}
 				</div>
-			{/key}
+
+				<div class="footer-center">
+					<!-- Skip is hidden on the language step: the choice applies
+					     immediately, so skipping is redundant with Next. -->
+					{#if !$isLastStep && $currentStep !== 0}
+						<button class="skip-step" onclick={handleSkip}>
+							{$i18n('onboarding_skip')}
+						</button>
+					{/if}
+				</div>
+
+				<div class="footer-right">
+					{#if !$isLastStep}
+						<Button variant="primary" onclick={handleNext}>
+							{$i18n('onboarding_next')}
+						</Button>
+					{/if}
+				</div>
+			</footer>
 		</div>
-
-		<footer class="onboarding-footer">
-			<div class="footer-left">
-				{#if $canGoBack}
-					<Button variant="ghost" onclick={handlePrev}>
-						{$i18n('onboarding_previous')}
-					</Button>
-				{/if}
-			</div>
-
-			<div class="footer-center">
-				{#if !$isLastStep}
-					<button class="skip-link" onclick={handleSkip}>
-						{$i18n('onboarding_skip')}
-					</button>
-				{/if}
-			</div>
-
-			<div class="footer-right">
-				{#if !$isLastStep}
-					<Button variant="primary" onclick={handleNext}>
-						{$i18n('onboarding_next')}
-					</Button>
-				{/if}
-			</div>
-		</footer>
 	</div>
 </div>
 
@@ -147,16 +158,62 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		padding: var(--spacing-lg);
 	}
 
-	.onboarding-container {
+	/* Two-panel wizard window: brand panel with vertical stepper on the
+	   left, step content + constant footer on the right. */
+	.onboarding-window {
+		display: grid;
+		grid-template-columns: 280px 1fr;
+		width: 100%;
+		max-width: 980px;
+		height: 100%;
+		max-height: min(640px, 100%);
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-xl);
+		box-shadow: var(--shadow-xl);
+		overflow: hidden;
+	}
+
+	.onboarding-side {
 		display: flex;
 		flex-direction: column;
-		width: 100%;
-		height: 100%;
-		max-width: 800px;
-		max-height: 100vh;
-		padding: var(--spacing-xl);
+		padding: var(--spacing-xl) var(--spacing-lg);
+		background:
+			linear-gradient(180deg, rgba(148, 239, 238, 0.16), transparent 55%), var(--surface-cream);
+		border-right: 1px solid var(--color-border-light);
+		overflow-y: auto;
+	}
+
+	:global([data-theme='dark']) .onboarding-side {
+		background:
+			linear-gradient(180deg, rgba(148, 239, 238, 0.08), transparent 55%), var(--surface-2);
+	}
+
+	.side-brand {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-xl);
+		font-size: var(--font-size-lg);
+	}
+
+	.side-brand .brand-dot {
+		width: 30px;
+		height: 30px;
+		border-radius: 9px;
+		background: var(--gradient-brand);
+		box-shadow: var(--glow-accent-soft);
+		flex-shrink: 0;
+	}
+
+	.onboarding-main {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		min-height: 0;
 	}
 
 	.onboarding-content {
@@ -165,7 +222,7 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		padding: var(--spacing-xl) 0;
+		padding: var(--spacing-xl);
 		overflow-y: auto;
 	}
 
@@ -180,8 +237,20 @@
 		grid-template-columns: 1fr auto 1fr;
 		align-items: center;
 		gap: var(--spacing-md);
-		padding-top: var(--spacing-lg);
-		border-top: 1px solid var(--color-border);
+		padding: var(--spacing-md) var(--spacing-xl);
+		border-top: 1px solid var(--color-border-light);
+		background: var(--surface-2);
+	}
+
+	@media (max-width: 760px) {
+		.onboarding-window {
+			grid-template-columns: 1fr;
+			max-height: 100%;
+		}
+
+		.onboarding-side {
+			display: none;
+		}
 	}
 
 	.footer-left {
@@ -196,7 +265,10 @@
 		justify-self: end;
 	}
 
-	.skip-link {
+	/* Named .skip-step (not .skip-link) so the global accessibility
+	   skip-to-content rules (absolute, off-screen until focused) can never
+	   leak onto this in-flow footer button. */
+	.skip-step {
 		background: none;
 		border: none;
 		color: var(--color-text-secondary);
@@ -206,12 +278,12 @@
 		transition: color 0.2s ease;
 	}
 
-	.skip-link:hover {
+	.skip-step:hover {
 		color: var(--color-text-primary);
 	}
 
-	.skip-link:focus-visible {
-		outline: 2px solid var(--color-primary);
+	.skip-step:focus-visible {
+		outline: 2px solid var(--color-accent-deep);
 		outline-offset: 2px;
 		border-radius: var(--border-radius-sm);
 	}

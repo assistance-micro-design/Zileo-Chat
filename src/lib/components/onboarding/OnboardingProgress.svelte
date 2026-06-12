@@ -16,119 +16,118 @@
 
 <script lang="ts">
 	/**
-	 * Progress indicator for onboarding wizard
-	 * Shows current step and visual progress bar
+	 * Vertical stepper for the onboarding wizard's brand panel.
+	 * Lists every step with its done / active / upcoming state (check mark,
+	 * glowing gradient dot, plain number) plus a "Step x of y" label.
+	 * Purely presentational: navigation stays in the onboarding store.
 	 */
-	import { untrack } from 'svelte';
+	import { Check } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
-	import { Tween } from 'svelte/motion';
-	import { cubicOut } from 'svelte/easing';
-	import { TOTAL_STEPS } from '$types/onboarding';
-	import { prefersReducedMotion } from '$lib/utils/motion';
+	import { ONBOARDING_STEPS, TOTAL_STEPS } from '$types/onboarding';
 
 	interface Props {
 		currentStep: number;
 	}
 
 	let { currentStep }: Props = $props();
-
-	const targetPercent = $derived(((currentStep + 1) / TOTAL_STEPS) * 100);
-
-	/**
-	 * Smoothly tweened fill width, seeded with the initial percentage. The
-	 * $effect below keeps it in sync; the duration collapses to 0 under
-	 * reduced-motion so the bar jumps instantly instead of animating.
-	 */
-	const fill = new Tween(
-		untrack(() => targetPercent),
-		{ duration: 350, easing: cubicOut }
-	);
-
-	$effect(() => {
-		fill.set(targetPercent, { duration: prefersReducedMotion() ? 0 : 350 });
-	});
 </script>
 
-<div class="onboarding-progress">
-	<div class="progress-text">
+<nav class="onboarding-steps" aria-label={$i18n('onboarding_progress_arialabel')}>
+	<ol class="steps-list">
+		{#each ONBOARDING_STEPS as step, i (step)}
+			<li
+				class="step-item"
+				class:done={i < currentStep}
+				class:active={i === currentStep}
+				aria-current={i === currentStep ? 'step' : undefined}
+			>
+				<span class="step-dot" aria-hidden="true">
+					{#if i < currentStep}
+						<Check size={12} />
+					{:else}
+						{i + 1}
+					{/if}
+				</span>
+				{$i18n(`onboarding_step_${step}`)}
+			</li>
+		{/each}
+	</ol>
+
+	<span class="progress-label">
 		{$i18n('onboarding_progress')
 			.replace('{current}', String(currentStep + 1))
 			.replace('{total}', String(TOTAL_STEPS))}
-	</div>
-	<div
-		class="progress-bar"
-		role="progressbar"
-		aria-valuemin={0}
-		aria-valuemax={TOTAL_STEPS}
-		aria-valuenow={currentStep + 1}
-	>
-		<div class="progress-fill" style="width: {fill.current}%"></div>
-	</div>
-	<div class="progress-dots">
-		{#each Array(TOTAL_STEPS) as _, i (i)}
-			<div class="dot" class:active={i <= currentStep} class:current={i === currentStep}></div>
-		{/each}
-	</div>
-</div>
+	</span>
+</nav>
 
 <style>
-	.onboarding-progress {
+	.onboarding-steps {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-md) 0;
+		flex: 1;
+		min-height: 0;
 	}
 
-	.progress-text {
+	.steps-list {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		flex: 1;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.step-item {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		padding: 0.45rem 0.6rem;
+		border-radius: var(--border-radius-md);
 		font-size: var(--font-size-sm);
+		color: var(--color-text-tertiary);
+	}
+
+	.step-dot {
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid var(--color-border-dark);
+		font-size: var(--font-size-2xs);
+		font-weight: var(--font-weight-semibold);
+		background: var(--surface-1);
+	}
+
+	.step-item.done {
 		color: var(--color-text-secondary);
 	}
 
-	.progress-bar {
-		width: 100%;
-		max-width: 300px;
-		height: 4px;
-		background: var(--color-border);
-		border-radius: var(--border-radius-full);
-		overflow: hidden;
+	.step-item.done .step-dot {
+		background: var(--color-success-light);
+		border-color: var(--color-success-border);
+		color: var(--color-success);
 	}
 
-	.progress-fill {
-		height: 100%;
-		background: var(--color-primary);
-		border-radius: var(--border-radius-full);
-		/* Width is driven by the JS Tween, which honors reduced-motion. */
+	.step-item.active {
+		color: var(--color-text-primary);
+		font-weight: var(--font-weight-semibold);
+		background: var(--color-accent-light);
 	}
 
-	.progress-dots {
-		display: flex;
-		gap: var(--spacing-sm);
-		margin-top: var(--spacing-xs);
+	.step-item.active .step-dot {
+		background: var(--gradient-brand);
+		border: none;
+		color: var(--color-accent-text);
+		box-shadow: var(--glow-accent-soft);
 	}
 
-	.dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--color-border);
-		transition: all 0.3s ease;
-	}
-
-	.dot.active {
-		background: var(--color-primary);
-	}
-
-	.dot.current {
-		transform: scale(1.25);
-		box-shadow:
-			0 0 0 2px var(--color-bg-primary),
-			0 0 0 4px var(--color-primary);
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.dot {
-			transition: none;
-		}
+	.progress-label {
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-tertiary);
+		padding: var(--spacing-md) 0.6rem 0;
 	}
 </style>
