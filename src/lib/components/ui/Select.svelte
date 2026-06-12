@@ -52,6 +52,8 @@
 		options: SelectOption[];
 		/** Label text */
 		label?: string;
+		/** Accessible name when no visible label is rendered */
+		ariaLabel?: string;
 		/** Help text */
 		help?: string;
 		/** Placeholder option text */
@@ -70,6 +72,7 @@
 		value = '',
 		options,
 		label,
+		ariaLabel,
 		help,
 		placeholder,
 		disabled = false,
@@ -103,6 +106,7 @@
 		id={selectId}
 		class="form-select"
 		{onchange}
+		aria-label={label ? undefined : ariaLabel}
 		aria-describedby={help ? `${selectId}-help` : undefined}
 	>
 		{#if placeholder}

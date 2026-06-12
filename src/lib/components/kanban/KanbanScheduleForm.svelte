@@ -83,10 +83,10 @@
 		</div>
 
 		<div class="time-row">
-			<label for="kanban-schedule-time">{$i18n('kanban_schedule_time')}</label>
+			<label class="time-label" for="kanban-schedule-time">{$i18n('kanban_schedule_time')}</label>
 			<input
 				id="kanban-schedule-time"
-				class="form-input"
+				class="form-input time-input"
 				type="time"
 				value={timeValue}
 				onchange={handleTimeChange}
@@ -98,38 +98,70 @@
 <style>
 	.kanban-schedule-form {
 		border: 1px solid var(--color-border);
-		border-radius: 6px;
-		padding: 0.75rem;
+		border-radius: var(--border-radius-md);
+		padding: var(--spacing-md);
 		margin: 0;
+	}
+	.kanban-schedule-form legend {
+		padding: 0 6px;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+	}
+	.kanban-schedule-form legend label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		cursor: pointer;
 	}
 	.days {
 		display: flex;
-		gap: 0.3rem;
+		gap: 0.25rem;
 		flex-wrap: wrap;
 		margin: 0.5rem 0;
 	}
+	/* Day chips follow the mock's chip recipe: outline at rest, translucent
+	   brand surface + deep-accent ink when active (not the solid accent fill,
+	   whose contrast fails for unselected-vs-selected scanning). */
 	.day-chip {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.3rem;
-		padding: 0.25rem 0.5rem;
-		border-radius: 999px;
+		padding: 0.22rem 0.7rem;
+		border-radius: var(--border-radius-full);
 		border: 1px solid var(--color-border);
-		background: var(--color-surface);
+		background: transparent;
+		color: var(--color-text-secondary);
 		cursor: pointer;
 		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		transition:
+			border-color var(--transition-fast),
+			color var(--transition-fast),
+			background-color var(--transition-fast);
+	}
+	.day-chip:hover {
+		border-color: var(--color-border-dark);
+		color: var(--color-text-primary);
 	}
 	.day-chip.active {
-		background: var(--color-accent);
-		color: var(--color-accent-text);
-		border-color: var(--color-accent);
+		background: var(--color-accent-light);
+		color: var(--color-accent-deep);
+		border-color: var(--color-accent-deep);
 	}
 	.day-chip input {
 		display: none;
 	}
 	.time-row {
 		display: flex;
+		flex-direction: column;
 		gap: 0.5rem;
-		align-items: center;
+		align-items: flex-start;
+	}
+	.time-label {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+	}
+	.time-input {
+		width: 140px;
 	}
 </style>

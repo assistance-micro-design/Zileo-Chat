@@ -11,6 +11,7 @@
 	import { i18n } from '$lib/i18n';
 	import { Badge, Button, Spinner } from '$lib/components/ui';
 	import {
+		Bot,
 		Eye,
 		Trash2,
 		FileText,
@@ -186,7 +187,10 @@
 	</header>
 
 	{#if targetAgentName}
-		<p class="card-meta">{targetAgentName}</p>
+		<p class="card-meta">
+			<Bot size={13} aria-hidden="true" />
+			{targetAgentName}
+		</p>
 	{/if}
 
 	{#if card.description}
@@ -195,7 +199,8 @@
 
 	{#if isRunning && liveProgress}
 		<p class="card-progress" aria-live="polite">
-			{$i18n('kanban_card_running')}
+			<Spinner size="sm" />
+			<span>{$i18n('kanban_card_running')}</span>
 		</p>
 	{/if}
 
@@ -356,15 +361,19 @@
 		flex: 1;
 		min-width: 0;
 	}
+	/* Neutral pill (border + tertiary surface), matching the mock's
+	   auto-purge countdown badge. */
 	.card-purge-countdown {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.2rem;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		padding: 0.1rem 0.35rem;
-		border-radius: 999px;
-		background: var(--color-surface-alt, rgba(0, 0, 0, 0.04));
+		font-size: var(--font-size-2xs);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-secondary);
+		padding: 0.1rem 0.45rem;
+		border-radius: var(--border-radius-full);
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
 		white-space: nowrap;
 	}
 	.card-purge-countdown.imminent {
@@ -372,38 +381,50 @@
 	}
 	.card-meta {
 		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-tertiary);
 	}
 	.card-description {
 		margin: 0;
 		font-size: var(--font-size-xs);
-		color: var(--color-text);
+		color: var(--color-text-secondary);
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
 		line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}
+	/* Live activity lines read in the info channel, like the mock's
+	   in-progress card. */
 	.card-progress {
 		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 		font-size: var(--font-size-xs);
-		color: var(--color-accent-deep);
+		color: var(--color-info);
 		font-style: italic;
 	}
 	.card-analyzing {
 		margin: 0;
 		display: flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.5rem;
 		font-size: var(--font-size-xs);
-		color: var(--color-accent-deep);
+		color: var(--color-info);
 		font-style: italic;
 	}
 	.card-error {
 		margin: 0;
 		font-size: var(--font-size-xs);
 		color: var(--color-error);
+		white-space: pre-wrap;
+		background: var(--color-error-light);
+		border-radius: var(--border-radius-sm);
+		padding: 0.35rem 0.5rem;
 	}
 	/* Actions revealed on hover or keyboard focus (desktop-first choice:
 	   to revisit if touch usage ever appears). */

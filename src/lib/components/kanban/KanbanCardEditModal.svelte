@@ -250,7 +250,7 @@
 		padding: 0.5rem 0.75rem;
 		background: var(--color-surface-alt, var(--color-surface));
 		border: 1px solid var(--color-border);
-		border-radius: 6px;
+		border-radius: var(--border-radius-md);
 	}
 	.readonly-label {
 		font-size: var(--font-size-sm);
@@ -262,7 +262,7 @@
 	}
 	.variables {
 		border: 1px solid var(--color-border);
-		border-radius: 6px;
+		border-radius: var(--border-radius-md);
 		padding: 0.75rem;
 		margin: 0;
 		display: flex;

@@ -11,6 +11,7 @@
 	import { tauriInvoke as invoke } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Modal, Button, Input, Textarea } from '$lib/components/ui';
+	import { RotateCcw } from '@lucide/svelte';
 	import type { Prompt } from '$types/prompt';
 
 	interface Props {
@@ -154,6 +155,7 @@
 					oninput={(e) => (summary = e.currentTarget.value)}
 					placeholder={$i18n('kanban_improve_summary_placeholder')}
 				/>
+				<span class="form-help summary-help">{$i18n('kanban_improve_summary_required')}</span>
 			</div>
 		{:else}
 			<p class="hint">{$i18n('versions_loading')}</p>
@@ -163,11 +165,12 @@
 		<Button variant="ghost" onclick={onclose} disabled={submitting}>
 			{$i18n('common_cancel')}
 		</Button>
-		<Button variant="secondary" onclick={submit} disabled={submitting || !prompt}>
+		<Button variant="outline" onclick={submit} disabled={submitting || !prompt}>
 			{$i18n('common_save')}
 		</Button>
 		{#if onsavedrequeue}
 			<Button variant="primary" onclick={submitAndRequeue} disabled={submitting || !prompt}>
+				<RotateCcw size={14} aria-hidden="true" />
 				{$i18n('kanban_improve_save_and_rerun')}
 			</Button>
 		{/if}
@@ -188,5 +191,9 @@
 	.error {
 		color: var(--color-error);
 		margin: 0 0 0.5rem;
+	}
+	/* The Input's bottom margin would detach the help line from its field. */
+	.summary-help {
+		margin-top: -0.35rem;
 	}
 </style>

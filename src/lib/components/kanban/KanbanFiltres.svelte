@@ -43,7 +43,7 @@
 <div class="kanban-filtres">
 	<div class="kanban-filtre">
 		<Select
-			label={$i18n('kanban_filter_agent')}
+			ariaLabel={$i18n('kanban_filter_agent')}
 			options={agentOptions}
 			value={selectedAgentId}
 			onchange={(e) => emit({ agentId: e.currentTarget.value })}
@@ -51,7 +51,7 @@
 	</div>
 	<div class="kanban-filtre">
 		<Select
-			label={$i18n('kanban_filter_folder')}
+			ariaLabel={$i18n('kanban_filter_folder')}
 			options={folderOptions}
 			value={selectedFolderId}
 			onchange={(e) => emit({ folderId: e.currentTarget.value })}
@@ -60,13 +60,17 @@
 </div>
 
 <style>
+	/* Compact inline selects, designed to sit on the page-title row. */
 	.kanban-filtres {
 		display: flex;
-		gap: 0.75rem;
+		gap: 0.5rem;
 		flex-wrap: wrap;
-		padding: 0.5rem 0;
+		align-items: center;
 	}
 	.kanban-filtre {
 		min-width: 180px;
+	}
+	.kanban-filtre :global(.form-group) {
+		margin-bottom: 0;
 	}
 </style>

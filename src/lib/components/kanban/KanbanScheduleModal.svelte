@@ -169,9 +169,11 @@
 
 	{#snippet footer()}
 		{#if existing}
-			<Button type="button" variant="ghost" onclick={requestRemove} disabled={saving}>
-				{$i18n('kanban_schedule_remove_btn')}
-			</Button>
+			<span class="footer-left">
+				<Button type="button" variant="ghost" onclick={requestRemove} disabled={saving}>
+					{$i18n('kanban_schedule_remove_btn')}
+				</Button>
+			</span>
 		{/if}
 		<Button type="button" variant="ghost" onclick={onclose} disabled={saving}>
 			{$i18n('common_cancel')}
@@ -201,6 +203,10 @@
 		margin: 0 0 0.75rem;
 		font-size: var(--font-size-sm);
 	}
+	/* The destructive choice sits apart from cancel/save, anchored left. */
+	.footer-left {
+		margin-right: auto;
+	}
 	.skip-pending {
 		display: flex;
 		align-items: flex-start;
@@ -208,7 +214,7 @@
 		margin: 0.75rem 0 0;
 		padding: 0.6rem 0.75rem;
 		border: 1px solid var(--color-border);
-		border-radius: 6px;
+		border-radius: var(--border-radius-md);
 		cursor: pointer;
 	}
 	.skip-pending input {
@@ -226,6 +232,6 @@
 	.modal-error {
 		color: var(--color-error);
 		margin: 0.5rem 0 0;
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 	}
 </style>

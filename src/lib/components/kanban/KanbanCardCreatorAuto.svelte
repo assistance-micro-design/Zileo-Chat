@@ -17,6 +17,7 @@
 	import { locale } from '$lib/stores/locale';
 	import { Select, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
+	import { Info } from '@lucide/svelte';
 	import { composingStore, canStartCompose } from '$lib/stores/kanban-compose';
 	import type { ComposeStartResponse } from '$types/kanban';
 
@@ -83,7 +84,10 @@
 	{#if !$canStartCompose}
 		<p class="cap-notice" role="status">{$i18n('kanban_compose_cap_reached')}</p>
 	{:else}
-		<p class="hint">{$i18n('kanban_compose_launched')}</p>
+		<p class="info-notice">
+			<Info size={16} aria-hidden="true" />
+			<span>{$i18n('kanban_compose_launched')}</span>
+		</p>
 	{/if}
 </div>
 
@@ -93,11 +97,21 @@
 		flex-direction: column;
 		gap: 0.6rem;
 	}
-	.hint {
+	/* Info alert (mock style): pale blue surface, matching border, leading icon. */
+	.info-notice {
 		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		font-style: italic;
+		display: flex;
+		gap: 0.5rem;
+		padding: var(--spacing-md);
+		font-size: var(--font-size-sm);
+		color: var(--color-info);
+		background: var(--color-info-light);
+		border: 1px solid rgba(59, 130, 246, 0.3);
+		border-radius: var(--border-radius-md);
+	}
+	.info-notice :global(svg) {
+		flex-shrink: 0;
+		margin-top: 2px;
 	}
 	.cap-notice {
 		margin: 0;
@@ -105,6 +119,6 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-warning);
 		background: var(--color-warning-bg);
-		border-radius: 6px;
+		border-radius: var(--border-radius-md);
 	}
 </style>

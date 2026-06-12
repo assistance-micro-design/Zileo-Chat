@@ -13,6 +13,8 @@
 	import ToolCallBlock from '$lib/components/chat/ToolCallBlock.svelte';
 	import ChatContainer from '$lib/components/agent/ChatContainer.svelte';
 	import {
+		BookOpen,
+		Bot,
 		CheckCircle2,
 		Wand2,
 		Trash2,
@@ -98,6 +100,30 @@
 	const variables = $derived(card ? safeParseVariables(card.variables) : {});
 	const targetAgent = $derived(card ? agents.find((a) => a.id === card.target_agent_id) : null);
 	const prompt = $derived(card?.prompt_id ? prompts.find((p) => p.id === card.prompt_id) : null);
+
+	/**
+	 * A successful workflow lands in `review` with status='done' while it
+	 * actually awaits human validation — show the dedicated label instead of
+	 * the misleading "Terminé" (same disambiguation as the board vignettes).
+	 */
+	function viewerStatus(c: KanbanCard): string {
+		return c.column === 'review' && c.status === 'done' ? 'awaiting_review' : c.status;
+	}
+
+	function viewerStatusVariant(c: KanbanCard): 'primary' | 'success' | 'warning' | 'error' {
+		switch (viewerStatus(c)) {
+			case 'failed':
+				return 'error';
+			case 'done':
+				return 'success';
+			case 'awaiting_review':
+			case 'review':
+			case 'proposed':
+				return 'warning';
+			default:
+				return 'primary';
+		}
+	}
 
 	/** Persisted meta-interaction history for this card (compose + analyze). */
 	let interactions = $state<KanbanCardInteraction[]>([]);
@@ -380,14 +406,20 @@
 		{#if card}
 			<div class="report-section">
 				<div class="meta-row">
-					<Badge variant={card.status === 'failed' ? 'error' : 'primary'}
-						>{$i18n(`kanban_status_${card.status}`)}</Badge
-					>
+					<Badge variant={viewerStatusVariant(card)}>
+						{$i18n(`kanban_status_${viewerStatus(card)}`)}
+					</Badge>
 					{#if targetAgent}
-						<span class="meta-pill">{targetAgent.name}</span>
+						<Badge variant="neutral">
+							<Bot size={13} aria-hidden="true" />
+							{targetAgent.name}
+						</Badge>
 					{/if}
 					{#if prompt}
-						<span class="meta-pill">{prompt.name}</span>
+						<Badge variant="neutral">
+							<BookOpen size={13} aria-hidden="true" />
+							{prompt.name}
+						</Badge>
 					{/if}
 				</div>
 
@@ -447,7 +479,7 @@
 						{#each interactions as interaction (interaction.id)}
 							<article class="interaction-card">
 								<header class="interaction-header">
-									<span class="interaction-kind">{interactionLabel(interaction.kind)}</span>
+									<Badge variant="primary">{interactionLabel(interaction.kind)}</Badge>
 									<span class="meta-pill">{interaction.provider} · {interaction.model_id_used}</span
 									>
 									<span class="meta-pill">
@@ -582,19 +614,19 @@
 				</Button>
 			{/if}
 			{#if card.column === 'review' && card.workflow_id && onreanalyze}
-				<Button variant="secondary" disabled={reanalyzing} onclick={() => handleReanalyze(card)}>
+				<Button variant="outline" disabled={reanalyzing} onclick={() => handleReanalyze(card)}>
 					<RefreshCw size={14} class={reanalyzing ? 'spin' : ''} />
 					{reanalyzing ? $i18n('kanban_card_reanalyzing') : $i18n('kanban_card_reanalyze')}
 				</Button>
 			{/if}
 			{#if onimprove && (card.column === 'review' || card.column === 'done') && card.prompt_id}
-				<Button variant="secondary" onclick={() => onimprove?.(card)}>
+				<Button variant="outline" onclick={() => onimprove?.(card)}>
 					<Wand2 size={14} />
 					{$i18n('kanban_card_improve')}
 				</Button>
 			{/if}
 			{#if ondelete}
-				<Button variant="danger" onclick={() => ondelete?.(card)}>
+				<Button variant="danger-soft" onclick={() => ondelete?.(card)}>
 					<Trash2 size={14} />
 					{$i18n('kanban_card_delete')}
 				</Button>
@@ -616,16 +648,25 @@
 		flex-wrap: wrap;
 		align-items: center;
 	}
+	/* Metric chip (mock recipe): tiny tabular pill on the sub-surface, used
+	   for the provider/cost/token figures of the supervisor history. */
 	.meta-pill {
-		font-size: var(--font-size-xs);
-		padding: 0.15rem 0.5rem;
-		border-radius: 999px;
-		background: var(--color-bg-secondary);
-		color: var(--color-text-muted);
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: var(--font-size-2xs);
+		font-variant-numeric: tabular-nums;
+		padding: 0.14rem 0.5rem;
+		border-radius: var(--border-radius-full);
+		background: var(--surface-2);
+		border: 1px solid var(--color-border-light);
+		color: var(--color-text-secondary);
 	}
+	/* Section headings sized as form labels, like the mock's report modal. */
 	h4 {
-		margin: 0 0 0.3rem;
-		font-size: var(--font-size-base);
+		margin: 0 0 0.4rem;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
 	}
 	h5 {
 		margin: 0.4rem 0 0.2rem;
@@ -640,11 +681,19 @@
 		color: var(--color-text-muted);
 		font-size: var(--font-size-sm);
 	}
+	/* Variables presented as a code panel: mono text on the sub-surface. */
 	.variables-list {
 		display: grid;
 		grid-template-columns: max-content 1fr;
 		gap: 0.25rem 0.6rem;
-		font-size: var(--font-size-sm);
+		margin: 0;
+		padding: 0.7rem 0.85rem;
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		line-height: 1.6;
+		background: var(--surface-2);
+		border: 1px solid var(--color-border-light);
+		border-radius: var(--border-radius-md);
 	}
 	.variables-list dt {
 		font-weight: 600;
@@ -664,9 +713,10 @@
 	}
 	.interaction-card {
 		border: 1px solid var(--color-border);
-		border-radius: 0.5rem;
-		padding: 0.6rem 0.75rem;
-		background: var(--color-bg-secondary);
+		border-radius: var(--border-radius-lg);
+		padding: 0.75rem;
+		background: var(--surface-1);
+		box-shadow: var(--shadow-xs);
 	}
 	.interaction-header,
 	.iteration-header {
@@ -675,9 +725,6 @@
 		gap: 0.4rem;
 		align-items: center;
 		margin-bottom: 0.4rem;
-	}
-	.interaction-kind {
-		font-weight: 600;
 	}
 	.iteration-list {
 		list-style: none;
@@ -695,6 +742,8 @@
 		font-weight: 600;
 		font-size: var(--font-size-sm);
 	}
+	/* Reasoning reads in the thinking channel (violet), like the execution
+	   blocks of the chat timeline. */
 	.reasoning-toggle {
 		display: inline-flex;
 		align-items: center;
@@ -703,18 +752,21 @@
 		border: none;
 		padding: 0.2rem 0;
 		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
 		cursor: pointer;
-		color: var(--color-text-muted);
+		color: var(--channel-thinking);
 	}
 	.reasoning-toggle:hover {
-		color: var(--color-text);
+		opacity: 0.8;
 	}
 	.reasoning-body {
 		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		padding: 0.3rem 0.5rem;
-		background: var(--color-bg);
-		border-radius: 0.3rem;
+		color: var(--color-text-secondary);
+		line-height: 1.65;
+		padding: 0.5rem 0.6rem;
+		background: linear-gradient(180deg, var(--channel-thinking-soft), transparent 60%);
+		border: 1px solid var(--color-border-light);
+		border-radius: var(--border-radius-md);
 		margin: 0.2rem 0;
 	}
 	.tool-calls {

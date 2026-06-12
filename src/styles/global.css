@@ -676,6 +676,17 @@ body {
   box-shadow: var(--glow-secondary);
 }
 
+.btn-outline {
+  background: transparent;
+  border-color: var(--color-border-dark);
+  color: var(--color-text-primary);
+}
+
+.btn-outline:hover:not(:disabled) {
+  border-color: var(--color-accent-deep);
+  color: var(--color-accent-deep);
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--color-text-secondary);
