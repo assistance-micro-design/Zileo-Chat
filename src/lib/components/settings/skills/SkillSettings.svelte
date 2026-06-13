@@ -31,6 +31,7 @@ Provides CRUD operations for skills with list view and form modal.
 	} from '$lib/stores/skills';
 	import SkillList from './SkillList.svelte';
 	import SkillForm from './SkillForm.svelte';
+	import VersionsHistoryModal from '$lib/components/settings/versions/VersionsHistoryModal.svelte';
 	import { Modal, ErrorBanner, DeleteConfirmModal } from '$lib/components/ui';
 	import SettingsSectionHeader from '../SettingsSectionHeader.svelte';
 	import type { SkillCreate } from '$types/skill';
@@ -43,6 +44,9 @@ Provides CRUD operations for skills with list view and form modal.
 	let showDeleteConfirm = $state(false);
 	let skillToDelete = $state<string | null>(null);
 	let deleting = $state(false);
+
+	/** Skill whose version history modal is open (null = closed) */
+	let versionsSkillId = $state<string | null>(null);
 
 	/**
 	 * Loads skills on component mount
@@ -63,6 +67,13 @@ Provides CRUD operations for skills with list view and form modal.
 	 */
 	function handleEdit(skillId: string): void {
 		skillStore.openEditForm(skillId);
+	}
+
+	/**
+	 * Opens the version history modal for a specific skill
+	 */
+	function handleHistory(skillId: string): void {
+		versionsSkillId = skillId;
 	}
 
 	/**
@@ -167,17 +178,28 @@ Provides CRUD operations for skills with list view and form modal.
 		skills={$skills}
 		loading={$skillLoading}
 		onedit={handleEdit}
+		onhistory={handleHistory}
 		ondelete={handleDeleteRequest}
 		ontoggle={handleToggleEnabled}
 	/>
 </div>
+
+<!-- Version history modal (opened from the list rows) -->
+{#if versionsSkillId}
+	<VersionsHistoryModal
+		kind="skill"
+		resourceId={versionsSkillId}
+		onclose={() => (versionsSkillId = null)}
+		onchanged={() => skillStore.loadSkills()}
+	/>
+{/if}
 
 <!-- Create/Edit Form Modal -->
 <Modal
 	open={$skillFormMode !== null}
 	title={$skillFormMode === 'create' ? $i18n('skills_create') : $i18n('skills_edit')}
 	onclose={handleFormClose}
-	fullscreen
+	wide
 >
 	{#snippet body()}
 		<SkillForm

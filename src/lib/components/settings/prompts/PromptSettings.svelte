@@ -34,6 +34,7 @@ Provides CRUD operations for prompts with list view and form modal.
 	} from '$lib/stores/prompts';
 	import PromptList from './PromptList.svelte';
 	import PromptForm from './PromptForm.svelte';
+	import VersionsHistoryModal from '$lib/components/settings/versions/VersionsHistoryModal.svelte';
 	import { Modal, ErrorBanner, DeleteConfirmModal } from '$lib/components/ui';
 	import SettingsSectionHeader from '../SettingsSectionHeader.svelte';
 	import type { PromptCreate } from '$types/prompt';
@@ -45,6 +46,9 @@ Provides CRUD operations for prompts with list view and form modal.
 	let showDeleteConfirm = $state(false);
 	let promptToDelete = $state<string | null>(null);
 	let deleting = $state(false);
+
+	/** Prompt whose version history modal is open (null = closed) */
+	let versionsPromptId = $state<string | null>(null);
 
 	/**
 	 * Loads prompts on component mount
@@ -65,6 +69,13 @@ Provides CRUD operations for prompts with list view and form modal.
 	 */
 	function handleEdit(promptId: string): void {
 		promptStore.openEditForm(promptId);
+	}
+
+	/**
+	 * Opens the version history modal for a specific prompt
+	 */
+	function handleHistory(promptId: string): void {
+		versionsPromptId = promptId;
 	}
 
 	/**
@@ -158,16 +169,27 @@ Provides CRUD operations for prompts with list view and form modal.
 		prompts={$prompts}
 		loading={$promptLoading}
 		onedit={handleEdit}
+		onhistory={handleHistory}
 		ondelete={handleDeleteRequest}
 	/>
 </div>
+
+<!-- Version history modal (opened from the list rows) -->
+{#if versionsPromptId}
+	<VersionsHistoryModal
+		kind="prompt"
+		resourceId={versionsPromptId}
+		onclose={() => (versionsPromptId = null)}
+		onchanged={() => promptStore.loadPrompts()}
+	/>
+{/if}
 
 <!-- Create/Edit Form Modal -->
 <Modal
 	open={$promptFormMode !== null}
 	title={$promptFormMode === 'create' ? $i18n('prompts_create') : $i18n('prompts_edit')}
 	onclose={handleFormClose}
-	fullscreen
+	wide
 >
 	{#snippet body()}
 		<PromptForm

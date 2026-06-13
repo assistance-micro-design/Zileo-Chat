@@ -15,15 +15,16 @@
 -->
 
 <!--
-SkillList - Displays skills in a grid of cards.
-Shows skill summary with actions for edit, delete, and enable/disable toggle.
+SkillList - Displays skills as compact entity rows inside a single card.
+Each row carries the category / target-kind badges and the enable switch;
+actions (edit, version history, delete) reveal on hover or keyboard focus.
 -->
 
 <script lang="ts">
 	import type { SkillSummary, SkillCategory } from '$types/skill';
 	import { SKILL_CATEGORY_I18N_KEYS } from '$types/skill';
-	import { Card, Badge, Button, StatusIndicator, Input, Select } from '$lib/components/ui';
-	import { BookMarked, Edit, Trash2, FileText } from '@lucide/svelte';
+	import { Card, Badge, Button, StatusIndicator, Input, Select, Switch } from '$lib/components/ui';
+	import { BookMarked, Search, Pencil, History, Trash2 } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 
 	/**
@@ -36,13 +37,15 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 		loading: boolean;
 		/** Edit callback */
 		onedit: (skillId: string) => void;
+		/** Version history callback */
+		onhistory: (skillId: string) => void;
 		/** Delete callback */
 		ondelete: (skillId: string) => void;
 		/** Toggle enabled callback */
 		ontoggle: (skillId: string, enabled: boolean) => void;
 	}
 
-	let { skills, loading, onedit, ondelete, ontoggle }: Props = $props();
+	let { skills, loading, onedit, onhistory, ondelete, ontoggle }: Props = $props();
 
 	// Filter state
 	let searchQuery = $state('');
@@ -104,28 +107,32 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 	}
 
 	/**
-	 * Formats content length for display
+	 * Builds the meta line: description · content size · last update
 	 */
-	function formatContentLength(length: number): string {
-		if (length >= 1000) {
-			return `${(length / 1000).toFixed(1)}k`;
-		}
-		return String(length);
+	function metaLine(skill: SkillSummary): string {
+		const description = skill.description || t('skills_no_description');
+		const size = t('skills_chars_count').replace('{count}', skill.content_length.toLocaleString());
+		const updated = `${t('skills_updated')} ${formatDate(skill.updated_at)}`;
+		return `${description} · ${size} · ${updated}`;
 	}
 </script>
 
 <div class="skill-list">
 	<!-- Filters -->
 	<div class="list-filters">
-		<Input
-			placeholder={$i18n('skills_search_placeholder')}
-			value={searchQuery}
-			oninput={handleSearchInput}
-		/>
+		<div class="search-box">
+			<Search size={14} class="search-icon" />
+			<Input
+				placeholder={$i18n('skills_search_placeholder')}
+				value={searchQuery}
+				oninput={handleSearchInput}
+			/>
+		</div>
 		<Select
 			value={categoryFilter}
 			onchange={(e) => (categoryFilter = e.currentTarget.value as SkillCategory | '')}
 			options={categoryOptions}
+			ariaLabel={$i18n('skills_form_category_label')}
 		/>
 	</div>
 
@@ -158,76 +165,56 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 			{/snippet}
 		</Card>
 	{:else}
-		<div class="skill-grid">
+		<div class="entity-list">
 			{#each filteredSkills as skill (skill.id)}
-				<Card>
-					{#snippet body()}
-						<div class="skill-card" class:disabled={!skill.enabled}>
-							<div class="skill-header">
-								<div class="skill-name-row">
-									<BookMarked size={20} class="skill-icon" />
-									<h4 class="skill-name">{skill.name}</h4>
-								</div>
-								<div class="skill-badges">
-									{#if skill.kind === 'kanban'}
-										<Badge variant="primary">{$i18n('skills_kind_kanban')}</Badge>
-									{/if}
-									<Badge variant={getCategoryVariant(skill.category)}>
-										{$i18n(SKILL_CATEGORY_I18N_KEYS[skill.category])}
-									</Badge>
-								</div>
-							</div>
-
-							<p class="skill-description">
-								{skill.description || $i18n('skills_no_description')}
-							</p>
-
-							<div class="skill-details">
-								<div class="detail-row">
-									<span class="detail-label">
-										<FileText size={14} />
-										{$i18n('skills_content_size')}
-									</span>
-									<span class="detail-value">
-										{$i18n('skills_chars_count').replace(
-											'{count}',
-											formatContentLength(skill.content_length)
-										)}
-									</span>
-								</div>
-								<div class="detail-row">
-									<span class="detail-label">{$i18n('skills_updated')}</span>
-									<span class="detail-value">{formatDate(skill.updated_at)}</span>
-								</div>
-								<div class="detail-row">
-									<span class="detail-label">{$i18n('skills_status')}</span>
-									<label class="toggle-label">
-										<input
-											type="checkbox"
-											checked={skill.enabled}
-											onchange={() => ontoggle(skill.id, !skill.enabled)}
-											class="toggle-input"
-										/>
-										<span class="toggle-text">
-											{skill.enabled ? $i18n('skills_enabled') : $i18n('skills_disabled')}
-										</span>
-									</label>
-								</div>
-							</div>
-
-							<div class="skill-actions">
-								<Button variant="ghost" size="sm" onclick={() => onedit(skill.id)}>
-									<Edit size={16} />
-									<span>{$i18n('common_edit')}</span>
-								</Button>
-								<Button variant="danger" size="sm" onclick={() => ondelete(skill.id)}>
-									<Trash2 size={16} />
-									<span>{$i18n('common_delete')}</span>
-								</Button>
-							</div>
-						</div>
-					{/snippet}
-				</Card>
+				<div class="entity-row" class:is-disabled={!skill.enabled}>
+					<BookMarked size={20} class="entity-icon" />
+					<div class="entity-main">
+						<span class="entity-title">
+							<strong>{skill.name}</strong>
+							<Badge variant={getCategoryVariant(skill.category)}>
+								{$i18n(SKILL_CATEGORY_I18N_KEYS[skill.category])}
+							</Badge>
+							{#if skill.kind === 'kanban'}
+								<Badge variant="success">{$i18n('skills_kind_kanban')}</Badge>
+							{:else}
+								<Badge variant="neutral">{$i18n('skills_kind_standard')}</Badge>
+							{/if}
+						</span>
+						<span class="entity-meta">{metaLine(skill)}</span>
+					</div>
+					<Switch
+						checked={skill.enabled}
+						onchange={(value) => ontoggle(skill.id, value)}
+						ariaLabel={$i18n('skills_toggle_arialabel').replace('{name}', skill.name)}
+					/>
+					<div class="entity-actions">
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={() => onedit(skill.id)}
+							ariaLabel="{$i18n('common_edit')}: {skill.name}"
+						>
+							<Pencil size={14} />
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={() => onhistory(skill.id)}
+							ariaLabel="{$i18n('versions_history_button')}: {skill.name}"
+						>
+							<History size={14} />
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={() => ondelete(skill.id)}
+							ariaLabel="{$i18n('common_delete')}: {skill.name}"
+						>
+							<Trash2 size={14} />
+						</Button>
+					</div>
+				</div>
 			{/each}
 		</div>
 	{/if}
@@ -237,22 +224,33 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 	.skill-list {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-lg);
+		gap: var(--spacing-md);
 	}
 
 	.list-filters {
 		display: flex;
-		gap: var(--spacing-md);
-		max-width: 500px;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
 	}
 
-	.list-filters :global(> *:first-child) {
-		flex: 2;
-	}
-
-	.list-filters :global(> *:last-child) {
+	.search-box {
+		position: relative;
 		flex: 1;
-		min-width: 150px;
+		min-width: 240px;
+	}
+
+	.search-box :global(.search-icon) {
+		position: absolute;
+		left: 10px;
+		top: 50%;
+		transform: translateY(-50%);
+		color: var(--color-text-tertiary);
+		z-index: 1;
+		pointer-events: none;
+	}
+
+	.search-box :global(input) {
+		padding-left: 2rem;
 	}
 
 	.loading-state {
@@ -291,130 +289,84 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 		line-height: var(--line-height-relaxed);
 	}
 
-	.skill-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-		gap: var(--spacing-lg);
-		contain: layout style;
+	.entity-list {
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-lg);
+		box-shadow: var(--shadow-sm);
+		overflow: hidden;
 	}
 
-	.skill-card {
+	.entity-row {
 		display: flex;
-		flex-direction: column;
+		align-items: center;
 		gap: var(--spacing-md);
+		padding: var(--spacing-md);
+		border-bottom: 1px solid var(--color-border-light);
 	}
 
-	.skill-card.disabled {
+	.entity-row:last-child {
+		border-bottom: none;
+	}
+
+	.entity-row.is-disabled .entity-main,
+	.entity-row.is-disabled :global(.entity-icon) {
 		opacity: 0.6;
 	}
 
-	.skill-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-	}
-
-	.skill-badges {
-		display: flex;
-		gap: var(--spacing-xs);
-		flex-wrap: wrap;
-		justify-content: flex-end;
-	}
-
-	.skill-name-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-	}
-
-	.skill-name-row :global(.skill-icon) {
+	.entity-row :global(.entity-icon) {
 		color: var(--color-accent-deep);
+		flex-shrink: 0;
 	}
 
-	.skill-name {
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-	}
-
-	.skill-description {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin: 0;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-		line-height: var(--line-height-relaxed);
-	}
-
-	.skill-details {
+	.entity-main {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-xs);
+		gap: 1px;
 	}
 
-	.detail-row {
+	.entity-title {
 		display: flex;
-		justify-content: space-between;
 		align-items: center;
+		gap: var(--spacing-xs);
+		flex-wrap: wrap;
+	}
+
+	.entity-title strong {
 		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
 	}
 
-	.detail-label {
+	.entity-meta {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.entity-actions {
 		display: flex;
-		align-items: center;
 		gap: var(--spacing-xs);
-		color: var(--color-text-secondary);
+		flex-shrink: 0;
+		opacity: 0;
+		transition: opacity var(--transition-fast);
 	}
 
-	.detail-value {
-		font-weight: var(--font-weight-medium);
-	}
-
-	.toggle-label {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-		cursor: pointer;
-	}
-
-	.toggle-input {
-		accent-color: var(--color-accent);
-	}
-
-	.toggle-text {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-	}
-
-	.skill-actions {
-		display: flex;
-		gap: var(--spacing-sm);
-		justify-content: flex-end;
-		padding-top: var(--spacing-md);
-		border-top: 1px solid var(--color-border);
-	}
-
-	.skill-actions :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
+	.entity-row:hover .entity-actions,
+	.entity-row:focus-within .entity-actions {
+		opacity: 1;
 	}
 
 	@media (max-width: 768px) {
-		.skill-grid {
-			grid-template-columns: 1fr;
-		}
-
 		.list-filters {
 			flex-direction: column;
-			max-width: none;
 		}
 
-		.list-filters :global(> *) {
-			flex: 1 !important;
+		.entity-actions {
+			opacity: 1;
 		}
 	}
 </style>

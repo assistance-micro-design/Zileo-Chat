@@ -4,9 +4,9 @@
   VersionsHistoryModal — lists previous versions of a prompt or skill,
   previews their content, and restores them with a single click.
 
-  Used by PromptForm and SkillForm in `edit` mode. The version snapshot is
-  taken automatically on every update_prompt/update_skill on the backend, so
-  the list reflects the full edit history.
+  Opened from the prompt/skill list rows. The version snapshot is taken
+  automatically on every update_prompt/update_skill on the backend, so the
+  list reflects the full edit history.
 -->
 
 <script lang="ts">
@@ -15,6 +15,7 @@
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Button, Badge, DeleteConfirmModal } from '$lib/components/ui';
+	import { Eye, RotateCcw, Trash2 } from '@lucide/svelte';
 	import type { PromptVersion, PromptVersionSummary } from '$types/prompt_version';
 	import type { SkillVersion, SkillVersionSummary } from '$types/skill_version';
 
@@ -28,7 +29,7 @@
 		onclose: () => void;
 		/**
 		 * Called after a successful restore or delete so the parent can refresh
-		 * (e.g. reload the version count badge or the current content).
+		 * (e.g. reload the list or the current content).
 		 */
 		onchanged?: () => void;
 	}
@@ -50,6 +51,11 @@
 	);
 	const deleteCmd = $derived(kind === 'prompt' ? 'delete_prompt_version' : 'delete_skill_version');
 	const idParam = $derived(kind === 'prompt' ? 'promptId' : 'skillId');
+
+	/** Highest version number, badged on the brand color (older ones stay neutral). */
+	const latestVersion = $derived(
+		versions.length > 0 ? Math.max(...versions.map((v) => v.version)) : 0
+	);
 
 	async function loadVersions() {
 		loading = true;
@@ -150,41 +156,49 @@
 				<p class="hint">{$i18n('versions_empty')}</p>
 			{:else}
 				<div class="layout">
-					<ul class="versions-list">
+					<ul class="versions-list" role="list">
 						{#each versions as v (v.id)}
-							<li class="version-row">
-								<div class="version-meta">
-									<Badge variant="primary">v{v.version}</Badge>
-									<span class="who">{v.edited_by}</span>
-									<span class="when">{new Date(v.edited_at).toLocaleString()}</span>
+							<li class="entity-row">
+								<Badge variant={v.version === latestVersion ? 'primary' : 'neutral'}>
+									v{v.version}
+								</Badge>
+								<div class="entity-main">
+									<strong class="entity-title">{v.edit_summary || `v${v.version}`}</strong>
+									<span class="entity-meta">
+										{new Date(v.edited_at).toLocaleString()} — {v.edited_by}
+									</span>
 								</div>
-								{#if v.edit_summary}
-									<p class="summary">{v.edit_summary}</p>
-								{/if}
-								<div class="actions">
-									<Button type="button" variant="ghost" size="sm" onclick={() => loadPreview(v.id)}>
-										{$i18n('versions_view')}
+								<div class="entity-actions">
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										onclick={() => loadPreview(v.id)}
+										ariaLabel="{$i18n('versions_view')} v{v.version}"
+									>
+										<Eye size={14} />
 									</Button>
 									<Button
 										type="button"
-										variant="primary"
+										variant="ghost"
 										size="sm"
 										disabled={restoring || deleting}
 										onclick={() => restoreVersion(v.id)}
+										ariaLabel="{$i18n('versions_restore')} v{v.version}"
 									>
-										{$i18n('versions_restore')}
+										<RotateCcw size={14} />
 									</Button>
 									<Button
 										type="button"
-										variant="danger"
+										variant="ghost"
 										size="sm"
 										disabled={deleting || restoring || versions.length <= 1}
 										onclick={() => requestDelete(v.id, v.version)}
 										ariaLabel={versions.length <= 1
 											? $i18n('versions_delete_blocked_last')
-											: $i18n('versions_delete')}
+											: `${$i18n('versions_delete')} v${v.version}`}
 									>
-										{$i18n('versions_delete')}
+										<Trash2 size={14} />
 									</Button>
 								</div>
 							</li>
@@ -207,6 +221,12 @@
 				</div>
 			{/if}
 		</div>
+
+		<footer class="modal-foot">
+			<Button type="button" variant="ghost" onclick={onclose}>
+				{$i18n('common_close')}
+			</Button>
+		</footer>
 	</div>
 </div>
 
@@ -223,12 +243,10 @@
 />
 
 <style>
-	/* Stacked above the parent Modal's backdrop (--z-index-modal-backdrop = 1040)
-	   and content (--z-index-modal = 1050) since this dialog is rendered nested
-	   inside an already-open Modal (PromptSettings/SkillSettings). The delete
-	   confirmation opened from here is nested one level deeper again, so it uses
-	   the Modal `elevated` prop (--z-index-modal-nested = 1065) to stack above
-	   this backdrop. */
+	/* Stacked above popover-level overlays so this dialog reads on top of the
+	   settings page. The delete confirmation opened from here is nested one
+	   level deeper again, so it uses the Modal `elevated` prop
+	   (--z-index-modal-nested) to stack above this backdrop. */
 	.versions-modal-backdrop {
 		position: fixed;
 		inset: 0;
@@ -240,8 +258,8 @@
 		padding: var(--spacing-lg);
 	}
 	.versions-modal-panel {
-		background: var(--color-bg-primary);
-		color: var(--color-text);
+		background: var(--surface-1);
+		color: var(--color-text-primary);
 		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-xl);
 		box-shadow: var(--shadow-xl);
@@ -255,13 +273,13 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0.75rem 1rem;
-		border-bottom: 1px solid var(--color-border);
-		background: var(--color-bg-secondary);
+		padding: var(--spacing-md) var(--spacing-lg);
+		border-bottom: 1px solid var(--color-border-light);
 	}
 	.modal-head h3 {
 		margin: 0;
 		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-semibold);
 	}
 	.close {
 		background: none;
@@ -272,11 +290,20 @@
 		cursor: pointer;
 	}
 	.modal-body {
-		padding: 0.75rem 1rem;
+		padding: var(--spacing-md) var(--spacing-lg);
 		overflow: auto;
+		flex: 1;
+	}
+	.modal-foot {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-md) var(--spacing-lg);
+		border-top: 1px solid var(--color-border-light);
+		background: var(--surface-2);
 	}
 	.hint {
-		color: var(--color-text-muted);
+		color: var(--color-text-secondary);
 	}
 	.error {
 		color: var(--color-error);
@@ -284,7 +311,7 @@
 	.layout {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-		gap: 1rem;
+		gap: var(--spacing-md);
 	}
 	.versions-list {
 		list-style: none;
@@ -292,38 +319,40 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
 	}
-	.version-row {
-		border: 1px solid var(--color-border);
-		border-radius: 6px;
-		padding: 0.5rem 0.75rem;
-	}
-	.version-meta {
+	.entity-row {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
+		gap: var(--spacing-md);
+		padding: var(--spacing-md) 0;
+		border-bottom: 1px solid var(--color-border-light);
 	}
-	.who {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
+	.entity-row:last-child {
+		border-bottom: none;
 	}
-	.when {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-	}
-	.summary {
-		margin: 0.25rem 0 0.5rem;
-	}
-	.actions {
+	.entity-main {
+		flex: 1;
+		min-width: 0;
 		display: flex;
-		gap: 0.5rem;
+		flex-direction: column;
+		gap: 1px;
+	}
+	.entity-title {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+	}
+	.entity-meta {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+	}
+	.entity-actions {
+		display: flex;
+		gap: var(--spacing-xs);
+		flex-shrink: 0;
 	}
 	.preview {
 		border: 1px solid var(--color-border);
-		border-radius: 6px;
+		border-radius: var(--border-radius-md);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -332,13 +361,13 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 0.5rem 0.75rem;
-		border-bottom: 1px solid var(--color-border);
-		background: var(--color-surface-alt);
+		padding: var(--spacing-sm) var(--spacing-md);
+		border-bottom: 1px solid var(--color-border-light);
+		background: var(--surface-2);
 	}
 	pre {
 		margin: 0;
-		padding: 0.75rem;
+		padding: var(--spacing-md);
 		white-space: pre-wrap;
 		font-size: var(--font-size-sm);
 		overflow: auto;

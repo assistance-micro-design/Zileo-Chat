@@ -18,15 +18,15 @@
 Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
-PromptList - Displays prompts in a grid of cards.
-Shows prompt summary with actions for edit and delete.
+PromptList - Displays prompts as compact entity rows inside a single card.
+Row actions (edit, version history, delete) reveal on hover or keyboard focus.
 -->
 
 <script lang="ts">
 	import type { PromptSummary, PromptCategory } from '$types/prompt';
 	import { PROMPT_CATEGORY_I18N_KEYS } from '$types/prompt';
 	import { Card, Badge, Button, StatusIndicator, Input, Select } from '$lib/components/ui';
-	import { FileText, Edit, Trash2, Variable } from '@lucide/svelte';
+	import { FileText, BookOpen, Search, Pencil, History, Trash2 } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 
 	/**
@@ -39,11 +39,13 @@ Shows prompt summary with actions for edit and delete.
 		loading: boolean;
 		/** Edit callback */
 		onedit: (promptId: string) => void;
+		/** Version history callback */
+		onhistory: (promptId: string) => void;
 		/** Delete callback */
 		ondelete: (promptId: string) => void;
 	}
 
-	let { prompts, loading, onedit, ondelete }: Props = $props();
+	let { prompts, loading, onedit, onhistory, ondelete }: Props = $props();
 
 	// Filter state
 	let searchQuery = $state('');
@@ -103,20 +105,38 @@ Shows prompt summary with actions for edit and delete.
 	function getCategoryVariant(category: PromptCategory): 'primary' | 'warning' {
 		return category === 'system' ? 'warning' : 'primary';
 	}
+
+	/**
+	 * Builds the meta line: description · variable count · last update
+	 */
+	function metaLine(prompt: PromptSummary): string {
+		const description = prompt.description || t('prompts_no_description');
+		const variables = (
+			prompt.variables_count !== 1
+				? t('prompts_placeholder_count_plural')
+				: t('prompts_placeholder_count')
+		).replace('{count}', String(prompt.variables_count));
+		const updated = `${t('prompts_updated')} ${formatDate(prompt.updated_at)}`;
+		return `${description} · ${variables} · ${updated}`;
+	}
 </script>
 
 <div class="prompt-list">
 	<!-- Filters -->
 	<div class="list-filters">
-		<Input
-			placeholder={$i18n('prompts_search_placeholder')}
-			value={searchQuery}
-			oninput={handleSearchInput}
-		/>
+		<div class="search-box">
+			<Search size={14} class="search-icon" />
+			<Input
+				placeholder={$i18n('prompts_search_placeholder')}
+				value={searchQuery}
+				oninput={handleSearchInput}
+			/>
+		</div>
 		<Select
 			value={categoryFilter}
 			onchange={(e) => (categoryFilter = e.currentTarget.value as PromptCategory | '')}
 			options={categoryOptions}
+			ariaLabel={$i18n('prompts_form_category_label')}
 		/>
 	</div>
 
@@ -149,62 +169,46 @@ Shows prompt summary with actions for edit and delete.
 			{/snippet}
 		</Card>
 	{:else}
-		<div class="prompt-grid">
+		<div class="entity-list">
 			{#each filteredPrompts as prompt (prompt.id)}
-				<Card>
-					{#snippet body()}
-						<div class="prompt-card">
-							<div class="prompt-header">
-								<div class="prompt-name-row">
-									<FileText size={20} class="prompt-icon" />
-									<h4 class="prompt-name">{prompt.name}</h4>
-								</div>
-								<Badge variant={getCategoryVariant(prompt.category)}>
-									{$i18n(PROMPT_CATEGORY_I18N_KEYS[prompt.category])}
-								</Badge>
-							</div>
-
-							<p class="prompt-description">
-								{prompt.description || $i18n('prompts_no_description')}
-							</p>
-
-							<div class="prompt-details">
-								<div class="detail-row">
-									<span class="detail-label">
-										<Variable size={14} />
-										{$i18n('prompts_variables')}
-									</span>
-									<span class="detail-value">
-										{prompt.variables_count !== 1
-											? $i18n('prompts_placeholder_count_plural').replace(
-													'{count}',
-													String(prompt.variables_count)
-												)
-											: $i18n('prompts_placeholder_count').replace(
-													'{count}',
-													String(prompt.variables_count)
-												)}
-									</span>
-								</div>
-								<div class="detail-row">
-									<span class="detail-label">{$i18n('prompts_updated')}</span>
-									<span class="detail-value">{formatDate(prompt.updated_at)}</span>
-								</div>
-							</div>
-
-							<div class="prompt-actions">
-								<Button variant="ghost" size="sm" onclick={() => onedit(prompt.id)}>
-									<Edit size={16} />
-									<span>{$i18n('common_edit')}</span>
-								</Button>
-								<Button variant="danger" size="sm" onclick={() => ondelete(prompt.id)}>
-									<Trash2 size={16} />
-									<span>{$i18n('common_delete')}</span>
-								</Button>
-							</div>
-						</div>
-					{/snippet}
-				</Card>
+				<div class="entity-row">
+					<BookOpen size={20} class="entity-icon" />
+					<div class="entity-main">
+						<span class="entity-title">
+							<strong>{prompt.name}</strong>
+							<Badge variant={getCategoryVariant(prompt.category)}>
+								{$i18n(PROMPT_CATEGORY_I18N_KEYS[prompt.category])}
+							</Badge>
+						</span>
+						<span class="entity-meta">{metaLine(prompt)}</span>
+					</div>
+					<div class="entity-actions">
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={() => onedit(prompt.id)}
+							ariaLabel="{$i18n('common_edit')}: {prompt.name}"
+						>
+							<Pencil size={14} />
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={() => onhistory(prompt.id)}
+							ariaLabel="{$i18n('versions_history_button')}: {prompt.name}"
+						>
+							<History size={14} />
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={() => ondelete(prompt.id)}
+							ariaLabel="{$i18n('common_delete')}: {prompt.name}"
+						>
+							<Trash2 size={14} />
+						</Button>
+					</div>
+				</div>
 			{/each}
 		</div>
 	{/if}
@@ -214,22 +218,33 @@ Shows prompt summary with actions for edit and delete.
 	.prompt-list {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-lg);
+		gap: var(--spacing-md);
 	}
 
 	.list-filters {
 		display: flex;
-		gap: var(--spacing-md);
-		max-width: 500px;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
 	}
 
-	.list-filters :global(> *:first-child) {
-		flex: 2;
-	}
-
-	.list-filters :global(> *:last-child) {
+	.search-box {
+		position: relative;
 		flex: 1;
-		min-width: 150px;
+		min-width: 240px;
+	}
+
+	.search-box :global(.search-icon) {
+		position: absolute;
+		left: 10px;
+		top: 50%;
+		transform: translateY(-50%);
+		color: var(--color-text-tertiary);
+		z-index: 1;
+		pointer-events: none;
+	}
+
+	.search-box :global(input) {
+		padding-left: 2rem;
 	}
 
 	.loading-state {
@@ -268,103 +283,79 @@ Shows prompt summary with actions for edit and delete.
 		line-height: var(--line-height-relaxed);
 	}
 
-	.prompt-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-		gap: var(--spacing-lg);
-		contain: layout style; /* Isolate layout recalculations */
-	}
-
-	.prompt-card {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
-	.prompt-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-	}
-
-	.prompt-name-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-	}
-
-	.prompt-name-row :global(.prompt-icon) {
-		color: var(--color-accent-deep);
-	}
-
-	.prompt-name {
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-	}
-
-	.prompt-description {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin: 0;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
+	.entity-list {
+		background: var(--surface-1);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-lg);
+		box-shadow: var(--shadow-sm);
 		overflow: hidden;
-		line-height: var(--line-height-relaxed);
 	}
 
-	.prompt-details {
+	.entity-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
+		padding: var(--spacing-md);
+		border-bottom: 1px solid var(--color-border-light);
+	}
+
+	.entity-row:last-child {
+		border-bottom: none;
+	}
+
+	.entity-row :global(.entity-icon) {
+		color: var(--color-accent-deep);
+		flex-shrink: 0;
+	}
+
+	.entity-main {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-xs);
+		gap: 1px;
 	}
 
-	.detail-row {
+	.entity-title {
 		display: flex;
-		justify-content: space-between;
 		align-items: center;
+		gap: var(--spacing-xs);
+		flex-wrap: wrap;
+	}
+
+	.entity-title strong {
 		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
 	}
 
-	.detail-label {
+	.entity-meta {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.entity-actions {
 		display: flex;
-		align-items: center;
 		gap: var(--spacing-xs);
-		color: var(--color-text-secondary);
+		flex-shrink: 0;
+		opacity: 0;
+		transition: opacity var(--transition-fast);
 	}
 
-	.detail-value {
-		font-weight: var(--font-weight-medium);
-	}
-
-	.prompt-actions {
-		display: flex;
-		gap: var(--spacing-sm);
-		justify-content: flex-end;
-		padding-top: var(--spacing-md);
-		border-top: 1px solid var(--color-border);
-	}
-
-	.prompt-actions :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
+	.entity-row:hover .entity-actions,
+	.entity-row:focus-within .entity-actions {
+		opacity: 1;
 	}
 
 	@media (max-width: 768px) {
-		.prompt-grid {
-			grid-template-columns: 1fr;
-		}
-
 		.list-filters {
 			flex-direction: column;
-			max-width: none;
 		}
 
-		.list-filters :global(> *) {
-			flex: 1 !important;
+		.entity-actions {
+			opacity: 1;
 		}
 	}
 </style>

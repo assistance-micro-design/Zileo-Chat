@@ -17,12 +17,11 @@
 <!--
 SkillForm - Form component for creating and editing skills.
 Displays in a modal with markdown content editor.
+Version history is reached from the skill list rows, not from this form.
 -->
 
 <script lang="ts">
-	import { tauriInvoke } from '$lib/tauri';
-	import { Button, Input, Textarea, Select, Badge } from '$lib/components/ui';
-	import VersionsHistoryModal from '$lib/components/settings/versions/VersionsHistoryModal.svelte';
+	import { Button, Input, Textarea, Select } from '$lib/components/ui';
 	import type { Skill, SkillCreate, SkillCategory } from '$types/skill';
 	import { SKILL_CATEGORY_I18N_KEYS } from '$types/skill';
 	import type { AgentKind } from '$types/agent';
@@ -46,19 +45,6 @@ Displays in a modal with markdown content editor.
 
 	let { mode, skill = null, saving = false, onsave, oncancel }: Props = $props();
 
-	let showVersions = $state(false);
-	/** Number of historical versions for this skill; null while loading. */
-	let versionCount = $state<number | null>(null);
-
-	async function loadVersionCount(skillId: string): Promise<void> {
-		try {
-			const list = await tauriInvoke<Array<{ id: string }>>('list_skill_versions', { skillId });
-			versionCount = list.length;
-		} catch {
-			versionCount = null;
-		}
-	}
-
 	// Form state
 	let name = $state('');
 	let description = $state('');
@@ -75,16 +61,6 @@ Displays in a modal with markdown content editor.
 		category = skill?.category ?? 'custom';
 		content = skill?.content ?? '';
 		kind = skill?.kind ?? 'standard';
-	});
-
-	// Refresh the version count whenever the editing target changes or the
-	// history modal closes (a restore creates a new snapshot, bumping count).
-	$effect(() => {
-		if (mode === 'edit' && skill && !showVersions) {
-			void loadVersionCount(skill.id);
-		} else if (mode === 'create') {
-			versionCount = null;
-		}
 	});
 
 	// Derived state
@@ -130,37 +106,22 @@ Displays in a modal with markdown content editor.
 </script>
 
 <form class="skill-form" onsubmit={handleSubmit}>
-	<div class="form-field">
-		<Input
-			label={$i18n('skills_form_name_label')}
-			value={name}
-			oninput={(e) => (name = e.currentTarget.value)}
-			placeholder={$i18n('skills_form_name_placeholder')}
-			required
-			disabled={saving}
-		/>
-		<div class="field-info">
-			<span class="char-count">{name.length}/128</span>
+	<div class="form-row">
+		<div class="form-field mono-input">
+			<Input
+				label={$i18n('skills_form_name_label')}
+				value={name}
+				oninput={(e) => (name = e.currentTarget.value)}
+				placeholder={$i18n('skills_form_name_placeholder')}
+				required
+				disabled={saving}
+				help={$i18n('skills_form_name_help')}
+			/>
 			{#if name.trim().length > 0 && !nameValid}
 				<span class="validation-error">{$i18n('skills_form_name_invalid')}</span>
 			{/if}
 		</div>
-	</div>
 
-	<div class="form-field">
-		<Textarea
-			label={$i18n('skills_form_description_label')}
-			value={description}
-			oninput={(e) => (description = e.currentTarget.value)}
-			placeholder={$i18n('skills_form_description_placeholder')}
-			rows={2}
-			required
-			disabled={saving}
-		/>
-		<span class="char-count">{description.length}/500</span>
-	</div>
-
-	<div class="form-field">
 		<Select
 			label={$i18n('skills_form_category_label')}
 			value={category}
@@ -170,18 +131,25 @@ Displays in a modal with markdown content editor.
 		/>
 	</div>
 
-	<div class="form-field">
-		<Select
-			label={$i18n('skills_form_kind_label')}
-			value={kind}
-			onchange={(e) => (kind = e.currentTarget.value === 'kanban' ? 'kanban' : 'standard')}
-			options={kindOptions}
-			disabled={saving || mode === 'edit'}
-		/>
-		<span class="field-help">
-			{mode === 'edit' ? $i18n('skills_form_kind_locked') : $i18n('skills_form_kind_help')}
-		</span>
-	</div>
+	<Textarea
+		label={$i18n('skills_form_description_label')}
+		value={description}
+		oninput={(e) => (description = e.currentTarget.value)}
+		placeholder={$i18n('skills_form_description_placeholder')}
+		rows={2}
+		required
+		disabled={saving}
+		help={$i18n('skills_form_description_help')}
+	/>
+
+	<Select
+		label={$i18n('skills_form_kind_label')}
+		value={kind}
+		onchange={(e) => (kind = e.currentTarget.value === 'kanban' ? 'kanban' : 'standard')}
+		options={kindOptions}
+		disabled={saving || mode === 'edit'}
+		help={mode === 'edit' ? $i18n('skills_form_kind_locked') : $i18n('skills_form_kind_help')}
+	/>
 
 	<div class="form-field">
 		<Textarea
@@ -189,28 +157,15 @@ Displays in a modal with markdown content editor.
 			value={content}
 			oninput={(e) => (content = e.currentTarget.value)}
 			placeholder={$i18n('skills_form_content_placeholder')}
-			rows={20}
+			rows={6}
 			required
 			disabled={saving}
+			help={$i18n('skills_form_content_help')}
 		/>
 		<span class="char-count">{contentLength.toLocaleString()}/50,000</span>
 	</div>
 
 	<div class="form-actions">
-		{#if mode === 'edit' && skill}
-			<Button
-				type="button"
-				variant="ghost"
-				onclick={() => (showVersions = true)}
-				disabled={saving || versionCount === 0}
-				ariaLabel={$i18n('versions_history_button')}
-			>
-				{$i18n('versions_history_button')}
-				{#if versionCount !== null && versionCount > 0}
-					<Badge variant="primary">{versionCount}</Badge>
-				{/if}
-			</Button>
-		{/if}
 		<Button type="button" variant="ghost" onclick={handleCancel} disabled={saving}>
 			{$i18n('common_cancel')}
 		</Button>
@@ -224,15 +179,18 @@ Displays in a modal with markdown content editor.
 	</div>
 </form>
 
-{#if showVersions && skill}
-	<VersionsHistoryModal kind="skill" resourceId={skill.id} onclose={() => (showVersions = false)} />
-{/if}
-
 <style>
 	.skill-form {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
+	}
+
+	.form-row {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--spacing-md);
+		align-items: start;
 	}
 
 	.form-field {
@@ -241,21 +199,14 @@ Displays in a modal with markdown content editor.
 		gap: var(--spacing-xs);
 	}
 
-	.field-info {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
+	.mono-input :global(input) {
+		font-family: var(--font-mono);
 	}
 
 	.char-count {
 		font-size: var(--font-size-xs);
 		color: var(--color-text-tertiary);
 		text-align: right;
-	}
-
-	.field-help {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-tertiary);
 	}
 
 	.validation-error {
@@ -270,5 +221,11 @@ Displays in a modal with markdown content editor.
 		margin-top: var(--spacing-md);
 		padding-top: var(--spacing-md);
 		border-top: 1px solid var(--color-border);
+	}
+
+	@media (max-width: 640px) {
+		.form-row {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

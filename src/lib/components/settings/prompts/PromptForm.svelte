@@ -19,14 +19,14 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 PromptForm - Form component for creating and editing prompts.
-Displays in a modal with variable detection and preview.
+Displays in a modal with variable detection and skill-reference insertion.
+Version history is reached from the prompt list rows, not from this form.
 -->
 
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { tauriInvoke } from '$lib/tauri';
-	import { Button, Input, Textarea, Select, Badge } from '$lib/components/ui';
-	import VersionsHistoryModal from '$lib/components/settings/versions/VersionsHistoryModal.svelte';
+	import { Button, Input, Textarea, Select } from '$lib/components/ui';
 	import type { Prompt, PromptCreate, PromptCategory } from '$types/prompt';
 	import { PROMPT_CATEGORY_I18N_KEYS } from '$types/prompt';
 	import type { SkillSummary } from '$types/skill';
@@ -50,22 +50,6 @@ Displays in a modal with variable detection and preview.
 	}
 
 	let { mode, prompt = null, saving = false, onsave, oncancel }: Props = $props();
-
-	let showVersions = $state(false);
-	/** Number of historical versions for this prompt; null while loading. */
-	let versionCount = $state<number | null>(null);
-
-	async function loadVersionCount(promptId: string): Promise<void> {
-		try {
-			const list = await tauriInvoke<Array<{ id: string }>>('list_prompt_versions', {
-				promptId
-			});
-			versionCount = list.length;
-		} catch {
-			// Non-blocking: keep null so the badge stays hidden but the button works.
-			versionCount = null;
-		}
-	}
 
 	// Form state
 	let name = $state('');
@@ -95,16 +79,6 @@ Displays in a modal with variable detection and preview.
 		description = prompt?.description ?? '';
 		category = prompt?.category ?? 'custom';
 		content = prompt?.content ?? '';
-	});
-
-	// Refresh the version count whenever the editing target changes or the
-	// history modal closes (a restore creates a new snapshot, bumping count).
-	$effect(() => {
-		if (mode === 'edit' && prompt && !showVersions) {
-			void loadVersionCount(prompt.id);
-		} else if (mode === 'create') {
-			versionCount = null;
-		}
 	});
 
 	// Derived state
@@ -170,7 +144,7 @@ Displays in a modal with variable detection and preview.
 </script>
 
 <form class="prompt-form" onsubmit={handleSubmit}>
-	<div class="form-field">
+	<div class="form-row">
 		<Input
 			label={$i18n('prompts_form_name_label')}
 			value={name}
@@ -179,22 +153,7 @@ Displays in a modal with variable detection and preview.
 			required
 			disabled={saving}
 		/>
-		<span class="char-count">{name.length}/128</span>
-	</div>
 
-	<div class="form-field">
-		<Textarea
-			label={$i18n('prompts_form_description_label')}
-			value={description}
-			oninput={(e) => (description = e.currentTarget.value)}
-			placeholder={$i18n('prompts_form_description_placeholder')}
-			rows={2}
-			disabled={saving}
-		/>
-		<span class="char-count">{description.length}/1000</span>
-	</div>
-
-	<div class="form-field">
 		<Select
 			label={$i18n('prompts_form_category_label')}
 			value={category}
@@ -204,6 +163,15 @@ Displays in a modal with variable detection and preview.
 		/>
 	</div>
 
+	<Textarea
+		label={$i18n('prompts_form_description_label')}
+		value={description}
+		oninput={(e) => (description = e.currentTarget.value)}
+		placeholder={$i18n('prompts_form_description_placeholder')}
+		rows={2}
+		disabled={saving}
+	/>
+
 	<div class="form-field">
 		<Textarea
 			id={contentTextareaId}
@@ -211,13 +179,26 @@ Displays in a modal with variable detection and preview.
 			value={content}
 			oninput={(e) => (content = e.currentTarget.value)}
 			placeholder={$i18n('prompts_form_content_placeholder')}
-			rows={18}
+			rows={6}
 			required
 			disabled={saving}
+			help={$i18n('prompts_form_content_help')}
 		/>
 		<div class="content-meta">
-			{#if insertableSkills.length > 0}
-				<div class="skill-insert">
+			{#if detectedVariables.length > 0}
+				<span class="meta-label">{$i18n('prompts_detected_variables')}</span>
+				{#each detectedVariables as variable (variable)}
+					<span class="badge badge-primary mono-badge">{variable}</span>
+				{/each}
+			{/if}
+			{#if detectedSkills.length > 0}
+				<span class="meta-label">{$i18n('prompts_detected_skills')}</span>
+				{#each detectedSkills as skill (skill)}
+					<span class="badge badge-success mono-badge">{skill}</span>
+				{/each}
+			{/if}
+			<div class="meta-right">
+				{#if insertableSkills.length > 0}
 					<select
 						class="skill-select"
 						onchange={(e) => {
@@ -235,48 +216,13 @@ Displays in a modal with variable detection and preview.
 							<option value={skill.name}>{skill.name}</option>
 						{/each}
 					</select>
-				</div>
-			{/if}
-			<span class="char-count">{contentLength.toLocaleString()}/50,000</span>
+				{/if}
+				<span class="char-count">{contentLength.toLocaleString()}/50,000</span>
+			</div>
 		</div>
 	</div>
 
-	{#if detectedVariables.length > 0 || detectedSkills.length > 0}
-		<div class="variables-section">
-			{#if detectedVariables.length > 0}
-				<span class="variables-label">{$i18n('prompts_detected_variables')}</span>
-				<div class="variables-list">
-					{#each detectedVariables as variable (variable)}
-						<Badge variant="primary">{variable}</Badge>
-					{/each}
-				</div>
-			{/if}
-			{#if detectedSkills.length > 0}
-				<span class="variables-label">{$i18n('prompts_detected_skills')}</span>
-				<div class="variables-list">
-					{#each detectedSkills as skill (skill)}
-						<Badge variant="success">{skill}</Badge>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	{/if}
-
 	<div class="form-actions">
-		{#if mode === 'edit' && prompt}
-			<Button
-				type="button"
-				variant="ghost"
-				onclick={() => (showVersions = true)}
-				disabled={saving || versionCount === 0}
-				ariaLabel={$i18n('versions_history_button')}
-			>
-				{$i18n('versions_history_button')}
-				{#if versionCount !== null && versionCount > 0}
-					<Badge variant="primary">{versionCount}</Badge>
-				{/if}
-			</Button>
-		{/if}
 		<Button type="button" variant="ghost" onclick={handleCancel} disabled={saving}>
 			{$i18n('common_cancel')}
 		</Button>
@@ -290,19 +236,18 @@ Displays in a modal with variable detection and preview.
 	</div>
 </form>
 
-{#if showVersions && prompt}
-	<VersionsHistoryModal
-		kind="prompt"
-		resourceId={prompt.id}
-		onclose={() => (showVersions = false)}
-	/>
-{/if}
-
 <style>
 	.prompt-form {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
+	}
+
+	.form-row {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--spacing-md);
+		align-items: start;
 	}
 
 	.form-field {
@@ -314,19 +259,30 @@ Displays in a modal with variable detection and preview.
 	.content-meta {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
+		gap: var(--spacing-xs);
+		flex-wrap: wrap;
+	}
+
+	.meta-label {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+	}
+
+	.mono-badge {
+		font-family: var(--font-mono);
+		font-weight: var(--font-weight-medium);
+	}
+
+	.meta-right {
+		display: flex;
+		align-items: center;
 		gap: var(--spacing-sm);
+		margin-left: auto;
 	}
 
 	.char-count {
 		font-size: var(--font-size-xs);
 		color: var(--color-text-tertiary);
-		text-align: right;
-		margin-left: auto;
-	}
-
-	.skill-insert {
-		flex-shrink: 0;
 	}
 
 	.skill-select {
@@ -343,27 +299,6 @@ Displays in a modal with variable detection and preview.
 		border-color: var(--color-accent);
 	}
 
-	.variables-section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-md);
-	}
-
-	.variables-label {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		color: var(--color-text-secondary);
-	}
-
-	.variables-list {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--spacing-sm);
-	}
-
 	.form-actions {
 		display: flex;
 		justify-content: flex-end;
@@ -371,5 +306,11 @@ Displays in a modal with variable detection and preview.
 		margin-top: var(--spacing-md);
 		padding-top: var(--spacing-md);
 		border-top: 1px solid var(--color-border);
+	}
+
+	@media (max-width: 640px) {
+		.form-row {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>
