@@ -21,6 +21,7 @@
 	 */
 	import { i18n } from '$lib/i18n';
 	import { localeStore } from '$lib/stores/locale';
+	import { Globe } from '@lucide/svelte';
 	import type { Locale } from '$types/i18n';
 
 	interface Props {
@@ -38,22 +39,26 @@
 	<h1 id="onboarding-title" class="step-title">{$i18n('onboarding_language_title')}</h1>
 	<p class="step-description">{$i18n('onboarding_language_description')}</p>
 
-	<div class="language-options">
+	<div class="choice-grid">
 		<button
-			class="language-button"
+			type="button"
+			class="choice-card"
+			class:selected={$localeStore === 'en'}
+			aria-pressed={$localeStore === 'en'}
 			onclick={() => selectLanguage('en')}
-			aria-label={$i18n('onboarding_language_english')}
 		>
-			<span class="flag">EN</span>
+			<Globe size={24} aria-hidden="true" />
 			<span class="label">{$i18n('onboarding_language_english')}</span>
 		</button>
 
 		<button
-			class="language-button"
+			type="button"
+			class="choice-card"
+			class:selected={$localeStore === 'fr'}
+			aria-pressed={$localeStore === 'fr'}
 			onclick={() => selectLanguage('fr')}
-			aria-label={$i18n('onboarding_language_french')}
 		>
-			<span class="flag">FR</span>
+			<Globe size={24} aria-hidden="true" />
 			<span class="label">{$i18n('onboarding_language_french')}</span>
 		</button>
 	</div>
@@ -81,40 +86,47 @@
 		max-width: 400px;
 	}
 
-	.language-options {
-		display: flex;
-		gap: var(--spacing-lg);
+	.choice-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--spacing-md);
+		width: 100%;
+		max-width: 420px;
 		margin-top: var(--spacing-md);
 	}
 
-	.language-button {
+	.choice-card {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-xl);
-		background: var(--color-bg-secondary);
+		padding: var(--spacing-lg);
+		background: var(--surface-1);
 		border: 2px solid var(--color-border);
 		border-radius: var(--border-radius-lg);
-		cursor: pointer;
-		transition: all 0.2s ease;
-		min-width: 120px;
-	}
-
-	.language-button:hover {
-		border-color: var(--color-primary);
-		background: var(--color-bg-hover);
-	}
-
-	.language-button:focus-visible {
-		outline: 2px solid var(--color-primary);
-		outline-offset: 2px;
-	}
-
-	.flag {
-		font-size: 2rem;
-		font-weight: var(--font-weight-bold);
 		color: var(--color-text-primary);
+		cursor: pointer;
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-medium);
+		transition:
+			border-color 0.2s ease,
+			box-shadow 0.2s ease,
+			background-color 0.2s ease;
+	}
+
+	.choice-card:hover {
+		border-color: var(--color-accent-hover);
+	}
+
+	.choice-card.selected {
+		border-color: var(--color-accent-deep);
+		background: var(--color-accent-light);
+		box-shadow: var(--glow-accent-soft);
+	}
+
+	.choice-card:focus-visible {
+		outline: 2px solid var(--color-accent-deep);
+		outline-offset: 2px;
 	}
 
 	.label {

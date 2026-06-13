@@ -47,7 +47,7 @@
 		MCPAdditions
 	} from '$types/import-export';
 	import { MAX_IMPORT_FILE_SIZE } from '$types/import-export';
-	import { Upload, CircleCheckBig, TriangleAlert, CircleAlert } from '@lucide/svelte';
+	import { Upload, CircleCheckBig, TriangleAlert, CircleAlert, Info } from '@lucide/svelte';
 
 	interface Props {
 		onNext: () => void;
@@ -225,7 +225,10 @@
 								>
 							{/if}
 						</div>
-						<p class="result-secrets">{$i18n('onboarding_import_secrets_notice')}</p>
+						<div class="secrets-notice">
+							<Info size={16} aria-hidden="true" />
+							<span>{$i18n('onboarding_import_secrets_notice')}</span>
+						</div>
 					</div>
 				{/snippet}
 			</Card>
@@ -338,12 +341,24 @@
 		gap: var(--spacing-xs);
 	}
 
-	.result-secrets {
-		font-size: var(--font-size-sm);
+	.secrets-notice {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-sm) var(--spacing-md);
+		border-radius: var(--border-radius-md);
+		background: var(--color-info-light);
 		color: var(--color-text-secondary);
-		margin: 0;
+		font-size: var(--font-size-sm);
+		text-align: left;
 		max-width: 460px;
 		line-height: 1.5;
+	}
+
+	.secrets-notice :global(svg) {
+		flex-shrink: 0;
+		margin-top: 2px;
+		color: var(--color-info);
 	}
 
 	.import-notice {

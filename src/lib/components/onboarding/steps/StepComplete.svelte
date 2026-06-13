@@ -62,19 +62,20 @@
 	}
 
 	.success-icon {
-		width: 80px;
-		height: 80px;
+		width: 76px;
+		height: 76px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--color-success-bg);
+		background: var(--color-success-light);
 		border-radius: 50%;
 		color: var(--color-success);
+		box-shadow: 0 0 24px rgba(74, 222, 128, 0.4);
 	}
 
 	.success-icon svg {
-		width: 40px;
-		height: 40px;
+		width: 36px;
+		height: 36px;
 	}
 
 	.step-title {

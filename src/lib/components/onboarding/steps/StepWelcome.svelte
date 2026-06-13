@@ -29,9 +29,7 @@
 </script>
 
 <div class="step-welcome" data-step="welcome">
-	<div class="logo-container">
-		<div class="logo">Z</div>
-	</div>
+	<span class="hero-dot" aria-hidden="true"></span>
 
 	<h1 class="step-title">{$i18n('onboarding_welcome_title')}</h1>
 	<p class="step-description">{$i18n('onboarding_welcome_description')}</p>
@@ -46,22 +44,13 @@
 		gap: var(--spacing-lg);
 	}
 
-	.logo-container {
+	.hero-dot {
+		width: 76px;
+		height: 76px;
+		border-radius: 22px;
+		background: var(--gradient-brand);
+		box-shadow: var(--glow-accent);
 		margin-bottom: var(--spacing-md);
-	}
-
-	.logo {
-		width: 80px;
-		height: 80px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-		border-radius: var(--border-radius-xl);
-		font-size: 2.5rem;
-		font-weight: var(--font-weight-bold);
-		color: white;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 	}
 
 	.step-title {

@@ -40,6 +40,8 @@
 	<div class="theme-options">
 		<button
 			class="theme-button"
+			class:selected={$theme === 'light'}
+			aria-pressed={$theme === 'light'}
 			data-theme-option="light"
 			onclick={() => selectTheme('light')}
 			aria-label={$i18n('onboarding_theme_light')}
@@ -56,6 +58,8 @@
 
 		<button
 			class="theme-button"
+			class:selected={$theme === 'dark'}
+			aria-pressed={$theme === 'dark'}
 			data-theme-option="dark"
 			onclick={() => selectTheme('dark')}
 			aria-label={$i18n('onboarding_theme_dark')}
@@ -106,19 +110,28 @@
 		align-items: center;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
+		background: var(--surface-1);
 		border: 2px solid var(--color-border);
 		border-radius: var(--border-radius-lg);
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition:
+			border-color 0.2s ease,
+			box-shadow 0.2s ease,
+			background-color 0.2s ease;
 	}
 
 	.theme-button:hover {
-		border-color: var(--color-primary);
+		border-color: var(--color-accent-hover);
+	}
+
+	.theme-button.selected {
+		border-color: var(--color-accent-deep);
+		background: var(--color-accent-light);
+		box-shadow: var(--glow-accent-soft);
 	}
 
 	.theme-button:focus-visible {
-		outline: 2px solid var(--color-primary);
+		outline: 2px solid var(--color-accent-deep);
 		outline-offset: 2px;
 	}
 

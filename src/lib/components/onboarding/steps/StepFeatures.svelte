@@ -34,20 +34,34 @@
 	interface FeatureCard {
 		key: string;
 		icon: Component;
-		/** Execution-channel token suffix tinting the card's icon pill. */
-		channel: 'agent' | 'tasks' | 'thinking' | 'tool';
+		/**
+		 * Execution-channel token suffix tinting the card's icon pill.
+		 * 'accent' is not a channel but the brand turquoise (voice dictation).
+		 */
+		channel: 'agent' | 'tool' | 'thinking' | 'accent';
 	}
 
 	const features: FeatureCard[] = [
 		{ key: 'chat', icon: MessageSquare, channel: 'agent' },
-		{ key: 'kanban', icon: LayoutDashboard, channel: 'tasks' },
+		{ key: 'kanban', icon: LayoutDashboard, channel: 'tool' },
 		{ key: 'memory', icon: Brain, channel: 'thinking' },
-		{ key: 'voice', icon: Mic, channel: 'tool' }
+		{ key: 'voice', icon: Mic, channel: 'accent' }
 	];
 
 	/** Staggered per-card entrance delay (ms), disabled under reduced-motion. */
 	function cardDelay(index: number): number {
 		return prefersReducedMotion() ? 0 : index * 80;
+	}
+
+	/**
+	 * Inline CSS custom properties tinting a card's icon pill. The brand
+	 * 'accent' has no `--channel-*` token, so it maps to the accent pair.
+	 */
+	function iconTint(channel: FeatureCard['channel']): string {
+		if (channel === 'accent') {
+			return '--feat-channel: var(--color-accent-deep); --feat-channel-soft: var(--color-accent-light)';
+		}
+		return `--feat-channel: var(--channel-${channel}); --feat-channel-soft: var(--channel-${channel}-soft)`;
 	}
 </script>
 
@@ -60,14 +74,16 @@
 			{@const Icon = feature.icon}
 			<div
 				class="feature-card"
-				style="--feat-channel: var(--channel-{feature.channel}); --feat-channel-soft: var(--channel-{feature.channel}-soft)"
+				style={iconTint(feature.channel)}
 				in:fly={{ y: 16, duration: motionDuration(300), delay: cardDelay(index) }}
 			>
 				<div class="feature-icon">
 					<Icon size={20} aria-hidden="true" />
 				</div>
-				<h3 class="feature-name">{$i18n(`onboarding_features_${feature.key}_title`)}</h3>
-				<p class="feature-text">{$i18n(`onboarding_features_${feature.key}_description`)}</p>
+				<div class="feature-body">
+					<h3 class="feature-name">{$i18n(`onboarding_features_${feature.key}_title`)}</h3>
+					<p class="feature-text">{$i18n(`onboarding_features_${feature.key}_description`)}</p>
+				</div>
 			</div>
 		{/each}
 	</div>
@@ -106,19 +122,26 @@
 
 	.feature-card {
 		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--spacing-xs);
+		flex-direction: row;
+		align-items: flex-start;
+		gap: var(--spacing-md);
 		padding: var(--spacing-md);
 		background: var(--surface-1);
 		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-lg);
 		box-shadow: var(--shadow-xs);
-		text-align: center;
+		text-align: left;
 		transition:
 			transform 0.2s ease,
 			box-shadow 0.2s ease,
 			border-color 0.2s ease;
+	}
+
+	.feature-body {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
 	}
 
 	.feature-card:hover {
@@ -142,12 +165,12 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		flex-shrink: 0;
 		width: 36px;
 		height: 36px;
 		border-radius: 10px;
 		background: var(--feat-channel-soft);
 		color: var(--feat-channel);
-		margin-bottom: var(--spacing-xs);
 	}
 
 	.feature-name {

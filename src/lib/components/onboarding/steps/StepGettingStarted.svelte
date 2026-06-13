@@ -155,7 +155,7 @@
 		align-items: center;
 		gap: var(--spacing-md);
 		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
+		background: var(--surface-1);
 		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-lg);
 		transition:
@@ -167,8 +167,8 @@
 	.checklist-item:hover,
 	.checklist-item:focus-within {
 		transform: translateY(-2px);
-		border-color: var(--color-primary);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+		border-color: var(--color-accent-hover);
+		box-shadow: var(--glow-accent-soft);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -190,10 +190,10 @@
 		width: 28px;
 		height: 28px;
 		border-radius: 50%;
-		background: var(--color-primary);
-		color: white;
+		background: var(--gradient-brand);
+		color: var(--color-accent-text);
 		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
+		font-weight: var(--font-weight-bold);
 	}
 
 	.checklist-body {
@@ -208,7 +208,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
-		color: var(--color-primary);
+		color: var(--color-accent-deep);
 	}
 
 	.checklist-title {
@@ -233,9 +233,9 @@
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
-		color: var(--color-primary);
+		color: var(--color-accent-deep);
 		background: transparent;
-		border: 1px solid var(--color-primary);
+		border: 1px solid var(--color-accent-deep);
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
 		transition:
@@ -245,12 +245,12 @@
 	}
 
 	.checklist-action:hover {
-		background: var(--color-primary);
-		color: white;
+		background: var(--color-accent-deep);
+		color: var(--color-accent-text);
 	}
 
 	.checklist-action:focus-visible {
-		outline: 2px solid var(--color-primary);
+		outline: 2px solid var(--color-accent-deep);
 		outline-offset: 2px;
 	}
 
@@ -276,7 +276,7 @@
 	}
 
 	.finish-link:focus-visible {
-		outline: 2px solid var(--color-primary);
+		outline: 2px solid var(--color-accent-deep);
 		outline-offset: 2px;
 		border-radius: var(--border-radius-sm);
 	}

@@ -28,7 +28,7 @@
 	import { openExternalUrl } from '$lib/tauri';
 	import { isAllowedScheme } from '$lib/utils/url';
 	import { motionDuration } from '$lib/utils/motion';
-	import { CircleCheck } from '@lucide/svelte';
+	import { CircleCheck, KeyRound, Zap } from '@lucide/svelte';
 
 	const MISTRAL_CONSOLE_URL = 'https://console.mistral.ai';
 
@@ -128,6 +128,10 @@
 </script>
 
 <div class="step-apikey" data-step="api_key">
+	<span class="apikey-icon" aria-hidden="true">
+		<KeyRound size={26} />
+	</span>
+
 	<h1 class="step-title">{$i18n('onboarding_apikey_title')}</h1>
 	<p class="step-description">{$i18n('onboarding_apikey_description')}</p>
 
@@ -149,15 +153,21 @@
 
 		<div class="button-row">
 			<Button
-				variant="secondary"
+				variant="outline"
 				onclick={testConnection}
 				disabled={!apiKey.trim() || $onboardingLoading}
 			>
-				{#if $onboardingLoading}
-					{$i18n('onboarding_apikey_testing')}
-				{:else}
-					{$i18n('onboarding_apikey_test')}
-				{/if}
+				<Zap size={16} aria-hidden="true" />
+				<span>
+					{#if $onboardingLoading}
+						{$i18n('onboarding_apikey_testing')}
+					{:else}
+						{$i18n('onboarding_apikey_test')}
+					{/if}
+				</span>
+			</Button>
+			<Button variant="ghost" onclick={handleSkip}>
+				{$i18n('onboarding_apikey_skip')}
 			</Button>
 		</div>
 
@@ -174,10 +184,6 @@
 			</div>
 		{/if}
 	</div>
-
-	<button class="skip-step" onclick={handleSkip}>
-		{$i18n('onboarding_apikey_skip')}
-	</button>
 </div>
 
 <style>
@@ -187,6 +193,17 @@
 		align-items: center;
 		gap: var(--spacing-lg);
 		width: 100%;
+	}
+
+	.apikey-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 52px;
+		height: 52px;
+		border-radius: 14px;
+		background: var(--color-accent-light);
+		color: var(--color-accent-deep);
 	}
 
 	.step-title {
@@ -218,7 +235,7 @@
 	}
 
 	.help-text a {
-		color: var(--color-primary);
+		color: var(--color-accent-deep);
 		text-decoration: none;
 	}
 
@@ -229,6 +246,8 @@
 	.button-row {
 		display: flex;
 		justify-content: center;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
 	}
 
 	.status {
@@ -250,25 +269,5 @@
 	.status.error {
 		background: var(--color-error-bg);
 		color: var(--color-error);
-	}
-
-	.skip-step {
-		background: none;
-		border: none;
-		color: var(--color-text-secondary);
-		font-size: var(--font-size-sm);
-		cursor: pointer;
-		padding: var(--spacing-xs) var(--spacing-sm);
-		transition: color 0.2s ease;
-	}
-
-	.skip-step:hover {
-		color: var(--color-text-primary);
-	}
-
-	.skip-step:focus-visible {
-		outline: 2px solid var(--color-primary);
-		outline-offset: 2px;
-		border-radius: var(--border-radius-sm);
 	}
 </style>
