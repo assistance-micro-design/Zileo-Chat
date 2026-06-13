@@ -19,7 +19,7 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 PromptList - Displays prompts as compact entity rows inside a single card.
-Row actions (edit, version history, delete) reveal on hover or keyboard focus.
+Row actions (edit, version history, delete) are always visible.
 -->
 
 <script lang="ts">
@@ -340,22 +340,11 @@ Row actions (edit, version history, delete) reveal on hover or keyboard focus.
 		display: flex;
 		gap: var(--spacing-xs);
 		flex-shrink: 0;
-		opacity: 0;
-		transition: opacity var(--transition-fast);
-	}
-
-	.entity-row:hover .entity-actions,
-	.entity-row:focus-within .entity-actions {
-		opacity: 1;
 	}
 
 	@media (max-width: 768px) {
 		.list-filters {
 			flex-direction: column;
-		}
-
-		.entity-actions {
-			opacity: 1;
 		}
 	}
 </style>

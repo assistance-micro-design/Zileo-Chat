@@ -17,7 +17,7 @@
 <!--
 SkillList - Displays skills as compact entity rows inside a single card.
 Each row carries the category / target-kind badges and the enable switch;
-actions (edit, version history, delete) reveal on hover or keyboard focus.
+actions (edit, version history, delete) are always visible.
 -->
 
 <script lang="ts">
@@ -351,22 +351,11 @@ actions (edit, version history, delete) reveal on hover or keyboard focus.
 		display: flex;
 		gap: var(--spacing-xs);
 		flex-shrink: 0;
-		opacity: 0;
-		transition: opacity var(--transition-fast);
-	}
-
-	.entity-row:hover .entity-actions,
-	.entity-row:focus-within .entity-actions {
-		opacity: 1;
 	}
 
 	@media (max-width: 768px) {
 		.list-filters {
 			flex-direction: column;
-		}
-
-		.entity-actions {
-			opacity: 1;
 		}
 	}
 </style>

@@ -184,42 +184,59 @@ Version history is reached from the prompt list rows, not from this form.
 			disabled={saving}
 			help={$i18n('prompts_form_content_help')}
 		/>
-		<div class="content-meta">
-			{#if detectedVariables.length > 0}
-				<span class="meta-label">{$i18n('prompts_detected_variables')}</span>
-				{#each detectedVariables as variable (variable)}
-					<span class="badge badge-primary mono-badge">{variable}</span>
-				{/each}
+		<div class="content-toolbar">
+			{#if insertableSkills.length > 0}
+				<select
+					class="skill-select"
+					onchange={(e) => {
+						const val = e.currentTarget.value;
+						if (val) {
+							insertSkillReference(val);
+							e.currentTarget.value = '';
+						}
+					}}
+					disabled={saving}
+					aria-label={$i18n('prompts_insert_skill')}
+				>
+					<option value="">{$i18n('prompts_insert_skill')}</option>
+					{#each insertableSkills as skill (skill.id)}
+						<option value={skill.name}>{skill.name}</option>
+					{/each}
+				</select>
 			{/if}
-			{#if detectedSkills.length > 0}
-				<span class="meta-label">{$i18n('prompts_detected_skills')}</span>
-				{#each detectedSkills as skill (skill)}
-					<span class="badge badge-success mono-badge">{skill}</span>
-				{/each}
-			{/if}
-			<div class="meta-right">
-				{#if insertableSkills.length > 0}
-					<select
-						class="skill-select"
-						onchange={(e) => {
-							const val = e.currentTarget.value;
-							if (val) {
-								insertSkillReference(val);
-								e.currentTarget.value = '';
-							}
-						}}
-						disabled={saving}
-						aria-label={$i18n('prompts_insert_skill')}
-					>
-						<option value="">{$i18n('prompts_insert_skill')}</option>
-						{#each insertableSkills as skill (skill.id)}
-							<option value={skill.name}>{skill.name}</option>
-						{/each}
-					</select>
-				{/if}
-				<span class="char-count">{contentLength.toLocaleString()}/50,000</span>
-			</div>
+			<span class="char-count">{contentLength.toLocaleString()}/50,000</span>
 		</div>
+
+		{#if detectedVariables.length > 0 || detectedSkills.length > 0}
+			<div class="detected">
+				{#if detectedVariables.length > 0}
+					<div class="detected-group">
+						<span class="detected-label">
+							{$i18n('prompts_detected_variables')}
+							<span class="detected-count">{detectedVariables.length}</span>
+						</span>
+						<div class="chips">
+							{#each detectedVariables as variable (variable)}
+								<span class="badge badge-primary mono-badge">{variable}</span>
+							{/each}
+						</div>
+					</div>
+				{/if}
+				{#if detectedSkills.length > 0}
+					<div class="detected-group">
+						<span class="detected-label">
+							{$i18n('prompts_detected_skills')}
+							<span class="detected-count">{detectedSkills.length}</span>
+						</span>
+						<div class="chips">
+							{#each detectedSkills as skill (skill)}
+								<span class="badge badge-success mono-badge">{skill}</span>
+							{/each}
+						</div>
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
 
 	<div class="form-actions">
@@ -256,16 +273,20 @@ Version history is reached from the prompt list rows, not from this form.
 		gap: var(--spacing-xs);
 	}
 
-	.content-meta {
+	/* Toolbar under the content field: skill inserter (left) + char count
+	   (right). Decoupled from the detected chips so its alignment never shifts
+	   with the number of variables. */
+	.content-toolbar {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-xs);
-		flex-wrap: wrap;
+		gap: var(--spacing-sm);
 	}
 
-	.meta-label {
+	.char-count {
+		margin-left: auto;
 		font-size: var(--font-size-xs);
 		color: var(--color-text-tertiary);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.mono-badge {
@@ -273,16 +294,50 @@ Version history is reached from the prompt list rows, not from this form.
 		font-weight: var(--font-weight-medium);
 	}
 
-	.meta-right {
+	/* Detected variables / skills: a tidy bordered panel that groups each kind
+	   under a labelled heading with a count. Capped height keeps the form usable
+	   even when a prompt declares many variables. */
+	.detected {
 		display: flex;
-		align-items: center;
+		flex-direction: column;
 		gap: var(--spacing-sm);
-		margin-left: auto;
+		max-height: 11rem;
+		overflow-y: auto;
+		padding: var(--spacing-sm) var(--spacing-md);
+		background: var(--surface-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-md);
 	}
 
-	.char-count {
+	.detected-group {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2xs);
+	}
+
+	.detected-label {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-2xs);
 		font-size: var(--font-size-xs);
 		color: var(--color-text-tertiary);
+	}
+
+	.detected-count {
+		min-width: 1.25rem;
+		padding: 0 var(--spacing-2xs);
+		text-align: center;
+		font-size: var(--font-size-2xs);
+		font-variant-numeric: tabular-nums;
+		color: var(--color-text-secondary);
+		background: var(--color-bg-tertiary);
+		border-radius: var(--border-radius-full);
+	}
+
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-2xs);
 	}
 
 	.skill-select {
