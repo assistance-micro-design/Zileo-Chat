@@ -23,6 +23,7 @@
 	import { Button, Select, Input } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { ListFilter, RotateCcw, Download, Trash2 } from '@lucide/svelte';
 
 	interface Props {
 		filter: AuditFilter;
@@ -115,74 +116,84 @@
 	}
 </script>
 
-<form class="filters" onsubmit={handleSubmit} aria-label={$i18n('audit_filters_aria_label')}>
-	<div class="filter-grid">
+<form
+	class="card filters-card"
+	onsubmit={handleSubmit}
+	aria-label={$i18n('audit_filters_aria_label')}
+>
+	<div class="filters-toolbar">
 		<Input
-			label={$i18n('audit_filter_tool')}
 			type="search"
 			bind:value={toolName}
 			placeholder={$i18n('audit_filter_tool_placeholder')}
+			ariaLabel={$i18n('audit_filter_tool')}
 		/>
 
 		<Select
-			label={$i18n('audit_filter_decision')}
 			value={decision}
 			options={decisionOptions}
+			ariaLabel={$i18n('audit_filter_decision')}
 			onchange={(e) => (decision = e.currentTarget.value as AuditDecision | '')}
 		/>
 
 		<Select
-			label={$i18n('audit_filter_decided_by')}
 			value={decidedBy}
 			options={decidedByOptions}
+			ariaLabel={$i18n('audit_filter_decided_by')}
 			onchange={(e) => (decidedBy = e.currentTarget.value as DecidedBy | '')}
 		/>
 
-		<Input label={$i18n('audit_filter_since')} type="datetime-local" bind:value={since} />
+		<Input type="datetime-local" bind:value={since} ariaLabel={$i18n('audit_filter_since')} />
 
-		<Input label={$i18n('audit_filter_until')} type="datetime-local" bind:value={until} />
-	</div>
+		<Input type="datetime-local" bind:value={until} ariaLabel={$i18n('audit_filter_until')} />
 
-	<div class="filter-actions">
-		<Button variant="primary" type="submit" disabled={busy}>
-			{$i18n('audit_filter_apply')}
+		<Button variant="primary" size="sm" type="submit" disabled={busy}>
+			<ListFilter size={14} aria-hidden="true" />
+			<span>{$i18n('audit_filter_apply')}</span>
 		</Button>
-		<Button variant="ghost" type="button" onclick={handleReset} disabled={busy}>
-			{$i18n('audit_filter_reset')}
+		<Button variant="ghost" size="sm" type="button" onclick={handleReset} disabled={busy}>
+			<RotateCcw size={14} aria-hidden="true" />
+			<span>{$i18n('audit_filter_reset')}</span>
 		</Button>
+
 		<div class="spacer"></div>
-		<Button variant="secondary" type="button" onclick={onexport} disabled={busy}>
-			{$i18n('audit_export_csv')}
+
+		<Button variant="outline" size="sm" type="button" onclick={onexport} disabled={busy}>
+			<Download size={14} aria-hidden="true" />
+			<span>{$i18n('audit_export_csv')}</span>
 		</Button>
-		<Button variant="danger" type="button" onclick={onpurge} disabled={busy}>
-			{$i18n('audit_purge_now')}
+		<Button variant="outline" size="sm" type="button" onclick={onpurge} disabled={busy}>
+			<Trash2 size={14} aria-hidden="true" />
+			<span>{$i18n('audit_purge_now')}</span>
 		</Button>
 	</div>
 </form>
 
 <style>
-	.filters {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
-		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
+	.filters-card {
 		margin-bottom: var(--spacing-lg);
 	}
 
-	.filter-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-		gap: var(--spacing-md);
-	}
-
-	.filter-actions {
+	.filters-toolbar {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--spacing-sm);
 		align-items: center;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-md);
+	}
+
+	/* Compact, auto-width controls so the bar reads as a single inline row. */
+	.filters-toolbar :global(.form-group) {
+		width: auto;
+	}
+
+	.filters-toolbar :global(.form-input[type='search']) {
+		width: 200px;
+	}
+
+	.filters-toolbar :global(.form-select),
+	.filters-toolbar :global(.form-input[type='datetime-local']) {
+		width: auto;
 	}
 
 	.spacer {

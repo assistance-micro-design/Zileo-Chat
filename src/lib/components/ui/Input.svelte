@@ -41,6 +41,8 @@
 		placeholder?: string;
 		/** Label text */
 		label?: string;
+		/** Accessible name when no visible label is rendered */
+		ariaLabel?: string;
 		/** Help text */
 		help?: string;
 		/** Whether the input is disabled */
@@ -70,6 +72,7 @@
 		value = $bindable(''),
 		placeholder = '',
 		label,
+		ariaLabel,
 		help,
 		disabled = false,
 		required = false,
@@ -116,6 +119,7 @@
 		{onchange}
 		{onfocus}
 		{onblur}
+		aria-label={label ? undefined : ariaLabel}
 		aria-describedby={help ? `${inputId}-help` : undefined}
 	/>
 

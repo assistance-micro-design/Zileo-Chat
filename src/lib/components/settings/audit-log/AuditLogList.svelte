@@ -45,8 +45,8 @@
 			<p>{$i18n('audit_log_empty')}</p>
 		</div>
 	{:else}
-		<div class="table-scroll">
-			<table class="audit-table">
+		<div class="table-container">
+			<table class="table">
 				<thead>
 					<tr>
 						<th scope="col">{$i18n('audit_col_time')}</th>
@@ -67,14 +67,20 @@
 	{/if}
 
 	<div class="pagination">
-		<Button variant="ghost" type="button" onclick={onprev} disabled={loading || page === 0}>
+		<Button
+			variant="ghost"
+			size="sm"
+			type="button"
+			onclick={onprev}
+			disabled={loading || page === 0}
+		>
 			{$i18n('audit_pagination_prev')}
 		</Button>
 		<span class="page-indicator">
 			{$i18n('audit_pagination_page')}
 			{page + 1}
 		</span>
-		<Button variant="ghost" type="button" onclick={onnext} disabled={loading || !hasMore}>
+		<Button variant="ghost" size="sm" type="button" onclick={onnext} disabled={loading || !hasMore}>
 			{$i18n('audit_pagination_next')}
 		</Button>
 	</div>
@@ -99,43 +105,16 @@
 		color: var(--color-text-secondary);
 	}
 
-	.table-scroll {
-		overflow-x: auto;
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-	}
-
-	.audit-table {
-		width: 100%;
-		border-collapse: collapse;
-	}
-
-	.audit-table thead {
-		background: var(--color-bg-secondary);
-	}
-
-	.audit-table th {
-		text-align: left;
-		font-weight: var(--font-weight-semibold);
-		font-size: var(--font-size-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: var(--color-text-secondary);
-		padding: var(--spacing-sm) var(--spacing-md);
-		border-bottom: 1px solid var(--color-border);
-		white-space: nowrap;
-	}
-
 	.pagination {
 		display: flex;
-		justify-content: center;
+		justify-content: space-between;
 		align-items: center;
 		gap: var(--spacing-md);
 		padding-top: var(--spacing-md);
 	}
 
 	.page-indicator {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
 	}
 </style>

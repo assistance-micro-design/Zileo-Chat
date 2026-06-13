@@ -18,7 +18,8 @@
   AuditLogRow - one row of the validation audit log table.
 -->
 <script lang="ts">
-	import type { ValidationAuditEntry } from '$types/validation';
+	import type { AuditDecision, RiskLevel, ValidationAuditEntry } from '$types/validation';
+	import { Badge } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 
 	interface Props {
@@ -27,14 +28,14 @@
 	let { entry }: Props = $props();
 
 	/**
-	 * Format an ISO 8601 timestamp as `YYYY-MM-DD HH:mm:ss`. Returns the raw
+	 * Format an ISO 8601 timestamp as `YYYY-MM-DD HH:mm`. Returns the raw
 	 * value if parsing fails so the user always sees something.
 	 */
 	function formatTimestamp(iso: string): string {
 		const date = new Date(iso);
 		if (Number.isNaN(date.getTime())) return iso;
 		const pad = (n: number) => String(n).padStart(2, '0');
-		return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+		return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 	}
 
 	const decisionKeys = {
@@ -59,21 +60,38 @@
 		high: 'audit_risk_high',
 		critical: 'audit_risk_critical'
 	} as const;
+
+	type BadgeVariant = 'primary' | 'success' | 'warning' | 'error' | 'neutral';
+
+	const decisionVariants: Record<AuditDecision, BadgeVariant> = {
+		approved: 'success',
+		rejected: 'error',
+		skipped: 'neutral',
+		timeout: 'warning',
+		blocked: 'neutral'
+	};
+
+	const riskVariants: Record<RiskLevel, BadgeVariant> = {
+		low: 'primary',
+		medium: 'warning',
+		high: 'warning',
+		critical: 'error'
+	};
 </script>
 
 <tr>
-	<td class="cell-time">{formatTimestamp(entry.decidedAt)}</td>
-	<td class="cell-tool" title={entry.toolName}>{entry.toolName}</td>
-	<td class="cell-decision">
-		<span class="badge badge-{entry.decision}">
+	<td class="cell-time mono">{formatTimestamp(entry.decidedAt)}</td>
+	<td class="cell-tool mono" title={entry.toolName}>{entry.toolName}</td>
+	<td>
+		<Badge variant={decisionVariants[entry.decision]}>
 			{$i18n(decisionKeys[entry.decision])}
-		</span>
+		</Badge>
 	</td>
 	<td class="cell-by">{$i18n(decidedByKeys[entry.decidedBy])}</td>
-	<td class="cell-risk">
-		<span class="risk-pill risk-{entry.riskLevel}">
+	<td>
+		<Badge variant={riskVariants[entry.riskLevel]}>
 			{$i18n(riskKeys[entry.riskLevel])}
-		</span>
+		</Badge>
 	</td>
 	<td class="cell-preview" title={entry.promptPreview ?? ''}>
 		{entry.promptPreview ?? '-'}
@@ -81,100 +99,35 @@
 </tr>
 
 <style>
-	tr:hover {
-		background: var(--color-bg-hover);
-	}
-
-	td {
-		padding: var(--spacing-sm) var(--spacing-md);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-primary);
-		border-bottom: 1px solid var(--color-border);
-		vertical-align: middle;
+	.mono {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 	}
 
 	.cell-time {
-		font-family: var(--font-mono, monospace);
 		white-space: nowrap;
 		color: var(--color-text-secondary);
 	}
 
 	.cell-tool {
-		font-weight: var(--font-weight-medium);
 		max-width: 200px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	.cell-preview {
-		max-width: 320px;
-		overflow: hidden;
-		text-overflow: ellipsis;
+	.cell-by {
+		font-size: var(--font-size-xs);
 		white-space: nowrap;
 		color: var(--color-text-secondary);
 	}
 
-	.badge {
-		display: inline-block;
-		padding: 2px var(--spacing-sm);
-		border-radius: var(--border-radius-sm);
+	.cell-preview {
+		max-width: 280px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-size: var(--font-size-xs);
-		font-weight: var(--font-weight-medium);
-	}
-
-	.badge-approved {
-		background: var(--color-success-light);
-		color: var(--color-success);
-	}
-
-	.badge-rejected {
-		background: var(--color-danger-light);
-		color: var(--color-danger);
-	}
-
-	.badge-timeout {
-		background: var(--color-warning-light);
-		color: var(--color-warning);
-	}
-
-	.badge-skipped {
-		background: var(--color-bg-secondary);
-		color: var(--color-text-secondary);
-	}
-
-	.badge-blocked {
-		background: var(--color-danger-light);
-		color: var(--color-danger);
-		font-weight: var(--font-weight-bold, 700);
-	}
-
-	.risk-pill {
-		display: inline-block;
-		padding: 2px var(--spacing-sm);
-		border-radius: var(--border-radius-sm);
-		font-size: var(--font-size-xs);
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-	}
-
-	.risk-low {
-		background: var(--color-bg-secondary);
-		color: var(--color-text-secondary);
-	}
-
-	.risk-medium {
-		background: var(--color-info-light, var(--color-bg-secondary));
-		color: var(--color-info, var(--color-text-primary));
-	}
-
-	.risk-high {
-		background: var(--color-warning-light);
-		color: var(--color-warning);
-	}
-
-	.risk-critical {
-		background: var(--color-danger-light);
-		color: var(--color-danger);
+		color: var(--color-text-tertiary);
 	}
 </style>

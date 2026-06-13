@@ -15,17 +15,27 @@
 -->
 
 <!--
-  AuditLogStats - aggregate stats card row.
+  AuditLogStats - aggregate stats chip row.
   Shows total + decision buckets returned by `get_validation_audit_stats`.
 -->
 <script lang="ts">
 	import type { AuditStats, AuditDecision } from '$types/validation';
 	import { i18n } from '$lib/i18n';
+	import { CircleCheck, CircleX, CircleMinus, Clock, Ban } from '@lucide/svelte';
 
 	interface Props {
 		stats: AuditStats | null;
 	}
 	let { stats }: Props = $props();
+
+	/** Per-decision icon + accent colour for the chip. */
+	const decisionMeta: Record<AuditDecision, { icon: typeof CircleCheck; color: string }> = {
+		approved: { icon: CircleCheck, color: 'var(--color-success)' },
+		rejected: { icon: CircleX, color: 'var(--color-error)' },
+		skipped: { icon: CircleMinus, color: 'var(--color-text-secondary)' },
+		timeout: { icon: Clock, color: 'var(--color-warning)' },
+		blocked: { icon: Ban, color: 'var(--color-text-secondary)' }
+	};
 
 	/**
 	 * Map a decision label coming from the backend to its i18n key.
@@ -45,65 +55,56 @@
 </script>
 
 <div class="stats-row" role="group" aria-label={$i18n('audit_stats_aria_label')}>
-	<div class="stat-card stat-total">
-		<span class="stat-label">{$i18n('audit_stats_total')}</span>
-		<span class="stat-value">{stats?.total ?? 0}</span>
-	</div>
+	<span class="metric-chip metric-total">
+		<strong>{(stats?.total ?? 0).toLocaleString()}</strong>
+		{$i18n('audit_stats_total')}
+	</span>
 
 	{#if stats}
 		{#each stats.byDecision as bucket (bucket.label)}
-			<div class="stat-card stat-decision-{bucket.label}">
-				<span class="stat-label">{decisionLabel(bucket.label)}</span>
-				<span class="stat-value">{bucket.count}</span>
-			</div>
+			{@const meta = decisionMeta[bucket.label as AuditDecision]}
+			<span class="metric-chip">
+				{#if meta}
+					{@const Icon = meta.icon}
+					<Icon size={14} color={meta.color} aria-hidden="true" />
+				{/if}
+				<strong style={meta ? `color:${meta.color}` : undefined}
+					>{bucket.count.toLocaleString()}</strong
+				>
+				{decisionLabel(bucket.label)}
+			</span>
 		{/each}
 	{/if}
 </div>
 
 <style>
 	.stats-row {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-		gap: var(--spacing-md);
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-sm);
 		margin-bottom: var(--spacing-lg);
 	}
 
-	.stat-card {
-		display: flex;
-		flex-direction: column;
+	.metric-chip {
+		display: inline-flex;
+		align-items: center;
 		gap: var(--spacing-xs);
-		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-	}
-
-	.stat-label {
+		padding: 0.4rem 0.8rem;
 		font-size: var(--font-size-xs);
+		font-variant-numeric: tabular-nums;
 		color: var(--color-text-secondary);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		background: var(--surface-2);
+		border: 1px solid var(--color-border-light);
+		border-radius: var(--border-radius-full);
+		white-space: nowrap;
 	}
 
-	.stat-value {
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
+	.metric-chip strong {
 		color: var(--color-text-primary);
+		font-weight: var(--font-weight-semibold);
 	}
 
-	.stat-decision-approved .stat-value {
-		color: var(--color-success);
-	}
-
-	.stat-decision-rejected .stat-value {
-		color: var(--color-danger);
-	}
-
-	.stat-decision-timeout .stat-value {
-		color: var(--color-warning);
-	}
-
-	.stat-decision-skipped .stat-value {
-		color: var(--color-text-secondary);
+	.metric-total strong {
+		color: var(--color-accent-deep);
 	}
 </style>
