@@ -41,9 +41,28 @@ export interface KanbanSettings {
 	 * Clamped to [COMPOSE_TIMEOUT_MIN_SECS, COMPOSE_TIMEOUT_MAX_SECS].
 	 */
 	composeTimeoutSecs: number;
+	/**
+	 * Global supervisor agent for the compose flow. Optional (Rust
+	 * `Option<String>` + skip-when-none); absent/undefined falls back to the
+	 * agent passed by the card creator.
+	 */
+	composeAgentId?: string;
+	/**
+	 * Global supervisor agent for the analyze flow. Optional; absent/undefined
+	 * falls back to the card's own `kanban_agent_id`.
+	 */
+	analyzeAgentId?: string;
 }
 
-/** Partial update payload — only provided fields are applied. */
+/**
+ * Partial update payload — only provided fields are applied.
+ *
+ * The agent ids are tri-state: omit a key to leave it unchanged, send `null`
+ * (or an empty string) to clear it back to the fallback, or send a value to set
+ * it.
+ */
 export interface UpdateKanbanSettingsRequest {
 	composeTimeoutSecs?: number;
+	composeAgentId?: string | null;
+	analyzeAgentId?: string | null;
 }

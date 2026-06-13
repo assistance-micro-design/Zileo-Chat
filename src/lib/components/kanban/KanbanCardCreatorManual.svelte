@@ -13,10 +13,12 @@
 	import { Select, Input, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
 	import KanbanScheduleForm from './KanbanScheduleForm.svelte';
+	import KanbanSupervisorNotice from './KanbanSupervisorNotice.svelte';
 	import type { AgentSummary } from '$types/agent';
 	import type { Prompt, PromptSummary, PromptVariable } from '$types/prompt';
 	import type { WorkflowFolder } from '$types/workflow';
 	import type { KanbanCardCreate, KanbanScheduleCreate } from '$types/kanban';
+	import type { SupervisorRoleState } from '$lib/utils/kanban-supervisors';
 
 	interface Props {
 		agents: AgentSummary[];
@@ -27,6 +29,8 @@
 		promptOptions: SelectOption[];
 		folderOptions: SelectOption[];
 		defaultKanbanAgentId: string;
+		/** Configuration state of the analyze supervisor role. */
+		analyzeState?: SupervisorRoleState;
 		onerror: (message: string | null) => void;
 	}
 
@@ -39,6 +43,7 @@
 		promptOptions,
 		folderOptions,
 		defaultKanbanAgentId,
+		analyzeState = 'unset',
 		onerror
 	}: Props = $props();
 
@@ -138,6 +143,11 @@
 		options={kanbanAgentOptions}
 		value={kanbanAgentId}
 		onchange={(e) => (kanbanAgentId = e.currentTarget.value)}
+	/>
+	<KanbanSupervisorNotice
+		state={analyzeState}
+		unsetKey="kanban_supervisor_analyze_unset"
+		danglingKey="kanban_supervisor_analyze_dangling"
 	/>
 	<Select
 		label={$i18n('kanban_field_target_agent')}

@@ -21,6 +21,7 @@
 	import type { PromptSummary } from '$types/prompt';
 	import type { WorkflowFolder } from '$types/workflow';
 	import type { KanbanCardCreate, KanbanScheduleCreate } from '$types/kanban';
+	import { supervisorRoleState } from '$lib/utils/kanban-supervisors';
 
 	interface Props {
 		open: boolean;
@@ -29,6 +30,10 @@
 		folders: WorkflowFolder[];
 		/** Pre-selected Kanban agent (current filter), or empty. */
 		defaultKanbanAgentId?: string;
+		/** Global compose supervisor id from settings (null/undefined = unset). */
+		composeAgentId?: string | null;
+		/** Global analyze supervisor id from settings (null/undefined = unset). */
+		analyzeAgentId?: string | null;
 		onclose: () => void;
 		oncreated: (
 			payload: KanbanCardCreate,
@@ -42,6 +47,8 @@
 		prompts,
 		folders,
 		defaultKanbanAgentId = '',
+		composeAgentId = null,
+		analyzeAgentId = null,
 		onclose,
 		oncreated
 	}: Props = $props();
@@ -74,6 +81,17 @@
 		{ value: '', label: $i18n('kanban_select_kanban_agent') },
 		...agents.filter((a) => a.kind === 'kanban').map((a) => ({ value: a.id, label: a.name }))
 	]);
+
+	// Cross the configured supervisor ids with the live Kanban-kind agents to
+	// classify each role: unset (info nudge), dangling (warning), or ok.
+	const kanbanAgentIds = $derived(
+		new Set(agents.filter((a) => a.kind === 'kanban').map((a) => a.id))
+	);
+	const composeState = $derived(supervisorRoleState(composeAgentId, kanbanAgentIds));
+	const analyzeState = $derived(supervisorRoleState(analyzeAgentId, kanbanAgentIds));
+	// D7: pre-select + lock the Auto compose select only when the global agent is
+	// actually valid; a dangling id must let the user pick one (with a warning).
+	const globalComposeAgentId = $derived(composeState === 'ok' ? (composeAgentId ?? '') : '');
 
 	const targetAgentOptions = $derived<SelectOption[]>([
 		{ value: '', label: $i18n('kanban_select_target_agent') },
@@ -164,6 +182,9 @@
 					bind:this={autoPane}
 					{kanbanAgentOptions}
 					{defaultKanbanAgentId}
+					{globalComposeAgentId}
+					{composeState}
+					{analyzeState}
 					onerror={(m) => (error = m)}
 				/>
 			{:else}
@@ -177,6 +198,7 @@
 					{promptOptions}
 					{folderOptions}
 					{defaultKanbanAgentId}
+					{analyzeState}
 					onerror={(m) => (error = m)}
 				/>
 			{/if}

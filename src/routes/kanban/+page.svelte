@@ -12,7 +12,7 @@
 	import { getErrorMessage } from '$lib/utils/error';
 	import { locale } from '$lib/stores/locale';
 	import { Badge, Button, DeleteConfirmModal, Spinner } from '$lib/components/ui';
-	import { Activity, Bot, Check, Sparkles, X, Pencil } from '@lucide/svelte';
+	import { Activity, Bot, Check, Sparkles, X, Pencil, TriangleAlert } from '@lucide/svelte';
 
 	import { kanbanStore, kanbanCardsByColumn, kanbanCards } from '$lib/stores/kanban';
 	import {
@@ -31,6 +31,8 @@
 	import { agents as agentsStore, agentStore } from '$lib/stores/agents';
 	import { prompts as promptsStore, promptStore } from '$lib/stores/prompts';
 	import { folders as foldersStore, folderStore } from '$lib/stores/folders';
+	import { kanbanSupervisorStore, analyzeSupervisorId } from '$lib/stores/kanban-settings';
+	import { supervisorRoleState } from '$lib/utils/kanban-supervisors';
 	import { LocalStorage, STORAGE_KEYS } from '$lib/services/localStorage.service';
 
 	import KanbanBoard from '$lib/components/kanban/KanbanBoard.svelte';
@@ -119,6 +121,21 @@
 	/** Card ids currently being finalized by the Kanban agent (root store). */
 	const analyzingSet = $derived(new Set($analyzingCardIdsStore));
 
+	/** Ids of the live Kanban-kind agents, for the supervisor integrity check. */
+	const kanbanAgentIdSet = $derived(
+		new Set($agentsStore.filter((a) => a.kind === 'kanban').map((a) => a.id))
+	);
+	/**
+	 * True when a global analyze supervisor IS configured but no longer matches a
+	 * live Kanban agent (deleted / demoted). This silently breaks re-analyze and
+	 * the boot catch-up for cards already in review, so it warrants a board-level
+	 * banner — not just a nudge in the creator modal (State B / D8). The banner
+	 * clears itself once the configuration is fixed (reactive on both stores).
+	 */
+	const analyzeSupervisorDangling = $derived(
+		supervisorRoleState($analyzeSupervisorId, kanbanAgentIdSet) === 'dangling'
+	);
+
 	$effect(() => {
 		void kanbanStore.loadCards(agentFilter || undefined);
 	});
@@ -183,7 +200,8 @@
 				agentStore.loadAgents(),
 				promptStore.loadPrompts(),
 				folderStore.loadFolders(),
-				kanbanScheduleStore.loadSchedules()
+				kanbanScheduleStore.loadSchedules(),
+				kanbanSupervisorStore.load()
 			]);
 		} catch (e) {
 			pageError = getErrorMessage(e);
@@ -743,6 +761,18 @@
 		<p class="page-error" role="alert">{pageError}</p>
 	{/if}
 
+	{#if analyzeSupervisorDangling}
+		<p class="supervisor-banner" role="alert">
+			<TriangleAlert size={16} aria-hidden="true" />
+			<span class="supervisor-banner-text">
+				{$i18n('kanban_supervisor_analyze_dangling_board')}
+			</span>
+			<a class="supervisor-banner-link" href="/settings/kanban">
+				{$i18n('kanban_supervisor_configure_link')}
+			</a>
+		</p>
+	{/if}
+
 	{#if hasComposeActivity}
 		<section class="proposed-zone" aria-labelledby="proposed-zone-title">
 			<h2 id="proposed-zone-title" class="proposed-zone-title">
@@ -942,6 +972,34 @@
 	.page-error {
 		color: var(--color-error);
 		margin: 0;
+	}
+	/* Integrity banner: the configured analyze supervisor no longer exists. Amber
+	   warning surface, non-dismissible (clears itself once reconfigured). */
+	.supervisor-banner {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		margin: 0;
+		padding: var(--spacing-sm) var(--spacing-md);
+		font-size: var(--font-size-sm);
+		color: var(--color-warning);
+		background: var(--color-warning-bg);
+		border: 1px solid var(--color-warning);
+		border-radius: var(--border-radius-md);
+	}
+	.supervisor-banner :global(svg) {
+		flex-shrink: 0;
+	}
+	.supervisor-banner-text {
+		flex: 1;
+		min-width: 0;
+	}
+	.supervisor-banner-link {
+		flex-shrink: 0;
+		font-weight: var(--font-weight-medium);
+		color: inherit;
+		text-decoration: underline;
 	}
 	/* Review zone on the site's signature cream surface, with a dashed brand
 	   border and a soft halo so proposed cards read as "awaiting a decision". */

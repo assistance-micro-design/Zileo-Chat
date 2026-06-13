@@ -20,18 +20,41 @@
 	import { Info } from '@lucide/svelte';
 	import { composingStore, canStartCompose } from '$lib/stores/kanban-compose';
 	import type { ComposeStartResponse } from '$types/kanban';
+	import type { SupervisorRoleState } from '$lib/utils/kanban-supervisors';
+	import KanbanSupervisorNotice from './KanbanSupervisorNotice.svelte';
 
 	interface Props {
 		kanbanAgentOptions: SelectOption[];
 		defaultKanbanAgentId: string;
+		/** Global compose supervisor id (D7): when set, the select is locked on it. */
+		globalComposeAgentId?: string;
+		/** Configuration state of the compose supervisor role. */
+		composeState?: SupervisorRoleState;
+		/** Configuration state of the analyze supervisor role. */
+		analyzeState?: SupervisorRoleState;
 		/** Called when an error happens locally so the parent can render it. */
 		onerror: (message: string | null) => void;
 	}
 
-	let { kanbanAgentOptions, defaultKanbanAgentId, onerror }: Props = $props();
+	let {
+		kanbanAgentOptions,
+		defaultKanbanAgentId,
+		globalComposeAgentId = '',
+		composeState = 'unset',
+		analyzeState = 'unset',
+		onerror
+	}: Props = $props();
 
 	let description = $state('');
-	let kanbanAgentId = $state(untrack(() => defaultKanbanAgentId));
+	// Manual selection (used only when the global compose agent is NOT locking it).
+	let manualAgentId = $state(untrack(() => defaultKanbanAgentId));
+	// D7: when a valid global compose agent is configured, lock the select on it.
+	// `globalComposeAgentId` arrives asynchronously (the settings store loads on
+	// modal open), so the effective id MUST be derived — initializing a `$state`
+	// once would leave a locked select showing the stale manual value. The backend
+	// is authoritative either way, but the UI must be honest.
+	const composeLocked = $derived(!!globalComposeAgentId);
+	const effectiveAgentId = $derived(composeLocked ? globalComposeAgentId : manualAgentId);
 
 	/**
 	 * Launches a DETACHED compose. Returns `true` when the generation was
@@ -40,7 +63,7 @@
 	 */
 	export async function compose(): Promise<boolean> {
 		onerror(null);
-		if (!kanbanAgentId) {
+		if (!effectiveAgentId) {
 			onerror($i18n('kanban_error_kanban_agent_required'));
 			return false;
 		}
@@ -55,7 +78,7 @@
 		}
 		try {
 			const { card_id } = await invoke<ComposeStartResponse>('start_compose_card', {
-				kanbanAgentId,
+				kanbanAgentId: effectiveAgentId,
 				description,
 				locale: $locale
 			});
@@ -72,8 +95,20 @@
 	<Select
 		label={$i18n('kanban_kanban_agent')}
 		options={kanbanAgentOptions}
-		value={kanbanAgentId}
-		onchange={(e) => (kanbanAgentId = e.currentTarget.value)}
+		value={effectiveAgentId}
+		disabled={composeLocked}
+		help={composeLocked ? $i18n('kanban_compose_agent_global_hint') : undefined}
+		onchange={(e) => (manualAgentId = e.currentTarget.value)}
+	/>
+	<KanbanSupervisorNotice
+		state={composeState}
+		unsetKey="kanban_supervisor_compose_unset"
+		danglingKey="kanban_supervisor_compose_dangling"
+	/>
+	<KanbanSupervisorNotice
+		state={analyzeState}
+		unsetKey="kanban_supervisor_analyze_unset"
+		danglingKey="kanban_supervisor_analyze_dangling"
 	/>
 	<Textarea
 		label={$i18n('kanban_describe_card')}

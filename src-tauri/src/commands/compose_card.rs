@@ -27,7 +27,9 @@ use crate::agents::execution::tool_loop::{self, PricingCache, ToolLoopContext};
 use crate::commands::agent::hydrate_llm_from_model;
 use crate::commands::kanban_card::create_kanban_card_core;
 use crate::commands::kanban_interaction::persist_interaction;
-use crate::commands::settings_kanban::{effective_compose_timeout, load_kanban_settings};
+use crate::commands::settings_kanban::{
+    effective_compose_timeout, kanban_agent_exists, load_kanban_settings, resolve_role_agent_id,
+};
 use crate::db::DBClient;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
@@ -211,7 +213,10 @@ async fn load_kanban_agent_config(db: &Arc<DBClient>, id: &str) -> Result<AgentC
     Ok(config)
 }
 
-fn build_compose_system_prompt(agent_system_prompt: &str) -> String {
+/// Prepends the compose-mode role block to an agent's own `system_prompt`.
+/// `pub(crate)` so the settings prompt-preview command can render the exact
+/// production prompt without duplicating the block text.
+pub(crate) fn build_compose_system_prompt(agent_system_prompt: &str) -> String {
     let mut s = String::new();
     if !agent_system_prompt.trim().is_empty() {
         s.push_str(agent_system_prompt.trim());
@@ -252,23 +257,6 @@ fn build_compose_user_prompt(description: &str) -> String {
          Compose the kanban card by calling SubmitComposedCard.",
         description
     )
-}
-
-/// Re-checks that the Kanban agent still exists (and is still Kanban-kind) just
-/// before persisting a proposed card (M3). The agent could have been deleted
-/// during the (potentially long) tool-loop; persisting a card pointing at a dead
-/// `kanban_agent_id` would break the report viewer / re-analyze paths.
-async fn kanban_agent_exists(db: &Arc<DBClient>, agent_id: &str) -> Result<bool, String> {
-    let validated = validate_uuid_field(agent_id, "kanban_agent_id")?;
-    let q = format!(
-        "SELECT meta::id(id) AS id FROM agent:`{}` WHERE kind = 'kanban'",
-        validated
-    );
-    let rows = db
-        .query_json(&q)
-        .await
-        .map_err(|e| format!("Failed to re-check Kanban agent: {}", e))?;
-    Ok(!rows.is_empty())
 }
 
 /// Emits `kanban:compose_ready` (best-effort — M4: no `AppHandle` is tolerated).
@@ -318,7 +306,20 @@ async fn run_compose_task(
     // each run so a setting change applies without restart). The clamp + the
     // default-on-error fallback live in `effective_compose_timeout` so the
     // integration logic is unit-tested by construction.
-    let timeout_secs = effective_compose_timeout(load_kanban_settings(&db).await);
+    //
+    // The settings are loaded ONCE here and reused to (a) derive the timeout and
+    // (b) resolve the GLOBAL compose supervisor agent. When a global compose
+    // agent is configured (and still a valid Kanban agent) it overrides the id
+    // passed by the creator; otherwise the creator's id is kept (legacy
+    // behaviour, full backward compatibility).
+    let settings = load_kanban_settings(&db).await;
+    let timeout_secs = effective_compose_timeout(settings.clone());
+    let configured_compose = settings
+        .as_ref()
+        .ok()
+        .and_then(|s| s.compose_agent_id.clone());
+    let effective_agent_id =
+        resolve_role_agent_id(&db, configured_compose.as_deref(), &kanban_agent_id).await;
 
     let outcome = tokio::time::timeout(
         Duration::from_secs(timeout_secs),
@@ -327,7 +328,7 @@ async fn run_compose_task(
             &tool_factory,
             &mcp_manager,
             &llm_manager,
-            &kanban_agent_id,
+            &effective_agent_id,
             &description,
             &locale,
             &card_id,
@@ -349,9 +350,10 @@ async fn run_compose_task(
         }
     };
 
-    // M3: re-validate the Kanban agent before persisting — abort with a clear
-    // failure (no orphan card) if it was deleted during the run.
-    match kanban_agent_exists(&db, &kanban_agent_id).await {
+    // M3: re-validate the EFFECTIVE Kanban agent (the one stamped on the card)
+    // before persisting — abort with a clear failure (no orphan card) if it was
+    // deleted during the run.
+    match kanban_agent_exists(&db, &effective_agent_id).await {
         Ok(true) => {}
         Ok(false) => {
             let msg = "The Kanban agent was deleted during generation".to_string();

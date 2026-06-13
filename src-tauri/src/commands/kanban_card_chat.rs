@@ -21,6 +21,7 @@
 use crate::commands::kanban_analyzer::load_workflow_report;
 use crate::commands::kanban_card::get_kanban_card_core;
 use crate::commands::message::{load_workflow_messages_core, save_message_core, SaveMessageParams};
+use crate::commands::settings_kanban::{load_kanban_settings, resolve_role_agent_id};
 use crate::commands::workflow::create_workflow_core;
 use crate::db::DBClient;
 use crate::models::message::Message;
@@ -226,9 +227,20 @@ pub(crate) async fn open_card_review_chat_core(
         });
     }
 
-    // First open: create a hidden workflow owned by the card's Kanban agent.
+    // First open: create a hidden workflow owned by the EFFECTIVE analyze agent
+    // — the configured global analyze supervisor when set & valid, otherwise the
+    // card's own `kanban_agent_id` (legacy / graceful fallback). This keeps the
+    // review chat owned by the same agent that produced the verdict.
+    let settings = load_kanban_settings(db).await;
+    let configured_analyze = settings
+        .as_ref()
+        .ok()
+        .and_then(|s| s.analyze_agent_id.clone());
+    let owner_agent_id =
+        resolve_role_agent_id(db, configured_analyze.as_deref(), &card.kanban_agent_id).await;
+
     let chat_name = format!("Card chat: {}", safe_truncate(&card.title, 80, true));
-    let chat_wf = create_workflow_core(db, chat_name, card.kanban_agent_id.clone(), true).await?;
+    let chat_wf = create_workflow_core(db, chat_name, owner_agent_id, true).await?;
 
     // Link it to the card so future opens resume the same conversation.
     let link_q = format!(

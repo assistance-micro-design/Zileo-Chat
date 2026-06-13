@@ -43,6 +43,11 @@
 	import { kanbanEventsStore } from '$lib/stores/kanban-events';
 	import { composingStore } from '$lib/stores/kanban-compose';
 	import { cardCreatorStore, cardCreatorOpen } from '$lib/stores/card-creator';
+	import {
+		kanbanSupervisorStore,
+		composeSupervisorId,
+		analyzeSupervisorId
+	} from '$lib/stores/kanban-settings';
 	import { kanbanStore } from '$lib/stores/kanban';
 	import { kanbanScheduleStore } from '$lib/stores/kanban-schedule';
 	import { agents as agentsStore, agentStore } from '$lib/stores/agents';
@@ -62,6 +67,9 @@
 			void agentStore.loadAgents();
 			void promptStore.loadPrompts();
 			void folderStore.loadFolders();
+			// Global supervisor ids drive the creator's compose/analyze nudges + the
+			// D7 locked compose select; refresh them each time the modal opens.
+			void kanbanSupervisorStore.load();
 		}
 	});
 
@@ -348,6 +356,8 @@
 	agents={$agentsStore}
 	prompts={$promptsStore}
 	folders={$foldersStore}
+	composeAgentId={$composeSupervisorId}
+	analyzeAgentId={$analyzeSupervisorId}
 	onclose={() => cardCreatorStore.close()}
 	oncreated={handleGlobalCardCreated}
 />

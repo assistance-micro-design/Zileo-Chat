@@ -29,6 +29,7 @@ use crate::agents::execution::tool_loop::{self, PricingCache, ToolLoopContext};
 use crate::commands::agent::hydrate_llm_from_model;
 use crate::commands::kanban_card::get_kanban_card_core;
 use crate::commands::kanban_interaction::persist_interaction;
+use crate::commands::settings_kanban::{load_kanban_settings, resolve_role_agent_id};
 use crate::db::DBClient;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
@@ -94,10 +95,23 @@ pub async fn analyze_card_report_core(
         )
     })?;
 
-    let mut config = load_kanban_agent_for_analysis(db, &card.kanban_agent_id).await?;
+    // Resolve the EFFECTIVE analyze supervisor BEFORE loading the agent and
+    // reading its `auto_analyze_reports` gate (D3): a configured global analyze
+    // agent overrides the card's own `kanban_agent_id` when it still exists and
+    // is Kanban-kind, otherwise we fall back to the card's agent (legacy
+    // behaviour / graceful degradation if the configured agent was deleted).
+    let settings = load_kanban_settings(db).await;
+    let configured_analyze = settings
+        .as_ref()
+        .ok()
+        .and_then(|s| s.analyze_agent_id.clone());
+    let effective_agent_id =
+        resolve_role_agent_id(db, configured_analyze.as_deref(), &card.kanban_agent_id).await;
+
+    let mut config = load_kanban_agent_for_analysis(db, &effective_agent_id).await?;
     if !config.auto_analyze_reports {
         debug!(
-            kanban_agent_id = %card.kanban_agent_id,
+            kanban_agent_id = %effective_agent_id,
             "Kanban agent has auto_analyze_reports=false — skipping"
         );
         return Ok(AnalyzeReport {
@@ -177,11 +191,11 @@ pub async fn analyze_card_report_core(
             // Without it the catch-up re-analyzes this card on every startup.
             let err_msg = format!("Analyze tool_loop failed: {}", e);
             let failed_report =
-                Report::failed(&card.kanban_agent_id, &user_prompt, err_msg.clone(), 0);
+                Report::failed(&effective_agent_id, &user_prompt, err_msg.clone(), 0);
             persist_terminal_analyze_interaction(
                 db,
                 &validated_card_id,
-                &card.kanban_agent_id,
+                &effective_agent_id,
                 &config.llm,
                 &user_prompt,
                 &failed_report,
@@ -204,7 +218,7 @@ pub async fn analyze_card_report_core(
             persist_terminal_analyze_interaction(
                 db,
                 &validated_card_id,
-                &card.kanban_agent_id,
+                &effective_agent_id,
                 &config.llm,
                 &user_prompt,
                 &exec_report,
@@ -224,7 +238,7 @@ pub async fn analyze_card_report_core(
         db,
         &validated_card_id,
         InteractionKind::Analyze,
-        &card.kanban_agent_id,
+        &effective_agent_id,
         &config.llm,
         &user_prompt,
         &exec_report,
@@ -448,7 +462,10 @@ async fn load_workflow_locale(db: &Arc<DBClient>, workflow_id: &str) -> Option<S
         .filter(|s| !s.trim().is_empty())
 }
 
-fn build_analyze_system_prompt(agent_sp: &str) -> String {
+/// Prepends the report-analysis role block to an agent's own `system_prompt`.
+/// `pub(crate)` so the settings prompt-preview command can render the exact
+/// production prompt without duplicating the block text.
+pub(crate) fn build_analyze_system_prompt(agent_sp: &str) -> String {
     let mut s = String::new();
     if !agent_sp.trim().is_empty() {
         s.push_str(agent_sp.trim());
