@@ -110,17 +110,29 @@ export const skillStore = {
 	/**
 	 * Toggle skill enabled/disabled state.
 	 * Skill-specific extension, not part of base CRUD.
+	 *
+	 * Flips the flag in place rather than reloading the whole list: a full
+	 * reload re-sorts by `updated_at`, which would make the toggled row jump
+	 * and the clicked switch appear to act on a different skill. The optimistic
+	 * update is reverted if the backend call fails.
 	 */
 	async toggleEnabled(id: string, enabled: boolean): Promise<void> {
-		baseCrudStore._store.update((s) => ({ ...s, loading: true, error: null }));
+		const applyEnabled = (value: boolean): void =>
+			baseCrudStore._store.update((s) => ({
+				...s,
+				error: null,
+				items: s.items.map((item) => (item.id === id ? { ...item, enabled: value } : item))
+			}));
+
+		applyEnabled(enabled);
 		try {
 			await invoke('update_skill', {
 				skillId: id,
 				config: { enabled }
 			});
-			await baseCrudStore.loadItems();
 		} catch (e) {
-			baseCrudStore._store.update((s) => ({ ...s, error: getErrorMessage(e), loading: false }));
+			applyEnabled(!enabled);
+			baseCrudStore._store.update((s) => ({ ...s, error: getErrorMessage(e) }));
 			throw e;
 		}
 	},

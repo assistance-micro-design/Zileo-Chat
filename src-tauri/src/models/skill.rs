@@ -112,6 +112,29 @@ pub struct SkillUpdate {
     pub enabled: Option<bool>,
 }
 
+/// Returns `true` when a skill update changes content-bearing fields
+/// (name, description, category, or content), as opposed to flipping only the
+/// `enabled` visibility flag.
+///
+/// A content change is versioned and bumps `updated_at`. A pure `enabled`
+/// toggle is a lightweight flag flip: it must not snapshot a version (which
+/// would pollute the history with identical-content entries) nor bump
+/// `updated_at` (which would reorder the skill list and make the toggled row
+/// jump under the cursor).
+///
+/// # Arguments
+/// * `update` - The partial update payload to inspect
+///
+/// # Returns
+/// `true` if any content-bearing field is set, `false` otherwise (including an
+/// empty update).
+pub fn skill_update_touches_content(update: &SkillUpdate) -> bool {
+    update.name.is_some()
+        || update.description.is_some()
+        || update.category.is_some()
+        || update.content.is_some()
+}
+
 /// Maximum length for skill name
 pub const MAX_SKILL_NAME_LEN: usize = 128;
 /// Maximum length for skill description
@@ -302,5 +325,72 @@ mod tests {
         assert!(json.contains("\"name\":\"new-name\""));
         assert!(!json.contains("description"));
         assert!(!json.contains("category"));
+    }
+
+    // -- skill_update_touches_content tests --
+
+    /// Flipping only `enabled` is a visibility toggle, not a content revision:
+    /// it must not trigger a version snapshot nor an `updated_at` bump.
+    #[test]
+    fn test_touches_content_enabled_only_is_false() {
+        let update = SkillUpdate {
+            name: None,
+            description: None,
+            category: None,
+            content: None,
+            enabled: Some(false),
+        };
+        assert!(!skill_update_touches_content(&update));
+    }
+
+    /// An empty update carries no content change either.
+    #[test]
+    fn test_touches_content_empty_is_false() {
+        let update = SkillUpdate {
+            name: None,
+            description: None,
+            category: None,
+            content: None,
+            enabled: None,
+        };
+        assert!(!skill_update_touches_content(&update));
+    }
+
+    #[test]
+    fn test_touches_content_name_is_true() {
+        let update = SkillUpdate {
+            name: Some("new-name".to_string()),
+            description: None,
+            category: None,
+            content: None,
+            enabled: None,
+        };
+        assert!(skill_update_touches_content(&update));
+    }
+
+    #[test]
+    fn test_touches_content_body_is_true() {
+        let update = SkillUpdate {
+            name: None,
+            description: None,
+            category: None,
+            content: Some("# New content".to_string()),
+            enabled: None,
+        };
+        assert!(skill_update_touches_content(&update));
+    }
+
+    /// A content edit that also flips `enabled` still counts as a content
+    /// change (the content fields win), so it is versioned as expected.
+    #[test]
+    fn test_touches_content_mixed_is_true() {
+        let update = SkillUpdate {
+            name: None,
+            description: Some("Updated description".to_string()),
+            category: None,
+            content: None,
+            enabled: Some(true),
+        };
+        assert!(skill_update_touches_content(&update));
     }
 }

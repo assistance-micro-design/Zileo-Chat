@@ -18,8 +18,8 @@
 
 use crate::commands::skill_version::snapshot_skill_version_core;
 use crate::models::skill::{
-    validate_skill_content, validate_skill_description, validate_skill_name, Skill, SkillCreate,
-    SkillSummary, SkillUpdate,
+    skill_update_touches_content, validate_skill_content, validate_skill_description,
+    validate_skill_name, Skill, SkillCreate, SkillSummary, SkillUpdate,
 };
 use crate::security::{serialize_for_query, validate_uuid_field};
 use crate::AppState;
@@ -232,11 +232,17 @@ pub async fn update_skill(
         return get_skill(skill_id, state).await;
     }
 
-    // Snapshot the current state BEFORE applying the update so the change
-    // remains reversible via the versions panel.
-    snapshot_skill_version_core(&state.db, &skill_id, &edited_by, edit_summary).await?;
-
-    set_clauses.push("updated_at = time::now()".to_string());
+    // A pure enable/disable toggle is a visibility flag, not a content
+    // revision. Versioning it would pollute the history with identical-content
+    // entries, and bumping `updated_at` would reorder the list (which is sorted
+    // by `updated_at DESC`), making the toggled row jump under the cursor.
+    // Only content-bearing changes snapshot a version and refresh the timestamp.
+    if skill_update_touches_content(&config) {
+        // Snapshot the current state BEFORE applying the update so the change
+        // remains reversible via the versions panel.
+        snapshot_skill_version_core(&state.db, &skill_id, &edited_by, edit_summary).await?;
+        set_clauses.push("updated_at = time::now()".to_string());
+    }
 
     let query = format!("UPDATE skill:`{}` SET {}", skill_id, set_clauses.join(", "));
 
