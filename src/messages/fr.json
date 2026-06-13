@@ -482,6 +482,7 @@
 	"audit_stats_total": "Total",
 	"audit_stats_aria_label": "Résumé du journal d'audit",
 
+	"settings_theme_description": "Choisissez l'apparence de l'application. Le réglage est immédiat et conservé.",
 	"theme_light": "Mode clair",
 	"theme_dark": "Mode sombre",
 	"theme_light_description": "Interface lumineuse et épurée",

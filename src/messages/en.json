@@ -482,6 +482,7 @@
 	"audit_stats_total": "Total",
 	"audit_stats_aria_label": "Audit log summary",
 
+	"settings_theme_description": "Choose the application's appearance. The change is instant and saved.",
 	"theme_light": "Light Mode",
 	"theme_dark": "Dark Mode",
 	"theme_light_description": "Bright and clean interface",

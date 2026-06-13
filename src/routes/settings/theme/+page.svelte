@@ -37,6 +37,7 @@ Manages theme selection (light/dark).
 <section class="settings-section">
 	<SettingsSectionHeader
 		titleKey="settings_theme"
+		descriptionKey="settings_theme_description"
 		helpTitleKey="help_theme_title"
 		helpDescriptionKey="help_theme_description"
 		helpTutorialKey="help_theme_tutorial"
@@ -48,21 +49,28 @@ Manages theme selection (light/dark).
 			type="button"
 			class="theme-card"
 			class:selected={$theme === 'light'}
+			aria-pressed={$theme === 'light'}
 			onclick={() => handleThemeChange('light')}
 		>
-			<div class="theme-preview light">
-				<div class="theme-header">
-					<Sun size={24} />
-					<div>
-						<h3 class="theme-title">{$i18n('theme_light')}</h3>
-						<p class="theme-description">{$i18n('theme_light_description')}</p>
-					</div>
+			<div class="theme-preview light" aria-hidden="true">
+				<div class="mini-card">
+					<span class="brand-dot"></span>
+					<span>{$i18n('theme_light')}</span>
 				</div>
-				<div class="theme-colors">
-					<div class="color-swatch accent"></div>
-					<div class="color-swatch secondary"></div>
-					<div class="color-swatch bg-light"></div>
-				</div>
+			</div>
+			<div class="theme-body">
+				<span class="theme-id">
+					<Sun size={18} aria-hidden="true" />
+					<span class="theme-id-text">
+						<strong>{$i18n('theme_light')}</strong>
+						<span class="theme-id-desc">{$i18n('theme_light_description')}</span>
+					</span>
+				</span>
+				<span class="swatches" aria-hidden="true">
+					<span style="background:#94efee"></span>
+					<span style="background:#fe7254"></span>
+					<span style="background:#f4f6fa"></span>
+				</span>
 			</div>
 		</button>
 
@@ -71,21 +79,28 @@ Manages theme selection (light/dark).
 			type="button"
 			class="theme-card"
 			class:selected={$theme === 'dark'}
+			aria-pressed={$theme === 'dark'}
 			onclick={() => handleThemeChange('dark')}
 		>
-			<div class="theme-preview dark">
-				<div class="theme-header">
-					<Moon size={24} />
-					<div>
-						<h3 class="theme-title">{$i18n('theme_dark')}</h3>
-						<p class="theme-description">{$i18n('theme_dark_description')}</p>
-					</div>
+			<div class="theme-preview dark" aria-hidden="true">
+				<div class="mini-card">
+					<span class="brand-dot"></span>
+					<span>{$i18n('theme_dark')}</span>
 				</div>
-				<div class="theme-colors">
-					<div class="color-swatch accent"></div>
-					<div class="color-swatch secondary"></div>
-					<div class="color-swatch bg-dark"></div>
-				</div>
+			</div>
+			<div class="theme-body">
+				<span class="theme-id">
+					<Moon size={18} aria-hidden="true" />
+					<span class="theme-id-text">
+						<strong>{$i18n('theme_dark')}</strong>
+						<span class="theme-id-desc">{$i18n('theme_dark_description')}</span>
+					</span>
+				</span>
+				<span class="swatches" aria-hidden="true">
+					<span style="background:#94efee"></span>
+					<span style="background:#fe7254"></span>
+					<span style="background:#0f1117"></span>
+				</span>
 			</div>
 		</button>
 	</div>
@@ -93,19 +108,21 @@ Manages theme selection (light/dark).
 
 <!-- Security Info -->
 <section class="settings-section">
-	<Card>
-		{#snippet header()}
-			<div class="security-header">
-				<ShieldCheck size={24} class="icon-success" />
-				<h3 class="card-title">{$i18n('security_title')}</h3>
-			</div>
-		{/snippet}
-		{#snippet body()}
-			<p class="security-info-text">
-				{$i18n('security_description')}
-			</p>
-		{/snippet}
-	</Card>
+	<div class="security-card">
+		<Card>
+			{#snippet body()}
+				<div class="security-body">
+					<ShieldCheck size={24} class="icon-success" aria-hidden="true" />
+					<div>
+						<strong class="security-title">{$i18n('security_title')}</strong>
+						<p class="security-info-text">
+							{$i18n('security_description')}
+						</p>
+					</div>
+				</div>
+			{/snippet}
+		</Card>
+	</div>
 </section>
 
 <style>
@@ -113,111 +130,160 @@ Manages theme selection (light/dark).
 	.theme-grid {
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-lg);
+		gap: var(--spacing-md);
+		max-width: 760px;
+		margin-bottom: var(--spacing-lg);
 	}
 
 	.theme-card {
-		cursor: pointer;
-		background: none;
-		border: none;
-		padding: 0;
+		display: block;
 		width: 100%;
+		padding: 0;
 		text-align: left;
-	}
-
-	.theme-preview {
-		background: var(--color-bg-primary);
+		font: inherit;
+		color: var(--color-text-primary);
+		background: var(--surface-1);
 		border: 2px solid var(--color-border);
 		border-radius: var(--border-radius-lg);
 		overflow: hidden;
-		transition: border-color var(--transition-fast);
+		cursor: pointer;
+		transition:
+			border-color var(--transition-fast),
+			box-shadow var(--transition-fast);
 	}
 
-	.theme-card.selected .theme-preview {
-		border-color: var(--color-accent);
+	.theme-card.selected {
+		border-color: var(--color-accent-deep);
+		box-shadow: var(--glow-accent-soft);
 	}
 
-	.theme-preview .theme-header {
+	.theme-card:focus-visible {
+		outline: none;
+		border-color: var(--color-accent-deep);
+		box-shadow: var(--glow-accent);
+	}
+
+	/* Tinted, non-flat previews (light is no longer pure white,
+	   dark is no longer Discord gray). */
+	.theme-preview {
+		height: 110px;
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-md);
-		padding: var(--spacing-lg);
+		justify-content: center;
+		position: relative;
 	}
 
-	.theme-preview.light .theme-header {
-		background: #ffffff;
-		color: #212529;
+	.theme-preview.light {
+		background:
+			radial-gradient(300px 90px at 80% 0%, rgba(78, 205, 203, 0.18), transparent 60%), #f4f6fa;
+		color: #171a21;
 	}
 
-	.theme-preview.dark .theme-header {
-		background: #2b2d31;
-		color: #ffffff;
+	.theme-preview.dark {
+		background:
+			radial-gradient(300px 90px at 80% 0%, rgba(148, 239, 238, 0.14), transparent 60%), #0f1117;
+		color: #f2f4fa;
 	}
 
-	.theme-preview.dark .theme-description {
-		color: #b5bac1;
+	.mini-card {
+		width: 70%;
+		height: 56px;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 0 12px;
+		border-radius: 10px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+		font-size: 11px;
 	}
 
-	.theme-title {
-		font-size: var(--font-size-base);
+	.theme-preview.light .mini-card {
+		background: #fff;
+		border: 1px solid rgba(23, 26, 33, 0.08);
+	}
+
+	.theme-preview.dark .mini-card {
+		background: #181c29;
+		border: 1px solid rgba(148, 163, 205, 0.14);
+	}
+
+	.brand-dot {
+		width: 14px;
+		height: 14px;
+		border-radius: 5px;
+		background: var(--gradient-brand);
+		flex-shrink: 0;
+	}
+
+	.theme-body {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-md);
+	}
+
+	.theme-id {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.theme-id-text {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.theme-id-text strong {
+		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-semibold);
 	}
 
-	.theme-description {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
+	.theme-id-desc {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
 	}
 
-	.theme-colors {
+	.swatches {
 		display: flex;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-lg);
-		background: var(--color-bg-secondary);
+		gap: 5px;
+		flex-shrink: 0;
 	}
 
-	.color-swatch {
-		width: 40px;
-		height: 40px;
-		border-radius: var(--border-radius-md);
-	}
-
-	.color-swatch.accent {
-		background: #94efee;
-	}
-
-	.color-swatch.secondary {
-		background: #fe7254;
-	}
-
-	.color-swatch.bg-light {
-		background: #ffffff;
-		border: 1px solid #dee2e6;
-	}
-
-	.color-swatch.bg-dark {
-		background: #2b2d31;
+	.swatches span {
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		border: 1px solid var(--color-border);
 	}
 
 	/* Security Section */
-	.security-header {
+	.security-card {
+		max-width: 760px;
+	}
+
+	.security-body {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: var(--spacing-md);
 	}
 
-	.security-header :global(.icon-success) {
+	.security-body :global(.icon-success) {
 		color: var(--color-success);
+		flex-shrink: 0;
 	}
 
-	.card-title {
-		font-size: var(--font-size-lg);
+	.security-title {
+		display: block;
+		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-semibold);
 	}
 
 	.security-info-text {
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 		line-height: var(--line-height-relaxed);
+		margin-top: var(--spacing-xs);
 	}
 
 	/* Responsive */
