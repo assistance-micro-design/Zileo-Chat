@@ -43,7 +43,7 @@
 	import { toastStore } from '$lib/stores/toast';
 	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { i18n } from '$lib/i18n';
-	import { ExternalLink } from '@lucide/svelte';
+	import { ExternalLink, Info } from '@lucide/svelte';
 	import { getErrorMessage } from '$lib/utils/error';
 
 	let enabled = $state(false);
@@ -163,129 +163,181 @@
 		helpDescriptionKey="help_stt_description"
 		helpTutorialKey="help_stt_tutorial"
 	/>
-	<p class="shortcut-hint">{$i18n('stt_shortcut_help')}</p>
+	<p class="shortcut-hint">
+		<Info size={14} aria-hidden="true" />
+		<span>{$i18n('stt_shortcut_help')}</span>
+	</p>
 
-	{#if $sttSettingsLoading}
-		<div class="lazy-loading">{$i18n('stt_loading')}</div>
-	{:else}
-		<Card>
-			{#snippet body()}
-				<div class="form-grid">
-					<div class="toggle-row">
-						<Switch
-							checked={enabled}
-							onchange={(value) => (enabled = value)}
-							labelledBy="stt-enabled-label"
+	<div class="stt-card">
+		{#if $sttSettingsLoading}
+			<div class="lazy-loading">{$i18n('stt_loading')}</div>
+		{:else}
+			<Card>
+				{#snippet body()}
+					<div class="stt-form">
+						<div class="toggle-row">
+							<span class="toggle-text">
+								<strong id="stt-enabled-label">{$i18n('stt_enabled_label')}</strong>
+								<span>{$i18n('stt_enabled_help')}</span>
+							</span>
+							<Switch
+								checked={enabled}
+								onchange={(value) => (enabled = value)}
+								labelledBy="stt-enabled-label"
+							/>
+						</div>
+
+						<div class="model-field">
+							<Input
+								label={$i18n('stt_model_id_label')}
+								value={modelId}
+								placeholder={DEFAULT_VOXTRAL_MODEL_ID}
+								oninput={handleModelInput}
+								help={$i18n('stt_model_id_help')}
+							/>
+							{#if modelError}
+								<p class="form-error" role="alert">{$i18n(modelError)}</p>
+							{/if}
+							<Button variant="ghost" size="sm" onclick={openModelsDoc}>
+								<ExternalLink size={14} aria-hidden="true" />
+								<span>{$i18n('stt_see_models_link')}</span>
+							</Button>
+						</div>
+
+						<div class="narrow">
+							<Select
+								label={$i18n('stt_language_label')}
+								value={language}
+								options={languageOptions.map((opt) => ({ ...opt, label: $i18n(opt.label) }))}
+								onchange={(ev) => (language = ev.currentTarget.value as typeof language)}
+								help={$i18n('stt_language_help')}
+							/>
+						</div>
+
+						<Textarea
+							label={$i18n('stt_context_bias_label')}
+							value={contextBiasRaw}
+							placeholder={$i18n('stt_context_bias_placeholder')}
+							rows={5}
+							oninput={(e) => (contextBiasRaw = e.currentTarget.value)}
+							help={$i18n('stt_context_bias_help')}
 						/>
-						<span id="stt-enabled-label">{$i18n('stt_enabled_label')}</span>
 					</div>
-					<p class="form-hint">{$i18n('stt_enabled_help')}</p>
-
-					<Input
-						label={$i18n('stt_model_id_label')}
-						value={modelId}
-						placeholder={DEFAULT_VOXTRAL_MODEL_ID}
-						oninput={handleModelInput}
-						help={$i18n('stt_model_id_help')}
-					/>
-					{#if modelError}
-						<p class="form-error" role="alert">{$i18n(modelError)}</p>
-					{/if}
-
-					<button type="button" class="link-button" onclick={openModelsDoc}>
-						<ExternalLink size={14} />
-						<span>{$i18n('stt_see_models_link')}</span>
-					</button>
-
-					<Select
-						label={$i18n('stt_language_label')}
-						value={language}
-						options={languageOptions.map((opt) => ({ ...opt, label: $i18n(opt.label) }))}
-						onchange={(ev) => (language = ev.currentTarget.value as typeof language)}
-						help={$i18n('stt_language_help')}
-					/>
-
-					<Textarea
-						label={$i18n('stt_context_bias_label')}
-						value={contextBiasRaw}
-						placeholder={$i18n('stt_context_bias_placeholder')}
-						rows={5}
-						oninput={(e) => (contextBiasRaw = e.currentTarget.value)}
-						help={$i18n('stt_context_bias_help')}
-					/>
-
-					<div class="actions">
-						<Button
-							variant="primary"
-							onclick={handleSave}
-							disabled={$sttSettingsSaving || modelError !== null}
-						>
-							{$sttSettingsSaving ? $i18n('stt_saving') : $i18n('stt_save')}
-						</Button>
-						<Button variant="secondary" onclick={handleReset} disabled={$sttSettingsSaving}>
-							{$i18n('stt_reset')}
-						</Button>
-					</div>
-				</div>
-			{/snippet}
-		</Card>
-	{/if}
+				{/snippet}
+				{#snippet footer()}
+					<Button variant="ghost" onclick={handleReset} disabled={$sttSettingsSaving}>
+						{$i18n('stt_reset')}
+					</Button>
+					<Button
+						variant="primary"
+						onclick={handleSave}
+						disabled={$sttSettingsSaving || modelError !== null}
+					>
+						{$sttSettingsSaving ? $i18n('stt_saving') : $i18n('stt_save')}
+					</Button>
+				{/snippet}
+			</Card>
+		{/if}
+	</div>
 </section>
 
 <style>
 	.settings-section :global(.settings-header) {
-		margin-bottom: var(--spacing-sm);
+		margin-bottom: var(--spacing-xs);
 	}
 
+	/* Keyboard-shortcut hint: small tertiary line with an info glyph, sitting
+	   directly under the section description like the mockup. */
 	.shortcut-hint {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin: 0 0 var(--spacing-lg);
-	}
-
-	.form-grid {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
-	.toggle-row {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		font-weight: var(--font-weight-medium);
-		cursor: pointer;
-	}
-
-	.form-hint {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin: 0;
-	}
-
-	.form-error {
-		color: var(--color-error, #dc2626);
-		font-size: var(--font-size-sm);
-		margin: 0;
-	}
-
-	.link-button {
 		display: inline-flex;
 		align-items: center;
 		gap: var(--spacing-xs);
-		background: transparent;
-		border: none;
-		color: var(--color-accent-deep);
-		cursor: pointer;
-		padding: 0;
-		font-size: var(--font-size-sm);
-		text-decoration: underline;
-		align-self: flex-start;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		margin: 0 0 var(--spacing-lg);
 	}
 
-	.actions {
+	.shortcut-hint :global(svg) {
+		flex-shrink: 0;
+	}
+
+	/* Mockup caps the dictation card at 720px so the form reads as one focused
+	   column rather than stretching across the full settings pane. */
+	.stt-card {
+		max-width: 720px;
+	}
+
+	/* The shared .card-footer only carries padding/border/background; the mockup
+	   right-aligns its Reset/Save actions, so opt this card's footer into the
+	   flex layout locally (scoped to this page, no global side effects). */
+	.stt-card :global(.card-footer) {
 		display: flex;
-		gap: var(--spacing-md);
-		margin-top: var(--spacing-md);
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--spacing-sm);
+	}
+
+	.stt-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-lg);
+	}
+
+	/* Field components own a .form-group with a bottom margin; spacing between
+	   blocks here is driven by the flex gap, so neutralise the per-field margin. */
+	.stt-form :global(.form-group) {
+		margin-bottom: 0;
+	}
+
+	/* Toggle row: descriptive text block on the left, switch on the right. */
+	.toggle-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--spacing-lg);
+	}
+
+	.toggle-text strong {
+		display: block;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-primary);
+	}
+
+	.toggle-text span {
+		display: block;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
+	}
+
+	/* Model id cluster: input, optional validation error, and the ghost button
+	   linking to the Voxtral model list. */
+	.model-field {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--spacing-xs);
+	}
+
+	.model-field :global(.form-group) {
+		width: 100%;
+	}
+
+	/* The model id is an exact identifier: monospaced and width-capped per the mockup. */
+	.model-field :global(.form-input) {
+		font-family: var(--font-mono);
+		max-width: 320px;
+	}
+
+	.narrow :global(.form-select) {
+		max-width: 320px;
+	}
+
+	.form-error {
+		color: var(--color-error);
+		font-size: var(--font-size-xs);
+		margin: 0;
 	}
 </style>
