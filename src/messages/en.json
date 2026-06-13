@@ -613,6 +613,8 @@
 	"ie_missing_env_vars": "Missing Env Vars",
 
 	"ie_resolve_conflicts_title": "Resolve Import Conflicts",
+	"ie_conflict_already_exists": "Already exists in this installation",
+	"ie_references_by_name_note": "References between entities are preserved by name: items missing at import become warnings, not errors. API keys are never exported.",
 	"ie_conflicts_need_resolution": "{unresolved} of {total} conflicts need resolution",
 	"ie_all_resolved": "All Resolved",
 	"ie_x_unresolved": "{count} Unresolved",

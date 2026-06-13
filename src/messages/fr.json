@@ -614,6 +614,8 @@
 	"ie_missing_env_vars": "Variables manquantes",
 
 	"ie_resolve_conflicts_title": "Résoudre les conflits d'importation",
+	"ie_conflict_already_exists": "Existe déjà dans cette installation",
+	"ie_references_by_name_note": "Les références entre entités sont conservées par nom : les éléments manquants à l'import deviennent des avertissements, pas des erreurs. Les clés d'API ne sont jamais exportées.",
 	"ie_conflicts_need_resolution": "{unresolved} conflit(s) sur {total} a résoudre",
 	"ie_all_resolved": "Tous résolus",
 	"ie_x_unresolved": "{count} non résolu(s)",

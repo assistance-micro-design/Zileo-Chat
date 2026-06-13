@@ -79,26 +79,28 @@
 		helpTutorialKey="help_import_export_tutorial"
 	/>
 
-	<!-- Tab navigation -->
-	<div class="tabs" role="tablist">
+	<!-- Tab navigation: brand segmented control (mirrors the dock's nav-seg) -->
+	<div class="seg-tabs" role="tablist" aria-label={$i18n('ie_title')}>
 		<button
-			class="tab"
+			type="button"
+			class="seg-tab"
 			role="tab"
 			aria-selected={activeTab === 'export'}
 			class:active={activeTab === 'export'}
 			onclick={() => (activeTab = 'export')}
 		>
-			<Download size={16} />
+			<Download size={16} aria-hidden="true" />
 			<span>{$i18n('ie_tab_export')}</span>
 		</button>
 		<button
-			class="tab"
+			type="button"
+			class="seg-tab"
 			role="tab"
 			aria-selected={activeTab === 'import'}
 			class:active={activeTab === 'import'}
 			onclick={() => (activeTab = 'import')}
 		>
-			<Upload size={16} />
+			<Upload size={16} aria-hidden="true" />
 			<span>{$i18n('ie_tab_import')}</span>
 		</button>
 	</div>
@@ -121,40 +123,56 @@
 		padding: var(--spacing-md);
 	}
 
-	.tabs {
-		display: flex;
-		gap: var(--spacing-xs);
-		border-bottom: 1px solid var(--color-border);
-		padding-bottom: var(--spacing-xs);
+	/* Segmented control: a translucent pill rail; the active segment lifts onto
+	   a surface with a soft brand glow and tints its icon (mirrors .nav-seg). */
+	.seg-tabs {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		padding: 3px;
+		width: fit-content;
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border-light);
+		border-radius: var(--border-radius-full);
 	}
 
-	.tab {
-		display: flex;
+	.seg-tab {
+		display: inline-flex;
 		align-items: center;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-sm) var(--spacing-md);
+		gap: var(--spacing-sm);
+		padding: 0.4rem 0.9rem;
 		border: none;
 		background: transparent;
 		color: var(--color-text-secondary);
 		font-size: var(--font-size-sm);
-		font-weight: 500;
+		font-weight: var(--font-weight-medium);
 		cursor: pointer;
-		border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
+		border-radius: var(--border-radius-full);
 		transition:
-			background-color 0.2s,
-			color 0.2s;
+			background-color var(--transition-fast),
+			color var(--transition-fast);
 	}
 
-	.tab:hover {
+	.seg-tab:hover {
 		background: var(--color-bg-hover);
 		color: var(--color-text-primary);
 	}
 
-	.tab.active {
-		background: var(--color-bg-primary);
-		color: var(--color-primary);
-		border-bottom: 2px solid var(--color-primary);
-		margin-bottom: -1px;
+	.seg-tab.active {
+		background: var(--surface-1);
+		color: var(--color-text-primary);
+		box-shadow: var(--shadow-xs), var(--glow-accent-soft);
+	}
+
+	.seg-tab.active :global(svg) {
+		color: var(--color-accent-deep);
+	}
+
+	.seg-tab:focus-visible {
+		outline: none;
+		box-shadow:
+			0 0 0 3px var(--color-accent-light),
+			0 0 0 1px var(--color-accent-deep);
 	}
 
 	.tab-content {

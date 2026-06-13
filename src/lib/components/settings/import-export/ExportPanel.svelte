@@ -25,10 +25,13 @@ Multi-step process: entity selection, options, preview, and export.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { tauriInvoke, saveDialog, isTauriRuntime } from '$lib/tauri';
-	import { Button, Card, Badge, StatusIndicator } from '$lib/components/ui';
+	import { Button, Card, StatusIndicator, Switch } from '$lib/components/ui';
 	import EntitySelector from './EntitySelector.svelte';
 	import ExportPreview from './ExportPreview.svelte';
+	import ImportExportSteps from './ImportExportSteps.svelte';
+	import type { WizardStepItem } from './ImportExportSteps.svelte';
 	import { isLocalOrPrivateHttpServer } from './mcp-export.helpers';
+	import { Download, Info } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { downloadBrowserFile } from '$lib/utils/browser-download';
@@ -105,6 +108,22 @@ Multi-step process: entity selection, options, preview, and export.
 			selectedCustomProviders.length >
 			0
 	);
+
+	/** Wizard progress, derived from the current step. */
+	const exportSteps = $derived<WizardStepItem[]>([
+		{
+			label: $i18n('ie_step_select'),
+			state: currentStep === 'selection' ? 'current' : 'done'
+		},
+		{
+			label: $i18n('ie_step_options'),
+			state: currentStep === 'options' ? 'current' : currentStep === 'preview' ? 'done' : 'upcoming'
+		},
+		{
+			label: $i18n('ie_step_preview'),
+			state: currentStep === 'preview' ? 'current' : 'upcoming'
+		}
+	]);
 
 	/**
 	 * Names of HTTP MCP servers whose URL targets a loopback/private address.
@@ -311,33 +330,8 @@ Multi-step process: entity selection, options, preview, and export.
 </script>
 
 <div class="export-panel">
-	<!-- Header -->
-	<div class="panel-header">
-		<h2 class="panel-title">{$i18n('ie_export_title')}</h2>
-		<div class="step-indicator">
-			<Badge variant={currentStep === 'selection' ? 'primary' : 'success'}>
-				{$i18n('ie_step_select')}
-			</Badge>
-			<span class="step-arrow">→</span>
-			<Badge
-				variant={currentStep === 'options'
-					? 'primary'
-					: currentStep === 'preview'
-						? 'success'
-						: 'primary'}
-			>
-				{$i18n('ie_step_options')}
-			</Badge>
-			<span class="step-arrow">→</span>
-			<Badge variant={currentStep === 'preview' ? 'primary' : 'primary'}>
-				{$i18n('ie_step_preview')}
-			</Badge>
-		</div>
-	</div>
-
 	{#if error}
-		<div class="error-message">
-			<Badge variant="error">{$i18n('common_error')}</Badge>
+		<div class="alert alert-error" role="alert">
 			<span>{error}</span>
 		</div>
 	{/if}
@@ -351,16 +345,15 @@ Multi-step process: entity selection, options, preview, and export.
 				</div>
 			{/snippet}
 		</Card>
-	{:else}
+	{:else if currentStep === 'selection'}
 		<!-- Step 1: Entity Selection -->
-		{#if currentStep === 'selection'}
-			<Card>
-				{#snippet body()}
-					<div class="step-content">
+		<Card>
+			{#snippet body()}
+				<div class="step-content">
+					<ImportExportSteps steps={exportSteps} />
+					<div class="step-block">
 						<h3 class="step-title">{$i18n('ie_select_entities_title')}</h3>
-						<p class="step-description">
-							{$i18n('ie_select_entities_description')}
-						</p>
+						<p class="step-description">{$i18n('ie_select_entities_description')}</p>
 
 						<div class="entity-selectors">
 							<EntitySelector
@@ -401,97 +394,96 @@ Multi-step process: entity selection, options, preview, and export.
 							/>
 						</div>
 					</div>
-				{/snippet}
-				{#snippet footer()}
-					<div class="step-actions">
-						<Button variant="primary" onclick={nextStep} disabled={!hasSelection}>
-							{$i18n('ie_next_options')}
-						</Button>
-					</div>
-				{/snippet}
-			</Card>
-		{/if}
-
+				</div>
+			{/snippet}
+			{#snippet footer()}
+				<div class="footer-actions">
+					<Button variant="primary" onclick={nextStep} disabled={!hasSelection}>
+						{$i18n('ie_next_options')}
+					</Button>
+				</div>
+			{/snippet}
+		</Card>
+	{:else if currentStep === 'options'}
 		<!-- Step 2: Export Options -->
-		{#if currentStep === 'options'}
-			<Card>
-				{#snippet body()}
-					<div class="step-content">
+		<Card>
+			{#snippet body()}
+				<div class="step-content">
+					<ImportExportSteps steps={exportSteps} />
+					<div class="step-block">
 						<h3 class="step-title">{$i18n('ie_export_options_title')}</h3>
-						<p class="step-description">
-							{$i18n('ie_export_options_description')}
-						</p>
+						<p class="step-description">{$i18n('ie_export_options_description')}</p>
 
-						<div class="options-list">
-							<label class="option-item">
-								<input
-									type="checkbox"
+						<div class="toggle-stack">
+							<div class="toggle-row">
+								<span class="toggle-text">
+									<strong id="ie-opt-timestamps">{$i18n('ie_include_timestamps')}</strong>
+									<span>{$i18n('ie_include_timestamps_description')}</span>
+								</span>
+								<Switch
 									checked={includeTimestamps}
-									onchange={() => (includeTimestamps = !includeTimestamps)}
+									onchange={(v) => (includeTimestamps = v)}
+									labelledBy="ie-opt-timestamps"
 								/>
-								<div class="option-info">
-									<span class="option-label">{$i18n('ie_include_timestamps')}</span>
-									<span class="option-description">
-										{$i18n('ie_include_timestamps_description')}
-									</span>
-								</div>
-							</label>
-
-							<label class="option-item">
-								<input
-									type="checkbox"
+							</div>
+							<div class="toggle-row">
+								<span class="toggle-text">
+									<strong id="ie-opt-sanitize">{$i18n('ie_sanitize_mcp')}</strong>
+									<span>{$i18n('ie_sanitize_mcp_description')}</span>
+								</span>
+								<Switch
 									checked={sanitizeMcp}
-									onchange={() => (sanitizeMcp = !sanitizeMcp)}
+									onchange={(v) => (sanitizeMcp = v)}
+									labelledBy="ie-opt-sanitize"
 								/>
-								<div class="option-info">
-									<span class="option-label">{$i18n('ie_sanitize_mcp')}</span>
-									<span class="option-description">
-										{$i18n('ie_sanitize_mcp_description')}
-									</span>
-								</div>
-							</label>
+							</div>
+						</div>
+
+						<div class="alert alert-info" role="note">
+							<Info size={18} aria-hidden="true" />
+							<span>{$i18n('ie_references_by_name_note')}</span>
 						</div>
 					</div>
-				{/snippet}
-				{#snippet footer()}
-					<div class="step-actions">
-						<Button variant="ghost" onclick={previousStep}>
-							{$i18n('common_cancel')}
-						</Button>
-						<Button variant="primary" onclick={nextStep}>
-							{$i18n('ie_next_preview')}
-						</Button>
-					</div>
-				{/snippet}
-			</Card>
-		{/if}
-
+				</div>
+			{/snippet}
+			{#snippet footer()}
+				<div class="footer-actions">
+					<Button variant="ghost" onclick={previousStep}>
+						{$i18n('common_cancel')}
+					</Button>
+					<Button variant="primary" onclick={nextStep}>
+						{$i18n('ie_next_preview')}
+					</Button>
+				</div>
+			{/snippet}
+		</Card>
+	{:else if currentStep === 'preview' && preview !== null}
 		<!-- Step 3: Preview -->
-		{#if currentStep === 'preview' && preview !== null}
-			{@const exportPreview = preview}
-			<Card>
-				{#snippet body()}
-					<div class="step-content">
-						<ExportPreview
-							preview={exportPreview}
-							{mcpSanitization}
-							{nonReimportableMcp}
-							onMcpSanitizationChange={handleMcpSanitizationChange}
-						/>
-					</div>
-				{/snippet}
-				{#snippet footer()}
-					<div class="step-actions">
-						<Button variant="ghost" onclick={previousStep} disabled={exporting}>
-							{$i18n('common_cancel')}
-						</Button>
-						<Button variant="primary" onclick={generateExport} disabled={exporting}>
-							{exporting ? $i18n('ie_exporting') : $i18n('ie_export_file')}
-						</Button>
-					</div>
-				{/snippet}
-			</Card>
-		{/if}
+		{@const exportPreview = preview}
+		<Card>
+			{#snippet body()}
+				<div class="step-content">
+					<ImportExportSteps steps={exportSteps} />
+					<ExportPreview
+						preview={exportPreview}
+						{mcpSanitization}
+						{nonReimportableMcp}
+						onMcpSanitizationChange={handleMcpSanitizationChange}
+					/>
+				</div>
+			{/snippet}
+			{#snippet footer()}
+				<div class="footer-actions">
+					<Button variant="ghost" onclick={previousStep} disabled={exporting}>
+						{$i18n('common_cancel')}
+					</Button>
+					<Button variant="primary" onclick={generateExport} disabled={exporting}>
+						<Download size={16} aria-hidden="true" />
+						<span>{exporting ? $i18n('ie_exporting') : $i18n('ie_export_file')}</span>
+					</Button>
+				</div>
+			{/snippet}
+		</Card>
 	{/if}
 </div>
 
@@ -502,41 +494,31 @@ Multi-step process: entity selection, options, preview, and export.
 		gap: var(--spacing-lg);
 	}
 
-	.panel-header {
+	/* Alerts: a tinted band with a 1px semantic border (info note / errors). */
+	.alert {
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: var(--spacing-lg);
-		flex-wrap: wrap;
-	}
-
-	.panel-title {
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-		color: var(--color-text-primary);
-	}
-
-	.step-indicator {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-	}
-
-	.step-arrow {
-		color: var(--color-text-tertiary);
-		font-size: var(--font-size-sm);
-	}
-
-	.error-message {
-		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-md);
+		border: 1px solid;
 		border-radius: var(--border-radius-md);
-		background: var(--color-error-light);
-		color: var(--color-error);
 		font-size: var(--font-size-sm);
+	}
+
+	.alert :global(svg) {
+		flex-shrink: 0;
+	}
+
+	.alert-info {
+		background: var(--color-info-light);
+		border-color: color-mix(in srgb, var(--color-info) 30%, transparent);
+		color: var(--color-info);
+	}
+
+	.alert-error {
+		background: var(--color-error-light);
+		border-color: var(--color-error-border);
+		color: var(--color-error);
 	}
 
 	.loading-state {
@@ -552,6 +534,12 @@ Multi-step process: entity selection, options, preview, and export.
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-lg);
+	}
+
+	.step-block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
 	}
 
 	.step-title {
@@ -573,74 +561,47 @@ Multi-step process: entity selection, options, preview, and export.
 		gap: var(--spacing-md);
 	}
 
-	.options-list {
+	/* Toggle rows: text block on the left, Switch on the right (mirrors the
+	   shared settings convention used across the validation/agents surfaces). */
+	.toggle-stack {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-md);
 	}
 
-	.option-item {
+	.toggle-row {
 		display: flex;
-		gap: var(--spacing-md);
 		align-items: flex-start;
-		padding: var(--spacing-md);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		cursor: pointer;
-		transition: background 0.2s;
-		user-select: none;
+		justify-content: space-between;
+		gap: var(--spacing-lg);
+		padding: var(--spacing-sm) 0;
 	}
 
-	.option-item:hover {
-		background: var(--color-bg-hover);
+	.toggle-row + .toggle-row {
+		border-top: 1px solid var(--color-border-light);
 	}
 
-	.option-item input[type='checkbox'] {
-		cursor: pointer;
-		width: 18px;
-		height: 18px;
-		margin: 2px 0 0 0;
-		flex-shrink: 0;
-	}
-
-	.option-info {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.option-label {
+	.toggle-text strong {
+		display: block;
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 	}
 
-	.option-description {
+	.toggle-text span {
+		display: block;
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
 	}
 
-	.step-actions {
+	.footer-actions {
 		display: flex;
 		justify-content: flex-end;
 		gap: var(--spacing-sm);
 	}
 
 	@media (max-width: 768px) {
-		.panel-header {
-			flex-direction: column;
-			align-items: flex-start;
-		}
-
-		.step-indicator {
-			flex-direction: column;
-			align-items: flex-start;
-		}
-
-		.step-arrow {
-			transform: rotate(90deg);
-		}
-
 		.entity-selectors {
 			grid-template-columns: 1fr;
 		}

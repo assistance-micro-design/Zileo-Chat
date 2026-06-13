@@ -90,7 +90,7 @@ Marks sensitive keys as required.
 				<div class="editor-header">
 					<div class="server-info">
 						<h4>{serverName}</h4>
-						<Badge variant="primary">{serverId}</Badge>
+						<Badge variant="mcp">{serverId}</Badge>
 					</div>
 					<div class="progress-info">
 						<span class="progress-text">

@@ -33,6 +33,8 @@ Orchestrates the multi-step import process:
 	import ImportPreview from './ImportPreview.svelte';
 	import ConflictResolver from './ConflictResolver.svelte';
 	import MCPEnvEditor from './MCPEnvEditor.svelte';
+	import ImportExportSteps from './ImportExportSteps.svelte';
+	import type { WizardStepItem } from './ImportExportSteps.svelte';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import type {
@@ -101,6 +103,45 @@ Orchestrates the multi-step import process:
 	const filteredMissingMcpEnv = $derived(() => {
 		if (!validation) return {};
 		return filterMissingMcpEnvForSelection(validation.missingMcpEnv, selection);
+	});
+
+	/**
+	 * Whether the optional "Configure" step applies (conflicts to resolve or
+	 * missing MCP env vars to fill for the selected entities). Uses addition,
+	 * not short-circuit ||, so both counts stay tracked dependencies.
+	 */
+	const hasConfigureStep = $derived(
+		!!validation && filteredConflicts().length + Object.keys(filteredMissingMcpEnv()).length > 0
+	);
+
+	/** Wizard progress, derived from the current step and whether configure applies. */
+	const importSteps: WizardStepItem[] = $derived.by(() => {
+		const at = (active: boolean, done: boolean): WizardStepItem['state'] =>
+			active ? 'current' : done ? 'done' : 'upcoming';
+		const steps: WizardStepItem[] = [
+			{ label: $i18n('ie_step_upload'), state: currentStep === 'upload' ? 'current' : 'done' },
+			{
+				label: $i18n('ie_step_preview_label'),
+				state: at(
+					currentStep === 'preview',
+					['conflicts', 'mcp_env', 'executing', 'complete'].includes(currentStep)
+				)
+			}
+		];
+		if (hasConfigureStep) {
+			steps.push({
+				label: $i18n('ie_step_configure'),
+				state: at(
+					currentStep === 'conflicts' || currentStep === 'mcp_env',
+					['executing', 'complete'].includes(currentStep)
+				)
+			});
+		}
+		steps.push({
+			label: $i18n('ie_step_import_label'),
+			state: at(currentStep === 'executing', currentStep === 'complete')
+		});
+		return steps;
 	});
 
 	/**
@@ -311,61 +352,14 @@ Orchestrates the multi-step import process:
 <div class="import-panel">
 	<input bind:this={fileInput} type="file" accept=".json" hidden onchange={handleFileSelected} />
 	<!-- Step Indicator -->
-	<div class="step-indicator">
-		<div
-			class="step"
-			class:active={currentStep === 'upload'}
-			class:completed={currentStep !== 'upload'}
-		>
-			<div class="step-number">1</div>
-			<div class="step-label">{$i18n('ie_step_upload')}</div>
-		</div>
-		<div class="step-divider"></div>
-		<div
-			class="step"
-			class:active={currentStep === 'preview'}
-			class:completed={['conflicts', 'mcp_env', 'executing', 'complete'].includes(currentStep)}
-		>
-			<div class="step-number">2</div>
-			<div class="step-label">{$i18n('ie_step_preview_label')}</div>
-		</div>
-		{#if validation && (filteredConflicts().length > 0 || Object.keys(filteredMissingMcpEnv()).length > 0)}
-			<div class="step-divider"></div>
-			<div
-				class="step"
-				class:active={currentStep === 'conflicts' || currentStep === 'mcp_env'}
-				class:completed={['executing', 'complete'].includes(currentStep)}
-			>
-				<div class="step-number">3</div>
-				<div class="step-label">{$i18n('ie_step_configure')}</div>
-			</div>
-		{/if}
-		<div class="step-divider"></div>
-		<div
-			class="step"
-			class:active={currentStep === 'executing'}
-			class:completed={currentStep === 'complete'}
-		>
-			<div class="step-number">
-				{validation &&
-				(filteredConflicts().length > 0 || Object.keys(filteredMissingMcpEnv()).length > 0)
-					? '4'
-					: '3'}
-			</div>
-			<div class="step-label">{$i18n('ie_step_import_label')}</div>
-		</div>
-	</div>
+	<ImportExportSteps steps={importSteps} />
 
 	<!-- Error Message -->
 	{#if error}
-		<Card>
-			{#snippet body()}
-				<div class="error-message">
-					<CircleAlert size={24} />
-					<p>{error}</p>
-				</div>
-			{/snippet}
-		</Card>
+		<div class="alert alert-error" role="alert">
+			<CircleAlert size={18} aria-hidden="true" />
+			<p>{error}</p>
+		</div>
 	{/if}
 
 	<!-- Step Content -->
@@ -394,41 +388,23 @@ Orchestrates the multi-step import process:
 			{@const previewValidation = validation}
 			<div class="preview-content">
 				{#if previewValidation.warnings.length > 0}
-					<Card>
-						{#snippet body()}
-							<div class="warnings">
-								<div class="warnings-title">
-									<CircleAlert size={16} />
-									<span>{$i18n('ie_warnings')} ({previewValidation.warnings.length})</span>
-								</div>
-								<div class="warning-list">
-									{#each previewValidation.warnings as warning, i (i)}
-										<div
-											class="warning-item"
-											class:warning-high={warning.severity === 'high'}
-											class:warning-medium={warning.severity === 'medium'}
-											class:warning-info={warning.severity === 'info'}
-										>
-											<div class="warning-header">
-												<Badge
-													variant={warning.severity === 'high'
-														? 'error'
-														: warning.severity === 'medium'
-															? 'warning'
-															: 'primary'}
-												>
-													{warning.severity}
-												</Badge>
-												<span class="warning-entity">{warning.entity}</span>
-											</div>
-											<p class="warning-detail">{getWarningDetail(warning)}</p>
-											<p class="warning-action">{getWarningAction(warning)}</p>
-										</div>
-									{/each}
-								</div>
-							</div>
-						{/snippet}
-					</Card>
+					<div class="alert alert-warning" role="note">
+						<CircleAlert size={18} aria-hidden="true" />
+						<div class="warning-body">
+							<strong class="warning-title">
+								{$i18n('ie_warnings')} ({previewValidation.warnings.length})
+							</strong>
+							<ul class="warning-lines">
+								{#each previewValidation.warnings as warning, i (i)}
+									<li>
+										<span class="warning-entity">{warning.entity}</span>
+										<span class="warning-detail">{getWarningDetail(warning)}</span>
+										<span class="warning-action">{getWarningAction(warning)}</span>
+									</li>
+								{/each}
+							</ul>
+						</div>
+					</div>
 				{/if}
 				<ImportPreview
 					validation={previewValidation}
@@ -621,80 +597,36 @@ Orchestrates the multi-step import process:
 		gap: var(--spacing-lg);
 	}
 
-	.step-indicator {
+	/* Alerts: a tinted band with a 1px semantic border (warnings / errors). */
+	.alert {
 		display: flex;
-		align-items: center;
-		justify-content: center;
+		align-items: flex-start;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-lg);
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-md);
-	}
-
-	.step {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--spacing-xs);
-		opacity: 0.5;
-		transition: opacity 0.2s;
-	}
-
-	.step.active,
-	.step.completed {
-		opacity: 1;
-	}
-
-	.step-number {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 32px;
-		height: 32px;
-		border-radius: 50%;
-		background: var(--color-bg-tertiary);
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-secondary);
-	}
-
-	.step.active .step-number {
-		background: var(--color-primary);
-		color: white;
-	}
-
-	.step.completed .step-number {
-		background: var(--color-success);
-		color: white;
-	}
-
-	.step-label {
-		font-size: var(--font-size-xs);
-		font-weight: var(--font-weight-medium);
-		text-align: center;
-	}
-
-	.step-divider {
-		width: 40px;
-		height: 2px;
-		background: var(--color-border);
-		margin: 0 var(--spacing-xs);
-	}
-
-	.error-message {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
 		padding: var(--spacing-md);
-		background: var(--color-error-light);
-		border: 1px solid var(--color-error);
+		border: 1px solid;
 		border-radius: var(--border-radius-md);
-		color: var(--color-error);
+		font-size: var(--font-size-sm);
 	}
 
-	.error-message p {
+	.alert :global(svg) {
+		flex-shrink: 0;
+	}
+
+	.alert p {
 		margin: 0;
 		flex: 1;
+	}
+
+	.alert-warning {
+		background: var(--color-warning-light);
+		border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
+		color: var(--color-warning);
+	}
+
+	.alert-error {
+		background: var(--color-error-light);
+		border-color: var(--color-error-border);
+		color: var(--color-error);
 	}
 
 	.step-content {
@@ -730,71 +662,46 @@ Orchestrates the multi-step import process:
 		gap: var(--spacing-lg);
 	}
 
-	.warnings {
+	/* Preview warnings live inside the amber alert band: a bold count title and
+	   one line per warning (entity, detail, then a muted action hint). */
+	.warning-body {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-xs);
+		min-width: 0;
 	}
 
-	.warnings-title {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
+	.warning-title {
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
 	}
 
-	.warning-list {
+	.warning-lines {
+		margin: 0;
+		padding-left: var(--spacing-lg);
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-sm);
-		margin-top: var(--spacing-sm);
+		gap: var(--spacing-xs);
 	}
 
-	.warning-item {
-		padding: var(--spacing-sm) var(--spacing-md);
-		border-radius: var(--border-radius-sm);
-		border-left: 3px solid var(--color-border);
-		background: var(--color-bg-secondary);
-	}
-
-	.warning-item.warning-high {
-		border-left-color: var(--color-error);
-	}
-
-	.warning-item.warning-medium {
-		border-left-color: var(--color-warning);
-	}
-
-	.warning-item.warning-info {
-		border-left-color: var(--color-primary);
-	}
-
-	.warning-header {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-xs);
+	.warning-lines li {
+		font-size: var(--font-size-sm);
 	}
 
 	.warning-entity {
-		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
 	}
 
-	.warning-detail {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-primary);
+	.warning-entity::after {
+		content: ' — ';
 	}
 
 	.warning-action {
-		margin: var(--spacing-xs) 0 0 0;
+		display: block;
 		font-size: var(--font-size-xs);
 		color: var(--color-text-tertiary);
 		font-style: italic;
+		margin-top: 1px;
 	}
 
 	.error-list {
@@ -914,18 +821,6 @@ Orchestrates the multi-step import process:
 	}
 
 	@media (max-width: 768px) {
-		.step-indicator {
-			overflow-x: auto;
-		}
-
-		.step-label {
-			display: none;
-		}
-
-		.step-divider {
-			width: 20px;
-		}
-
 		.actions {
 			flex-direction: column-reverse;
 		}
