@@ -20,6 +20,7 @@ Each section is now a separate route for better performance and UX.
 -->
 
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Sidebar } from '$lib/components/layout';
 
 	import {
@@ -39,6 +40,7 @@ Each section is now a separate route for better performance and UX.
 	} from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { pauseOnScroll } from '$lib/actions/pauseOnScroll';
+	import { loadAllLLMData, testConnection } from '$lib/stores/llm';
 
 	/** Props from +layout.ts */
 	interface Props {
@@ -94,6 +96,86 @@ Each section is now a separate route for better performance and UX.
 		const section = sectionDefs.find((s) => pathname.startsWith(s.route));
 		return section?.id ?? 'providers';
 	});
+
+	/** Connectivity state shown for each provider in the sidebar footer. */
+	type ProviderState = 'unconfigured' | 'checking' | 'functional' | 'offline';
+
+	interface ProviderStatus {
+		id: string;
+		displayName: string;
+		state: ProviderState;
+	}
+
+	let providerStatuses = $state<ProviderStatus[]>([]);
+	let providersLoading = $state(true);
+
+	/** Maps a connectivity state to its localized label. */
+	function providerStateLabel(state: ProviderState): string {
+		switch (state) {
+			case 'functional':
+				return $i18n('settings_provider_state_functional');
+			case 'offline':
+				return $i18n('settings_provider_state_offline');
+			case 'checking':
+				return $i18n('settings_provider_state_checking');
+			default:
+				return $i18n('llm_provider_not_configured');
+		}
+	}
+
+	/** Replaces one provider's state immutably so the list stays reactive. */
+	function setProviderState(id: string, state: ProviderState): void {
+		providerStatuses = providerStatuses.map((p) => (p.id === id ? { ...p, state } : p));
+	}
+
+	// Load the provider list once when entering Settings (the layout persists
+	// across sub-route navigations, so this runs a single time). Configured
+	// providers are then probed concurrently and their dot upgrades to
+	// functional/offline as each result lands.
+	onMount(() => {
+		let active = true;
+
+		void (async () => {
+			try {
+				const data = await loadAllLLMData();
+				if (!active) return;
+				providerStatuses = data.providerList
+					.filter((p) => p.enabled)
+					.map((p): ProviderStatus => {
+						const configured =
+							!p.requiresApiKey || data.settings[p.id]?.api_key_configured === true;
+						return {
+							id: p.id,
+							displayName: p.displayName,
+							state: configured ? 'checking' : 'unconfigured'
+						};
+					});
+
+				// Failures are swallowed into 'offline' so one unreachable provider
+				// never rejects the whole batch.
+				await Promise.all(
+					providerStatuses
+						.filter((p) => p.state === 'checking')
+						.map(async ({ id }) => {
+							try {
+								const result = await testConnection(id);
+								if (active) setProviderState(id, result.success ? 'functional' : 'offline');
+							} catch {
+								if (active) setProviderState(id, 'offline');
+							}
+						})
+				);
+			} catch {
+				// Leave the panel empty on a hard load failure.
+			} finally {
+				if (active) providersLoading = false;
+			}
+		})();
+
+		return () => {
+			active = false;
+		};
+	});
 </script>
 
 <div class="settings-page">
@@ -146,13 +228,35 @@ Each section is now a separate route for better performance and UX.
 
 		{#snippet footer()}
 			{#if sidebarCollapsed}
-				<div class="security-badge-collapsed" title={$i18n('settings_security_badge')}>
-					<ShieldCheck size={20} />
+				<div class="providers-status providers-status-collapsed">
+					{#each providerStatuses as provider (provider.id)}
+						<span
+							class="provider-dot"
+							data-state={provider.state}
+							title={`${provider.displayName} — ${providerStateLabel(provider.state)}`}
+						></span>
+					{/each}
 				</div>
 			{:else}
-				<div class="security-badge">
-					<ShieldCheck size={16} />
-					<span class="security-text">{$i18n('settings_security_badge')}</span>
+				<div class="providers-status">
+					<span class="providers-status-title">{$i18n('settings_providers')}</span>
+					{#if providersLoading && providerStatuses.length === 0}
+						<span class="providers-status-empty">{$i18n('providers_loading')}</span>
+					{:else if providerStatuses.length === 0}
+						<span class="providers-status-empty">{$i18n('settings_providers_none')}</span>
+					{:else}
+						<ul class="providers-status-list">
+							{#each providerStatuses as provider (provider.id)}
+								<li class="provider-status-item">
+									<span class="provider-dot" data-state={provider.state}></span>
+									<span class="provider-status-name">{provider.displayName}</span>
+									<span class="provider-status-state" data-state={provider.state}>
+										{providerStateLabel(provider.state)}
+									</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
 				</div>
 			{/if}
 		{/snippet}
@@ -171,6 +275,10 @@ Each section is now a separate route for better performance and UX.
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
+		/* Detach the sidebar card from the viewport edges with a gutter + gap,
+		   matching the floating sidebar of the agent page. */
+		gap: var(--spacing-md);
+		padding: 0 var(--spacing-md) var(--spacing-md);
 	}
 
 	/* Sidebar */
@@ -270,28 +378,114 @@ Each section is now a separate route for better performance and UX.
 		color: var(--color-accent-deep);
 	}
 
-	.security-badge {
+	/* Provider connectivity panel (sidebar footer) */
+	.providers-status {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		width: 100%;
+	}
+
+	.providers-status-collapsed {
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.providers-status-title {
+		font-size: var(--font-size-2xs);
+		font-weight: var(--font-weight-semibold);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--color-text-tertiary);
+	}
+
+	.providers-status-empty {
+		font-size: var(--font-size-xs);
+		font-style: italic;
+		color: var(--color-text-tertiary);
+	}
+
+	.providers-status-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2xs);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.provider-status-item {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-sm);
-		background: var(--color-success-light);
-		border-radius: var(--border-radius-md);
-		color: var(--color-success);
-	}
-
-	.security-badge-collapsed {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: var(--spacing-sm);
-		background: var(--color-success-light);
-		border-radius: var(--border-radius-md);
-		color: var(--color-success);
-	}
-
-	.security-text {
 		font-size: var(--font-size-xs);
+	}
+
+	.provider-status-name {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--color-text-secondary);
+	}
+
+	.provider-status-state {
+		flex-shrink: 0;
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-tertiary);
+	}
+
+	.provider-status-state[data-state='functional'] {
+		color: var(--color-success);
+	}
+
+	.provider-status-state[data-state='offline'] {
+		color: var(--color-danger);
+	}
+
+	/* Glowing connectivity dot */
+	.provider-dot {
+		width: 8px;
+		height: 8px;
+		flex-shrink: 0;
+		border-radius: var(--border-radius-full);
+		background: var(--color-text-tertiary);
+	}
+
+	.provider-dot[data-state='unconfigured'] {
+		background: var(--color-text-tertiary);
+		opacity: 0.55;
+	}
+
+	.provider-dot[data-state='checking'] {
+		background: var(--color-accent-deep);
+	}
+
+	.provider-dot[data-state='functional'] {
+		background: var(--color-success);
+		box-shadow: 0 0 6px color-mix(in srgb, var(--color-success) 55%, transparent);
+	}
+
+	.provider-dot[data-state='offline'] {
+		background: var(--color-danger);
+		box-shadow: 0 0 6px color-mix(in srgb, var(--color-danger) 45%, transparent);
+	}
+
+	@media (prefers-reduced-motion: no-preference) {
+		.provider-dot[data-state='checking'] {
+			animation: provider-dot-pulse 1.3s ease-in-out infinite;
+		}
+	}
+
+	@keyframes provider-dot-pulse {
+		0%,
+		100% {
+			opacity: 0.35;
+		}
+		50% {
+			opacity: 1;
+		}
 	}
 
 	/* Shared settings page styles (scoped to content area) */
