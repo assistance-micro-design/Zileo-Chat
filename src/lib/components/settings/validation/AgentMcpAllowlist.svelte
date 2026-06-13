@@ -29,15 +29,18 @@ stale-seed reactivity bug. The parent seeds `value` from
 user toggle, so an open+save without interaction reproduces the existing
 allowlist identically (anti-involuntary-disarm).
 
-Per running server: one checkbox per tool (arming) + ONE checkbox
-`allow_in_delegated_runs` (per-server flag: also auto-approve when another
-autonomous agent delegates to this one). Entries of STOPPED / absent servers
-cannot be edited (their tools are not listable) and are shown read-only —
-they are preserved verbatim in the payload so they are never silently disarmed.
+Each running server renders as a nested card: collapsible header carrying the
+armed-count badge plus the arm-all / disarm-all actions, expanded body with the
+per-tool checkbox grid and the per-server `allow_in_delegated_runs` switch
+(also auto-approve when another autonomous agent delegates to this one).
+Entries of STOPPED / absent servers cannot be edited (their tools are not
+listable) and are shown as read-only dimmed cards — they are preserved verbatim
+in the payload so they are never silently disarmed.
 -->
 
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
+	import { Badge, Button, Switch } from '$lib/components/ui';
 	import { ChevronRight, Trash2 } from '@lucide/svelte';
 	import type { MCPServer } from '$types/mcp';
 	import type { McpToolAllowlistEntry } from '$types/agent';
@@ -47,8 +50,7 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		mergeServerTools,
 		preservedMcpAllowlistEntries,
 		removePreservedEntry,
-		seedMcpArmingState,
-		toggleAllServerTools
+		seedMcpArmingState
 	} from './mcp-allowlist.helpers';
 
 	interface Props {
@@ -148,19 +150,25 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		);
 	}
 
-	/**
-	 * Select-all / none for one server: arms every displayed tool when not all
-	 * are armed yet, otherwise clears the selection. Preserves armed orphans.
-	 */
-	function toggleAllTools(server: MCPServer): void {
+	/** Replaces one server's armed tool list and emits the rebuilt allowlist. */
+	function setServerTools(serverId: string, tools: string[]): void {
 		const armed = currentArming();
-		const cur = armed[server.id] ?? { tools: [], allowInDelegatedRuns: false };
-		const tools = toggleAllServerTools(
-			displayedTools(server).map((t) => t.name),
-			armedToolsFor(server.id)
-		);
-		armed[server.id] = { tools, allowInDelegatedRuns: cur.allowInDelegatedRuns };
+		const cur = armed[serverId] ?? { tools: [], allowInDelegatedRuns: false };
+		armed[serverId] = { tools, allowInDelegatedRuns: cur.allowInDelegatedRuns };
 		onchange(buildMcpToolAllowlist(armed, enumerableIds, value));
+	}
+
+	/** Arms every displayed tool of `server` (exposed + armed orphans). */
+	function armAllTools(server: MCPServer): void {
+		setServerTools(
+			server.id,
+			displayedTools(server).map((t) => t.name)
+		);
+	}
+
+	/** Disarms every tool of `server` (the entry is pruned from the payload). */
+	function disarmAllTools(server: MCPServer): void {
+		setServerTools(server.id, []);
 	}
 
 	/** Flips the per-server delegation flag and emits the rebuilt allowlist. */
@@ -201,122 +209,129 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 </script>
 
 <div class="agent-mcp-allowlist">
-	<p class="allowlist-warning" role="note">{$i18n('validation_mcp_allowlist_warning')}</p>
-
 	{#if runningServers.length === 0}
 		<p class="allowlist-empty">{$i18n('validation_mcp_allowlist_none')}</p>
 	{:else}
 		{#each runningServers as server (server.id)}
-			{@const displayed = displayedTools(server)}
-			{@const armed = countArmed(server.id)}
-			<div class="server-block">
-				<button
-					type="button"
-					class="server-summary"
-					aria-expanded={isExpanded(server.id)}
-					aria-controls={isExpanded(server.id) ? `mcp-srv-body-${server.id}` : undefined}
-					onclick={() => toggleExpanded(server.id)}
-				>
-					<span class={['chevron', isExpanded(server.id) && 'chevron-open']} aria-hidden="true">
-						<ChevronRight size={16} />
-					</span>
-					<span class="server-name">{server.name}</span>
-					<span class="armed-count">
-						{$i18n('validation_mcp_allowlist_armed_count', { armed, total: displayed.length })}
-					</span>
-				</button>
+			<div class="card server-card">
+				<div class="server-header">
+					<button
+						type="button"
+						class="server-summary"
+						aria-expanded={isExpanded(server.id)}
+						aria-controls={isExpanded(server.id) ? `mcp-srv-body-${server.id}` : undefined}
+						onclick={() => toggleExpanded(server.id)}
+					>
+						<span class={['chevron', isExpanded(server.id) && 'chevron-open']} aria-hidden="true">
+							<ChevronRight size={16} />
+						</span>
+						<strong class="server-name">{server.name}</strong>
+						<Badge variant="mcp">
+							{$i18n('validation_mcp_allowlist_armed_count', {
+								armed: countArmed(server.id),
+								total: displayedTools(server).length
+							})}
+						</Badge>
+					</button>
+					<div class="server-actions">
+						<Button
+							variant="ghost"
+							size="sm"
+							disabled={displayedTools(server).length === 0 || isAllArmed(server)}
+							onclick={() => armAllTools(server)}
+						>
+							{$i18n('validation_mcp_allowlist_select_all')}
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							disabled={countArmed(server.id) === 0}
+							onclick={() => disarmAllTools(server)}
+						>
+							{$i18n('validation_mcp_allowlist_remove', { name: server.name })}
+						</Button>
+					</div>
+				</div>
 
-				{#if displayed.length === 0}
-					{#if isExpanded(server.id)}
-						<p id="mcp-srv-body-{server.id}" class="server-no-tools">
-							{$i18n('validation_mcp_allowlist_no_tools')}
-						</p>
-					{/if}
-				{:else}
-					<!-- Delegation toggle stays visible without expanding (it governs the
-					     whole server). Disabled when nothing is armed: it only takes effect
-					     once at least one tool is auto-approved (otherwise the entry is pruned). -->
-					<label class="delegated-item">
-						<input
-							type="checkbox"
-							checked={isDelegatedAllowed(server.id)}
-							disabled={armed === 0}
-							onchange={() => toggleDelegated(server.id)}
-						/>
-						<div class="delegated-content">
-							<span class="delegated-label"
-								>{$i18n('validation_mcp_allowlist_allow_delegated')}</span
-							>
-							<span class="delegated-help"
-								>{$i18n('validation_mcp_allowlist_allow_delegated_help')}</span
-							>
-						</div>
-					</label>
-
-					{#if isExpanded(server.id)}
-						<div id="mcp-srv-body-{server.id}" class="tool-group">
-							<label class="tool-item tool-select-all">
-								<input
-									type="checkbox"
-									checked={isAllArmed(server)}
-									onchange={() => toggleAllTools(server)}
+				{#if isExpanded(server.id)}
+					<div id="mcp-srv-body-{server.id}" class="server-body">
+						{#if displayedTools(server).length === 0}
+							<p class="server-no-tools">{$i18n('validation_mcp_allowlist_no_tools')}</p>
+						{:else}
+							<div class="tool-grid">
+								{#each displayedTools(server) as tool (tool.name)}
+									<label class={['tool-item', tool.orphan && 'tool-orphan']}>
+										<input
+											type="checkbox"
+											class="form-checkbox"
+											checked={isToolArmed(server.id, tool.name)}
+											onchange={() => toggleTool(server.id, tool.name)}
+										/>
+										<span class="tool-name">{tool.name}</span>
+										{#if tool.orphan}
+											<span class="orphan-badge"
+												>{$i18n('validation_mcp_allowlist_orphan_badge')}</span
+											>
+										{/if}
+									</label>
+								{/each}
+							</div>
+							<!-- Delegation switch: disabled when nothing is armed — it only
+							     takes effect once at least one tool is auto-approved
+							     (otherwise the entry is pruned from the payload). -->
+							<div class="toggle-row delegated-row">
+								<span class="toggle-text">
+									<strong id="mcp-delegated-{server.id}">
+										{$i18n('validation_mcp_allowlist_allow_delegated')}
+									</strong>
+									<span>{$i18n('validation_mcp_allowlist_allow_delegated_help')}</span>
+								</span>
+								<Switch
+									checked={isDelegatedAllowed(server.id)}
+									disabled={countArmed(server.id) === 0}
+									onchange={() => toggleDelegated(server.id)}
+									labelledBy="mcp-delegated-{server.id}"
 								/>
-								<span class="select-all-label">{$i18n('validation_mcp_allowlist_select_all')}</span>
-							</label>
-							{#each displayed as tool (tool.name)}
-								<label class={['tool-item', tool.orphan && 'tool-orphan']}>
-									<input
-										type="checkbox"
-										checked={isToolArmed(server.id, tool.name)}
-										onchange={() => toggleTool(server.id, tool.name)}
-									/>
-									<span class="tool-name">{tool.name}</span>
-									{#if tool.orphan}
-										<span class="orphan-badge"
-											>{$i18n('validation_mcp_allowlist_orphan_badge')}</span
-										>
-									{/if}
-								</label>
-							{/each}
-						</div>
-					{/if}
+							</div>
+						{/if}
+					</div>
 				{/if}
 			</div>
 		{/each}
 	{/if}
 
 	{#if preserved.length > 0}
-		<div class="preserved-block">
-			<p class="preserved-note">{$i18n('validation_mcp_allowlist_stopped_note')}</p>
-			<ul class="preserved-list" role="list">
-				{#each preserved as entry (entry.server_id)}
-					<li class="preserved-item">
-						<div class="preserved-info">
-							<span class="preserved-name">{resolveServerName(entry.server_id)}</span>
-							<span class="preserved-kind">{$i18n(preservedKindLabel(entry.server_id))}</span>
-							{#if !isResolvable(entry.server_id)}
-								<span class="preserved-raw-id" title={entry.server_id}>({entry.server_id})</span>
-							{/if}
-						</div>
-						<span class="preserved-tools">{entry.tools.join(', ')}</span>
-						{#if entry.allow_in_delegated_runs}
-							<span class="preserved-flag">{$i18n('validation_mcp_allowlist_delegated_badge')}</span
-							>
+		<p class="preserved-note">{$i18n('validation_mcp_allowlist_stopped_note')}</p>
+		{#each preserved as entry (entry.server_id)}
+			<div class="card server-card preserved-card">
+				<div class="server-header">
+					<div class="preserved-title">
+						<strong class="server-name">{resolveServerName(entry.server_id)}</strong>
+						{#if !isResolvable(entry.server_id)}
+							<span class="preserved-raw-id" title={entry.server_id}>({entry.server_id})</span>
 						{/if}
-						<button
-							type="button"
-							class="preserved-remove"
-							aria-label={$i18n('validation_mcp_allowlist_remove', {
-								name: resolveServerName(entry.server_id)
-							})}
-							onclick={() => removeServer(entry.server_id)}
-						>
-							<Trash2 size={14} aria-hidden="true" />
-						</button>
-					</li>
-				{/each}
-			</ul>
-		</div>
+						<Badge variant="neutral">{entry.tools.length}</Badge>
+						<Badge variant="warning">{$i18n(preservedKindLabel(entry.server_id))}</Badge>
+					</div>
+					<Button
+						variant="ghost"
+						size="sm"
+						ariaLabel={$i18n('validation_mcp_allowlist_remove', {
+							name: resolveServerName(entry.server_id)
+						})}
+						onclick={() => removeServer(entry.server_id)}
+					>
+						<Trash2 size={14} aria-hidden="true" />
+					</Button>
+				</div>
+				<div class="server-body preserved-body">
+					<span class="preserved-tools">{entry.tools.join(', ')}</span>
+					{#if entry.allow_in_delegated_runs}
+						<span class="preserved-flag">{$i18n('validation_mcp_allowlist_delegated_badge')}</span>
+					{/if}
+				</div>
+			</div>
+		{/each}
 	{/if}
 </div>
 
@@ -327,16 +342,6 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		gap: var(--spacing-sm);
 	}
 
-	.allowlist-warning {
-		margin: 0;
-		padding: var(--spacing-sm);
-		background: var(--color-bg-secondary);
-		border-left: 3px solid var(--color-warning, var(--color-border));
-		border-radius: var(--border-radius-sm);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
 	.allowlist-empty {
 		margin: 0;
 		font-size: var(--font-size-sm);
@@ -344,21 +349,28 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		font-style: italic;
 	}
 
-	.server-block {
+	/* Nested cards: keep the global card surface but drop the outer shadow. */
+	.server-card {
+		box-shadow: none;
+	}
+
+	.server-header {
 		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-sm);
-		background: var(--color-bg-secondary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-md);
+		flex-wrap: wrap;
+		padding: var(--spacing-md);
+	}
+
+	.server-card:not(.preserved-card) .server-header:not(:last-child) {
+		border-bottom: 1px solid var(--color-border-light);
 	}
 
 	.server-summary {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
-		width: 100%;
 		padding: 0;
 		background: none;
 		border: none;
@@ -375,21 +387,31 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		transition: transform 0.15s ease;
 	}
 
+	@media (prefers-reduced-motion: reduce) {
+		.chevron {
+			transition: none;
+		}
+	}
+
 	.chevron-open {
 		transform: rotate(90deg);
 	}
 
 	.server-name {
-		font-weight: 600;
+		font-weight: var(--font-weight-semibold);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-primary);
 	}
 
-	.armed-count {
-		margin-left: auto;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-		white-space: nowrap;
+	.server-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		flex-wrap: wrap;
+	}
+
+	.server-body {
+		padding: var(--spacing-md);
 	}
 
 	.server-no-tools {
@@ -399,37 +421,27 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		font-style: italic;
 	}
 
-	.tool-group {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-		padding-left: var(--spacing-sm);
+	.tool-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		gap: var(--spacing-sm);
 	}
 
-	.tool-item,
-	.delegated-item {
+	.tool-item {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		gap: var(--spacing-sm);
 		cursor: pointer;
+		min-width: 0;
 	}
 
 	.tool-name {
 		font-size: var(--font-size-sm);
 		font-family: var(--font-mono);
 		color: var(--color-text-primary);
-	}
-
-	.tool-select-all {
-		padding-bottom: var(--spacing-xs);
-		margin-bottom: 2px;
-		border-bottom: 1px dashed var(--color-border);
-	}
-
-	.select-all-label {
-		font-size: var(--font-size-sm);
-		font-weight: 600;
-		color: var(--color-text-secondary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.tool-orphan .tool-name {
@@ -440,36 +452,36 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		font-size: var(--font-size-xs);
 		font-style: italic;
 		color: var(--color-warning, var(--color-text-secondary));
+		white-space: nowrap;
 	}
 
-	.delegated-item {
-		margin-top: var(--spacing-xs);
-		padding-top: var(--spacing-xs);
-		border-top: 1px dashed var(--color-border);
-	}
-
-	.delegated-content {
+	/* Delegation switch row under the tool grid */
+	.delegated-row {
 		display: flex;
-		flex-direction: column;
-		gap: 2px;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--spacing-lg);
+		margin-top: var(--spacing-sm);
+		padding-top: var(--spacing-sm);
+		border-top: 1px solid var(--color-border-light);
 	}
 
-	.delegated-label {
+	.toggle-text strong {
+		display: block;
 		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 	}
 
-	.delegated-help {
+	.toggle-text span {
+		display: block;
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
 	}
 
-	.preserved-block {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
+	/* Preserved (read-only) entries: dimmed cards, explicit revoke only */
 	.preserved-note {
 		margin: 0;
 		font-size: var(--font-size-xs);
@@ -477,45 +489,16 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		font-style: italic;
 	}
 
-	.preserved-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.preserved-item {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg-tertiary, var(--color-bg-secondary));
-		border: 1px dashed var(--color-border);
-		border-radius: var(--border-radius-sm);
+	.preserved-card {
 		opacity: 0.8;
 	}
 
-	.preserved-info {
+	.preserved-title {
 		display: flex;
-		flex-direction: column;
-		gap: 2px;
+		align-items: center;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
 		min-width: 0;
-	}
-
-	.preserved-name {
-		font-size: var(--font-size-sm);
-		font-weight: 600;
-		color: var(--color-text-primary);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.preserved-kind {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
 	}
 
 	.preserved-raw-id {
@@ -524,8 +507,15 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 		color: var(--color-text-secondary);
 	}
 
+	.preserved-body {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
+		padding-top: 0;
+	}
+
 	.preserved-tools {
-		flex: 1;
 		font-size: var(--font-size-xs);
 		font-family: var(--font-mono);
 		color: var(--color-text-primary);
@@ -538,22 +528,6 @@ they are preserved verbatim in the payload so they are never silently disarmed.
 	.preserved-flag {
 		font-size: var(--font-size-xs);
 		color: var(--color-warning, var(--color-text-secondary));
-	}
-
-	.preserved-remove {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		padding: var(--spacing-xs);
-		background: none;
-		border: none;
-		border-radius: var(--border-radius-sm);
-		color: var(--color-danger);
-		cursor: pointer;
-	}
-
-	.preserved-remove:hover {
-		background: var(--color-danger-light);
+		white-space: nowrap;
 	}
 </style>

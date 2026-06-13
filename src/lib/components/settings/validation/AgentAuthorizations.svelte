@@ -20,6 +20,10 @@ Settings → Validation page (NOT in AgentForm). For the selected agent it edits
   - require_file_confirmation (destructive file-op confirmation), and
   - the MCP auto-approval allowlist for detached runs.
 
+Everything lives in a single card: agent select, MCP auto-approval block with
+its unsaved-changes badge and amber warning, then the file-confirmation toggle,
+with the save action on a sticky bar at the bottom.
+
 Seeds imperatively from get_agent_config on selection (AgentSummary does not
 carry these fields) — no reactive $effect that could clobber edits
 Save is EXPLICIT (disarming is sensitive): a single
@@ -31,13 +35,10 @@ MCP servers are preserved verbatim by the allowlist helpers.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { i18n } from '$lib/i18n';
-	import { Button, Select, type SelectOption } from '$lib/components/ui';
+	import { Badge, Button, Card, Select, Switch, type SelectOption } from '$lib/components/ui';
+	import { TriangleAlert } from '@lucide/svelte';
 	import { agents, agentStore } from '$lib/stores/agents';
 	import { loadServers } from '$lib/stores/mcp';
-	import {
-		validationSettingsStore,
-		settings as validationSettings
-	} from '$lib/stores/validation-settings';
 	import { getErrorMessage } from '$lib/utils/error';
 	import type { AgentConfig, McpToolAllowlistEntry } from '$types/agent';
 	import type { MCPServer } from '$types/mcp';
@@ -78,23 +79,11 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		}))
 	);
 
-	/** True when any agent has MCP auto-approval configured (shows the legend). */
+	/** True when any agent has MCP auto-approval configured (legend as select help). */
 	const anyConfigured = $derived($agents.some((a) => a.has_mcp_auto_approval));
-
-	/**
-	 * Localized label of the current GLOBAL validation mode — shown for context
-	 * only. The allowlist is NEVER coupled to it (detached vs attended runs are
-	 * governed independently).
-	 */
-	const currentModeLabel = $derived(
-		$validationSettings ? $i18n(`validation_mode_${$validationSettings.mode}`) : null
-	);
 
 	onMount(() => {
 		agentStore.loadAgents();
-		// Load the global validation mode for the read-only context block (a
-		// sibling section may already have loaded it; the store is idempotent).
-		void validationSettingsStore.loadSettings().catch(() => {});
 	});
 
 	/**
@@ -141,8 +130,8 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		saved = false;
 	}
 
-	function toggleRequireFileConfirmation(): void {
-		requireFileConfirmation = !requireFileConfirmation;
+	function setRequireFileConfirmation(value: boolean): void {
+		requireFileConfirmation = value;
 		dirty = true;
 		saved = false;
 	}
@@ -187,78 +176,81 @@ MCP servers are preserved verbatim by the allowlist helpers.
 	}
 </script>
 
-<div class="agent-authorizations">
-	<Select
-		label={$i18n('validation_authorizations_select_agent')}
-		placeholder={$i18n('validation_authorizations_select_placeholder')}
-		value={selectedAgentId}
-		options={agentOptions}
-		disabled={loading || saving}
-		onchange={(e) => selectAgent(e.currentTarget.value)}
-	/>
-
-	{#if anyConfigured}
-		<p class="auth-legend" role="note">
-			{$i18n('validation_authorizations_configured_legend')}
-		</p>
-	{/if}
-
-	{#if errorMsg}
-		<p class="auth-error" role="alert">{errorMsg}</p>
-	{/if}
-
-	{#if loading}
-		<p class="auth-info">{$i18n('validation_authorizations_loading')}</p>
-	{:else if loadedConfig}
-		<div class="mode-context" role="note">
-			<p class="mode-context-line">{$i18n('validation_authorizations_detached_scope')}</p>
-			<p class="mode-context-line">
-				{$i18n('validation_authorizations_attended_scope', { mode: currentModeLabel ?? '—' })}
-			</p>
-		</div>
-
-		<label class="checkbox-item">
-			<input
-				type="checkbox"
-				checked={requireFileConfirmation}
-				onchange={toggleRequireFileConfirmation}
-			/>
-			<div class="checkbox-content">
-				<span class="checkbox-label">{$i18n('validation_require_file_confirmation')}</span>
-				<span class="checkbox-description"
-					>{$i18n('validation_require_file_confirmation_desc')}</span
-				>
+<Card>
+	{#snippet body()}
+		<div class="agent-authorizations">
+			<div class="agent-select">
+				<Select
+					label={$i18n('validation_authorizations_select_agent')}
+					placeholder={$i18n('validation_authorizations_select_placeholder')}
+					value={selectedAgentId}
+					options={agentOptions}
+					disabled={loading || saving}
+					help={anyConfigured ? $i18n('validation_authorizations_configured_legend') : undefined}
+					onchange={(e) => selectAgent(e.currentTarget.value)}
+				/>
 			</div>
-		</label>
 
-		<div class="allowlist-section">
-			<h4 class="subsection-title">{$i18n('validation_mcp_allowlist_section')}</h4>
-			<p class="subsection-help">{$i18n('validation_mcp_allowlist_help')}</p>
-			<AgentMcpAllowlist
-				{runningServers}
-				knownServers={allKnownServers}
-				value={allowlistDraft}
-				onchange={onAllowlistChange}
-			/>
-		</div>
+			{#if errorMsg}
+				<p class="auth-error" role="alert">{errorMsg}</p>
+			{/if}
 
-		<div class="auth-actions">
-			{#if dirty}
-				<span class="auth-dirty">{$i18n('validation_authorizations_dirty')}</span>
+			{#if loading}
+				<p class="auth-info">{$i18n('validation_authorizations_loading')}</p>
+			{:else if loadedConfig}
+				<div class="allowlist-head">
+					<h4 class="group-title">{$i18n('validation_mcp_allowlist_section')}</h4>
+					{#if dirty}
+						<Badge variant="warning">{$i18n('validation_authorizations_dirty')}</Badge>
+					{/if}
+				</div>
+
+				<div class="autonomy-warning" role="note">
+					<TriangleAlert size={18} aria-hidden="true" />
+					<span>{$i18n('validation_mcp_allowlist_warning')}</span>
+				</div>
+
+				<AgentMcpAllowlist
+					{runningServers}
+					knownServers={allKnownServers}
+					value={allowlistDraft}
+					onchange={onAllowlistChange}
+				/>
+
+				<div class="toggle-row">
+					<span class="toggle-text">
+						<strong id="validation-file-confirmation">
+							{$i18n('validation_require_file_confirmation')}
+						</strong>
+						<span>{$i18n('validation_require_file_confirmation_desc')}</span>
+					</span>
+					<Switch
+						checked={requireFileConfirmation}
+						onchange={setRequireFileConfirmation}
+						labelledBy="validation-file-confirmation"
+					/>
+				</div>
+
+				<!-- Sticky save bar: stays visible while the long authorizations form
+				     scrolls beneath it. Opaque card surface, no backdrop blur: a blurred
+				     sticky bar forces WebKitGTK to re-blur the scrolled content behind
+				     it every frame. -->
+				<div class="form-actions">
+					{#if saved}
+						<span class="auth-saved" role="status">{$i18n('validation_authorizations_saved')}</span>
+					{/if}
+					<Button variant="primary" disabled={!dirty || saving} onclick={save}>
+						{saving
+							? $i18n('validation_saving')
+							: $i18n('validation_authorizations_save', { name: loadedConfig.name })}
+					</Button>
+				</div>
+			{:else}
+				<p class="auth-info">{$i18n('validation_authorizations_none')}</p>
 			{/if}
-			{#if saved}
-				<span class="auth-saved">{$i18n('validation_authorizations_saved')}</span>
-			{/if}
-			<Button variant="primary" disabled={!dirty || saving} onclick={save}>
-				{saving
-					? $i18n('validation_saving')
-					: $i18n('validation_authorizations_save', { name: loadedConfig.name })}
-			</Button>
 		</div>
-	{:else}
-		<p class="auth-info">{$i18n('validation_authorizations_none')}</p>
-	{/if}
-</div>
+	{/snippet}
+</Card>
 
 <style>
 	.agent-authorizations {
@@ -267,17 +259,14 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		gap: var(--spacing-md);
 	}
 
+	.agent-select {
+		max-width: 420px;
+	}
+
 	.auth-error {
 		margin: 0;
 		font-size: var(--font-size-sm);
 		color: var(--color-danger);
-	}
-
-	.auth-legend {
-		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-		font-style: italic;
 	}
 
 	.auth-info {
@@ -287,67 +276,64 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		font-style: italic;
 	}
 
-	.mode-context {
+	.allowlist-head {
 		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-sm) var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-left: 3px solid var(--color-accent, var(--color-border));
-		border-radius: var(--border-radius-sm);
+		align-items: center;
+		gap: var(--spacing-sm);
 	}
 
-	.mode-context-line {
+	.group-title {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-accent-deep);
 		margin: 0;
+	}
+
+	.autonomy-warning {
+		display: flex;
+		gap: var(--spacing-sm);
+		align-items: flex-start;
+		padding: var(--spacing-md);
+		border-radius: var(--border-radius-md);
+		background: var(--color-warning-light);
+		border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+		color: var(--color-warning);
+	}
+
+	.autonomy-warning :global(svg) {
+		flex-shrink: 0;
+	}
+
+	.autonomy-warning span {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
-		line-height: 1.5;
 	}
 
-	.checkbox-item {
+	.toggle-row {
 		display: flex;
 		align-items: flex-start;
-		gap: var(--spacing-sm);
-		cursor: pointer;
+		justify-content: space-between;
+		gap: var(--spacing-lg);
+		padding: var(--spacing-sm) 0;
 	}
 
-	.checkbox-content {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-
-	.checkbox-label {
+	.toggle-text strong {
+		display: block;
 		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 	}
 
-	.checkbox-description {
+	.toggle-text span {
+		display: block;
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
 	}
 
-	.allowlist-section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.subsection-title {
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-	}
-
-	.subsection-help {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
-	/* Sticky save bar: stays visible while the long authorizations form
-	   scrolls beneath it. */
-	.auth-actions {
+	/* Sticky save bar: stays visible while the long form scrolls beneath it. */
+	.form-actions {
 		position: sticky;
 		bottom: 0;
 		display: flex;
@@ -356,18 +342,11 @@ MCP servers are preserved verbatim by the allowlist helpers.
 		gap: var(--spacing-md);
 		padding: var(--spacing-md) 0;
 		border-top: 1px solid var(--color-border);
-		/* Opaque surface, no backdrop blur: a blurred sticky bar forces
-		   WebKitGTK to re-blur the scrolled content behind it every frame. */
-		background: var(--color-bg-primary);
-	}
-
-	.auth-dirty {
-		margin-right: auto;
-		font-size: var(--font-size-xs);
-		color: var(--color-warning, var(--color-text-secondary));
+		background: var(--surface-1);
 	}
 
 	.auth-saved {
+		margin-right: auto;
 		font-size: var(--font-size-sm);
 		color: var(--color-success, var(--color-text-secondary));
 	}

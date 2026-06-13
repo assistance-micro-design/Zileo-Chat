@@ -18,15 +18,19 @@
 	/**
 	 * ValidationSettings component
 	 * Manages global validation settings configuration
-	 *
+
 	 * Functional options:
 	 * - Mode (Auto/Manual/Selective)
 	 * - Selective: Sub-Agent operations, Tools, MCP servers
 	 * - Risk Thresholds (autoApproveLow, alwaysConfirmHigh)
+	 *
+	 * Everything is edited inside a single card whose sticky save bar carries
+	 * the explicit Reset / Save actions plus the unsaved-changes hint.
 	 */
 	import { onMount } from 'svelte';
 	import { tauriInvoke } from '$lib/tauri';
-	import { Button, ErrorBanner } from '$lib/components/ui';
+	import { Button, Card, ErrorBanner, Input, Select, Switch } from '$lib/components/ui';
+	import { ExternalLink, Info, Trash2, TriangleAlert } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import {
@@ -117,6 +121,18 @@
 	const basicTools = $derived(splitTools.basicTools);
 	const subAgentTools = $derived(splitTools.subAgentTools);
 
+	// Timeout behavior options with localized labels for the native select
+	const behaviorSelectOptions = $derived(
+		timeoutBehaviorOptions.map((opt) => ({ value: opt.value, label: $i18n(opt.labelKey) }))
+	);
+
+	// Auto/Manual overview display (null in selective mode). Derived in the
+	// script because {@const} would not re-evaluate when the mode flips between
+	// auto and manual without leaving the {#if} block.
+	const modeDisplay = $derived(
+		localMode === 'auto' || localMode === 'manual' ? getAutoManualModeDisplay(localMode) : null
+	);
+
 	// Load settings and resources on mount
 	onMount(async () => {
 		try {
@@ -177,6 +193,12 @@
 		markChanged();
 	}
 
+	/** Parses a number input, keeping the previous value on a non-numeric entry. */
+	function parseIntOr(raw: string, fallback: number): number {
+		const parsed = Number.parseInt(raw, 10);
+		return Number.isNaN(parsed) ? fallback : parsed;
+	}
+
 	// Handle save
 	async function handleSave(): Promise<void> {
 		errorMessage = null;
@@ -213,7 +235,7 @@
 	}
 </script>
 
-<!-- Shared snippet: renders a list of tool badges -->
+<!-- Shared snippet: renders a list of tool badges (auto/manual mode overview) -->
 {#snippet toolBadgeList(tools: AvailableToolInfo[], badgeClass: string)}
 	{#if tools.length > 0}
 		<div class="item-list">
@@ -257,322 +279,296 @@
 			<span>{$i18n('validation_loading')}</span>
 		</div>
 	{:else}
-		<!-- Mode Selector -->
-		<div class="settings-section">
-			<h3 class="section-title">{$i18n('validation_mode_title')}</h3>
-			<div class="card-selector" role="group" aria-label={$i18n('validation_mode_title')}>
-				{#each modeOptions as option (option.value)}
-					<button
-						type="button"
-						class="selector-card"
-						class:selected={localMode === option.value}
-						onclick={() => selectMode(option.value)}
-					>
-						<span class="selector-card-title">{$i18n(option.labelKey)}</span>
-						<span class="selector-card-description">{$i18n(option.descKey)}</span>
-					</button>
-				{/each}
-			</div>
-			{#if localMode === 'auto'}
-				<div class="mode-banner warning">
-					<span class="mode-banner-icon">!</span>
-					<div class="mode-banner-content">
-						<span class="mode-banner-title">{$i18n('validation_auto_multi_workflow_title')}</span>
-						<span class="mode-banner-text">{$i18n('validation_auto_multi_workflow_desc')}</span>
-					</div>
-				</div>
-			{/if}
-			{#if localMode === 'manual' || localMode === 'selective'}
-				<div class="mode-banner info">
-					<span class="mode-banner-icon">i</span>
-					<div class="mode-banner-content">
-						<span class="mode-banner-title">{$i18n('validation_single_workflow_title')}</span>
-						<span class="mode-banner-text">{$i18n('validation_single_workflow_desc')}</span>
-					</div>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Auto/Manual Mode Information (merged - identical structure, different variant) -->
-		{#if localMode === 'auto' || localMode === 'manual'}
-			{@const modeDisplay = getAutoManualModeDisplay(localMode)}
-			{@const variant = modeDisplay.variant}
-			{@const icon = modeDisplay.icon}
-			{@const statusKey = modeDisplay.statusKey}
-			{@const sectionTitleKey = modeDisplay.sectionTitleKey}
-			{@const sectionHelpKey = modeDisplay.sectionHelpKey}
-
-			<div class="settings-section">
-				<h3 class="section-title">{$i18n(sectionTitleKey)}</h3>
-				<p class="section-help">{$i18n(sectionHelpKey)}</p>
-
-				<div class="info-cards">
-					<ValidationInfoCard {variant} {icon} titleKey="validation_sub_agents" {statusKey}>
-						{@render toolBadgeList(subAgentTools, variant)}
-					</ValidationInfoCard>
-
-					<ValidationInfoCard {variant} {icon} titleKey="validation_tools" {statusKey}>
-						{@render toolBadgeList(basicTools, variant)}
-					</ValidationInfoCard>
-
-					<ValidationInfoCard {variant} {icon} titleKey="validation_mcp" {statusKey}>
-						{@render mcpBadgeList(variant)}
-					</ValidationInfoCard>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Selective Configuration -->
-		{#if localMode === 'selective'}
-			<div class="settings-section">
-				<h3 class="section-title">{$i18n('validation_selective_title')}</h3>
-				<p class="section-help">{$i18n('validation_selective_help')}</p>
-
-				<div class="checkbox-group">
-					<!-- Sub-Agents Validation -->
-					<label class="checkbox-item">
-						<input type="checkbox" bind:checked={localSubAgentsValidation} onchange={markChanged} />
-						<div class="checkbox-content">
-							<span class="checkbox-label">{$i18n('validation_sub_agents')}</span>
-							<span class="checkbox-description">{$i18n('validation_sub_agents_desc')}</span>
-							{@render toolBadgeList(subAgentTools, localSubAgentsValidation ? 'enabled' : '')}
+		<Card>
+			{#snippet body()}
+				<div class="validation-form">
+					<!-- Mode Selector -->
+					<section class="form-section">
+						<h4 class="group-title">{$i18n('validation_mode_title')}</h4>
+						<div class="mode-grid" role="group" aria-label={$i18n('validation_mode_title')}>
+							{#each modeOptions as option (option.value)}
+								<button
+									type="button"
+									class="mode-card"
+									class:selected={localMode === option.value}
+									onclick={() => selectMode(option.value)}
+								>
+									<strong>{$i18n(option.labelKey)}</strong>
+									<span>{$i18n(option.descKey)}</span>
+								</button>
+							{/each}
 						</div>
-					</label>
+						{#if localMode === 'auto'}
+							<div class="mode-banner warning" role="note">
+								<TriangleAlert size={18} aria-hidden="true" />
+								<div class="mode-banner-content">
+									<strong>{$i18n('validation_auto_multi_workflow_title')}</strong>
+									<span>{$i18n('validation_auto_multi_workflow_desc')}</span>
+								</div>
+							</div>
+						{/if}
+						{#if localMode === 'manual' || localMode === 'selective'}
+							<div class="mode-banner info" role="note">
+								<Info size={18} aria-hidden="true" />
+								<div class="mode-banner-content">
+									<strong>{$i18n('validation_single_workflow_title')}</strong>
+									<span>{$i18n('validation_single_workflow_desc')}</span>
+								</div>
+							</div>
+						{/if}
 
-					<!-- Tools Validation -->
-					<label class="checkbox-item">
-						<input type="checkbox" bind:checked={localToolsValidation} onchange={markChanged} />
-						<div class="checkbox-content">
-							<span class="checkbox-label">{$i18n('validation_tools')}</span>
-							<span class="checkbox-description">{$i18n('validation_tools_desc')}</span>
-							{@render toolBadgeList(basicTools, localToolsValidation ? 'enabled' : '')}
+						<!-- Selective sub-options: dashed enclosure, checkbox on the right -->
+						{#if localMode === 'selective'}
+							<div class="selective-box">
+								<label class="toggle-row">
+									<span class="toggle-text">
+										<strong>{$i18n('validation_sub_agents')}</strong>
+										<span>{$i18n('validation_sub_agents_desc')}</span>
+									</span>
+									<input
+										type="checkbox"
+										class="form-checkbox"
+										bind:checked={localSubAgentsValidation}
+										onchange={markChanged}
+									/>
+								</label>
+								<label class="toggle-row">
+									<span class="toggle-text">
+										<strong>{$i18n('validation_tools')}</strong>
+										<span>{$i18n('validation_tools_desc')}</span>
+									</span>
+									<input
+										type="checkbox"
+										class="form-checkbox"
+										bind:checked={localToolsValidation}
+										onchange={markChanged}
+									/>
+								</label>
+								<label class="toggle-row">
+									<span class="toggle-text">
+										<strong>{$i18n('validation_mcp')}</strong>
+										<span>{$i18n('validation_mcp_desc')}</span>
+									</span>
+									<input
+										type="checkbox"
+										class="form-checkbox"
+										bind:checked={localMcpValidation}
+										onchange={markChanged}
+									/>
+								</label>
+							</div>
+						{/if}
+					</section>
+
+					<!-- Auto/Manual Mode Information (merged - identical structure, different variant) -->
+					{#if modeDisplay}
+						<section class="form-section">
+							<h4 class="group-title">{$i18n(modeDisplay.sectionTitleKey)}</h4>
+							<p class="section-help">{$i18n(modeDisplay.sectionHelpKey)}</p>
+
+							<div class="info-cards">
+								<ValidationInfoCard
+									variant={modeDisplay.variant}
+									icon={modeDisplay.icon}
+									titleKey="validation_sub_agents"
+									statusKey={modeDisplay.statusKey}
+								>
+									{@render toolBadgeList(subAgentTools, modeDisplay.variant)}
+								</ValidationInfoCard>
+
+								<ValidationInfoCard
+									variant={modeDisplay.variant}
+									icon={modeDisplay.icon}
+									titleKey="validation_tools"
+									statusKey={modeDisplay.statusKey}
+								>
+									{@render toolBadgeList(basicTools, modeDisplay.variant)}
+								</ValidationInfoCard>
+
+								<ValidationInfoCard
+									variant={modeDisplay.variant}
+									icon={modeDisplay.icon}
+									titleKey="validation_mcp"
+									statusKey={modeDisplay.statusKey}
+								>
+									{@render mcpBadgeList(modeDisplay.variant)}
+								</ValidationInfoCard>
+							</div>
+						</section>
+					{/if}
+
+					<!-- Risk Thresholds -->
+					<section class="form-section">
+						<h4 class="group-title">{$i18n('validation_risk_title')}</h4>
+						<div class="toggle-stack">
+							<div class="toggle-row">
+								<span class="toggle-text">
+									<strong id="validation-risk-low">
+										{$i18n('validation_risk_auto_approve_low')}
+									</strong>
+									<span>{$i18n('validation_risk_auto_approve_low_desc')}</span>
+								</span>
+								<Switch
+									checked={localRiskThresholds.autoApproveLow}
+									onchange={(v) => {
+										localRiskThresholds.autoApproveLow = v;
+										markChanged();
+									}}
+									labelledBy="validation-risk-low"
+								/>
+							</div>
+							<div class="toggle-row">
+								<span class="toggle-text">
+									<strong id="validation-risk-high">
+										{$i18n('validation_risk_always_confirm_high')}
+									</strong>
+									<span class="warning">{$i18n('validation_risk_always_confirm_high_desc')}</span>
+								</span>
+								<Switch
+									checked={localRiskThresholds.alwaysConfirmHigh}
+									onchange={(v) => {
+										localRiskThresholds.alwaysConfirmHigh = v;
+										markChanged();
+									}}
+									labelledBy="validation-risk-high"
+								/>
+							</div>
 						</div>
-					</label>
+					</section>
 
-					<!-- MCP Servers Validation -->
-					<label class="checkbox-item">
-						<input type="checkbox" bind:checked={localMcpValidation} onchange={markChanged} />
-						<div class="checkbox-content">
-							<span class="checkbox-label">{$i18n('validation_mcp')}</span>
-							<span class="checkbox-description">{$i18n('validation_mcp_desc')}</span>
-							{@render mcpBadgeList(localMcpValidation ? 'enabled' : '')}
+					<!-- Timeout Settings -->
+					<section class="form-section">
+						<h4 class="group-title">{$i18n('validation_timeout_title')}</h4>
+						<div class="field-grid">
+							<div class="timeout-field">
+								<Input
+									type="number"
+									label={$i18n('validation_timeout_seconds_label')}
+									value={String(localTimeoutSeconds)}
+									min={TIMEOUT_MIN}
+									max={TIMEOUT_MAX}
+									step={5}
+									help={$i18n('validation_timeout_range', {
+										min: TIMEOUT_MIN,
+										max: TIMEOUT_MAX
+									})}
+									oninput={(e) => {
+										localTimeoutSeconds = parseIntOr(e.currentTarget.value, localTimeoutSeconds);
+										markChanged();
+									}}
+									onblur={() => {
+										localTimeoutSeconds = clampTimeout(localTimeoutSeconds);
+									}}
+								/>
+							</div>
+							<Select
+								label={$i18n('validation_timeout_behavior_label')}
+								options={behaviorSelectOptions}
+								value={localTimeoutBehavior}
+								onchange={(e) => {
+									localTimeoutBehavior = e.currentTarget.value as TimeoutBehavior;
+									markChanged();
+								}}
+							/>
 						</div>
-					</label>
-				</div>
-			</div>
-		{/if}
+					</section>
 
-		<!-- Risk Thresholds -->
-		<div class="settings-section">
-			<h3 class="section-title">{$i18n('validation_risk_title')}</h3>
-			<div class="checkbox-group">
-				<label class="checkbox-item">
-					<input
-						type="checkbox"
-						bind:checked={localRiskThresholds.autoApproveLow}
-						onchange={markChanged}
-					/>
-					<div class="checkbox-content">
-						<span class="checkbox-label">{$i18n('validation_risk_auto_approve_low')}</span>
-						<span class="checkbox-description"
-							>{$i18n('validation_risk_auto_approve_low_desc')}</span
-						>
+					<!-- Audit Logging -->
+					<section class="form-section">
+						<h4 class="group-title">{$i18n('validation_audit_title')}</h4>
+						<div class="toggle-row">
+							<span class="toggle-text">
+								<strong id="validation-audit-logging"
+									>{$i18n('validation_audit_enable_label')}</strong
+								>
+								<span>{$i18n('validation_audit_enable_desc')}</span>
+							</span>
+							<Switch
+								checked={localEnableLogging}
+								onchange={(v) => {
+									localEnableLogging = v;
+									markChanged();
+								}}
+								labelledBy="validation-audit-logging"
+							/>
+						</div>
+						<div class="audit-row" class:disabled={!localEnableLogging}>
+							<div class="retention-field">
+								<Input
+									type="number"
+									label={$i18n('validation_audit_retention_label')}
+									value={String(localRetentionDays)}
+									min={RETENTION_MIN}
+									max={RETENTION_MAX}
+									step={1}
+									disabled={!localEnableLogging}
+									help={$i18n('validation_audit_retention_range', {
+										min: RETENTION_MIN,
+										max: RETENTION_MAX
+									})}
+									oninput={(e) => {
+										localRetentionDays = parseIntOr(e.currentTarget.value, localRetentionDays);
+										markChanged();
+									}}
+									onblur={() => {
+										localRetentionDays = clampRetention(localRetentionDays);
+									}}
+								/>
+							</div>
+							<div class="audit-buttons">
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={handlePurgeNow}
+									disabled={purging || !localEnableLogging}
+								>
+									<Trash2 size={14} aria-hidden="true" />
+									<span>
+										{purging
+											? $i18n('validation_audit_purging')
+											: $i18n('validation_audit_purge_button')}
+									</span>
+								</Button>
+								<a class="btn btn-ghost btn-sm" href="/settings/audit-log">
+									{$i18n('validation_audit_view_log_link')}
+									<ExternalLink size={14} aria-hidden="true" />
+								</a>
+							</div>
+						</div>
+					</section>
+
+					<!-- Sticky save bar: stays visible while the long form scrolls beneath
+					     it. Opaque card surface, no backdrop blur: a blurred sticky bar
+					     forces WebKitGTK to re-blur the content scrolling behind it on
+					     every frame. -->
+					<div class="form-actions">
+						{#if hasChanges && !$isSaving}
+							<span class="dirty-hint" role="status">
+								<TriangleAlert size={14} aria-hidden="true" />
+								{$i18n('settings_unsaved_changes')}
+							</span>
+						{/if}
+						<Button variant="ghost" onclick={handleReset} disabled={$isSaving}>
+							{$i18n('validation_reset_button')}
+						</Button>
+						<Button variant="primary" onclick={handleSave} disabled={$isSaving || !hasChanges}>
+							{$isSaving ? $i18n('validation_saving') : $i18n('validation_save_changes')}
+						</Button>
 					</div>
-				</label>
-				<label class="checkbox-item">
-					<input
-						type="checkbox"
-						bind:checked={localRiskThresholds.alwaysConfirmHigh}
-						onchange={markChanged}
-					/>
-					<div class="checkbox-content">
-						<span class="checkbox-label">{$i18n('validation_risk_always_confirm_high')}</span>
-						<span class="checkbox-description warning"
-							>{$i18n('validation_risk_always_confirm_high_desc')}</span
-						>
-					</div>
-				</label>
-			</div>
-		</div>
-
-		<!-- Timeout Settings -->
-		<div class="settings-section">
-			<h3 class="section-title">{$i18n('validation_timeout_title')}</h3>
-			<p class="section-help">{$i18n('validation_timeout_help')}</p>
-
-			<label class="slider-row">
-				<span class="slider-label">
-					{$i18n('validation_timeout_seconds_label')}
-					<span class="slider-value">{localTimeoutSeconds}s</span>
-				</span>
-				<input
-					type="range"
-					min={TIMEOUT_MIN}
-					max={TIMEOUT_MAX}
-					step="5"
-					bind:value={localTimeoutSeconds}
-					oninput={() => {
-						localTimeoutSeconds = clampTimeout(localTimeoutSeconds);
-						markChanged();
-					}}
-				/>
-				<span class="slider-bounds">
-					<span>{TIMEOUT_MIN}s</span><span>{TIMEOUT_MAX}s</span>
-				</span>
-			</label>
-
-			<fieldset class="radio-group">
-				<legend class="radio-group-legend">{$i18n('validation_timeout_behavior_label')}</legend>
-				{#each timeoutBehaviorOptions as opt (opt.value)}
-					<label class="radio-item">
-						<input
-							type="radio"
-							name="timeout-behavior"
-							value={opt.value}
-							checked={localTimeoutBehavior === opt.value}
-							onchange={() => {
-								localTimeoutBehavior = opt.value;
-								markChanged();
-							}}
-						/>
-						<span class="radio-label">{$i18n(opt.labelKey)}</span>
-					</label>
-				{/each}
-			</fieldset>
-		</div>
-
-		<!-- Audit Logging -->
-		<div class="settings-section">
-			<h3 class="section-title">{$i18n('validation_audit_title')}</h3>
-			<p class="section-help">{$i18n('validation_audit_help')}</p>
-
-			<label class="checkbox-item">
-				<input type="checkbox" bind:checked={localEnableLogging} onchange={markChanged} />
-				<div class="checkbox-content">
-					<span class="checkbox-label">{$i18n('validation_audit_enable_label')}</span>
-					<span class="checkbox-description">{$i18n('validation_audit_enable_desc')}</span>
 				</div>
-			</label>
-
-			<label class="slider-row" class:disabled={!localEnableLogging}>
-				<span class="slider-label">
-					{$i18n('validation_audit_retention_label')}
-					<span class="slider-value">
-						{localRetentionDays}
-						{$i18n('validation_audit_retention_days_unit')}
-					</span>
-				</span>
-				<input
-					type="range"
-					min={RETENTION_MIN}
-					max={RETENTION_MAX}
-					step="1"
-					bind:value={localRetentionDays}
-					disabled={!localEnableLogging}
-					oninput={() => {
-						localRetentionDays = clampRetention(localRetentionDays);
-						markChanged();
-					}}
-				/>
-				<span class="slider-bounds">
-					<span>{RETENTION_MIN}</span><span>{RETENTION_MAX}</span>
-				</span>
-			</label>
-
-			<div class="audit-actions">
-				<Button
-					variant="secondary"
-					onclick={handlePurgeNow}
-					disabled={purging || !localEnableLogging}
-				>
-					{purging ? $i18n('validation_audit_purging') : $i18n('validation_audit_purge_button')}
-				</Button>
-				<a class="audit-link" href="/settings/audit-log">
-					{$i18n('validation_audit_view_log_link')}
-				</a>
-			</div>
-		</div>
-
-		<!-- Actions -->
-		<div class="settings-actions">
-			{#if hasChanges && !$isSaving}
-				<span class="unsaved-hint" role="status">{$i18n('settings_unsaved_changes')}</span>
-			{/if}
-			<Button variant="secondary" onclick={handleReset} disabled={$isSaving}>
-				{$i18n('validation_reset_button')}
-			</Button>
-			<Button variant="primary" onclick={handleSave} disabled={$isSaving || !hasChanges}>
-				{$isSaving ? $i18n('validation_saving') : $i18n('validation_save_changes')}
-			</Button>
-		</div>
+			{/snippet}
+		</Card>
 	{/if}
 </div>
 
 <style>
-	/* Timeout slider + audit section styling */
-	.slider-row {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: var(--spacing-xs);
-	}
-	.slider-row.disabled {
-		opacity: 0.55;
-	}
-	.slider-label {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		font-weight: 500;
-	}
-	.slider-value {
-		font-variant-numeric: tabular-nums;
-		color: var(--color-primary);
-	}
-	.slider-bounds {
-		display: flex;
-		justify-content: space-between;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-	}
-	.radio-group {
-		border: none;
-		padding: 0;
-		margin: 0;
+	.validation-settings {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-	.radio-group-legend {
-		font-weight: 500;
-		margin-bottom: var(--spacing-xs);
-	}
-	.radio-item {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-	}
-	.radio-item:hover {
-		background: var(--color-bg-hover);
-	}
-	.audit-actions {
-		display: flex;
-		align-items: center;
 		gap: var(--spacing-md);
-		margin-top: var(--spacing-sm);
-	}
-	.audit-link {
-		color: var(--color-primary);
-		text-decoration: none;
-		font-size: var(--font-size-sm);
-	}
-	.audit-link:hover {
-		text-decoration: underline;
 	}
 
-	.validation-settings {
+	.validation-form {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-xl);
@@ -595,16 +591,16 @@
 		animation: spin 0.8s linear infinite;
 	}
 
-	.settings-section {
+	.form-section {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
 	}
 
-	.section-title {
-		font-size: var(--font-size-base);
+	.group-title {
+		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
+		color: var(--color-accent-deep);
 		margin: 0;
 	}
 
@@ -614,95 +610,79 @@
 		margin: 0;
 	}
 
-	/* Card Selector */
-	.card-selector {
+	/* Mode cards */
+	.mode-grid {
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
 		gap: var(--spacing-md);
 	}
 
 	@media (max-width: 768px) {
-		.card-selector {
+		.mode-grid {
 			grid-template-columns: 1fr;
 		}
 	}
 
-	.selector-card {
+	.mode-card {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: var(--spacing-xs);
 		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border: 2px solid var(--color-border);
-		border-radius: var(--border-radius-md);
+		background: transparent;
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-lg);
 		cursor: pointer;
 		transition:
 			border-color var(--transition-fast),
-			background-color var(--transition-fast);
+			box-shadow var(--transition-fast);
 		text-align: left;
 	}
 
-	.selector-card:hover {
-		border-color: var(--color-primary);
-		background: var(--color-bg-hover);
+	.mode-card:hover {
+		border-color: var(--color-accent-deep);
 	}
 
-	.selector-card.selected {
-		border-color: var(--color-primary);
-		background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+	.mode-card.selected {
+		border-color: var(--color-accent-deep);
+		box-shadow: var(--glow-accent-soft);
+		background: var(--color-accent-light);
 	}
 
-	.selector-card-title {
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
-	}
-
-	.selector-card-description {
+	.mode-card strong {
+		display: block;
 		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
+		color: var(--color-text-primary);
+		margin-bottom: 2px;
 	}
 
-	/* Mode Banners */
+	.mode-card span {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+	}
+
+	/* Mode banners */
 	.mode-banner {
 		display: flex;
 		align-items: flex-start;
-		gap: var(--spacing-md);
+		gap: var(--spacing-sm);
 		padding: var(--spacing-md);
 		border-radius: var(--border-radius-md);
-		margin-top: var(--spacing-sm);
 	}
 
-	.mode-banner.warning {
-		background: color-mix(in srgb, var(--color-warning) 10%, transparent);
-		border: 1px solid var(--color-warning);
-	}
-
-	.mode-banner.info {
-		background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-		border: 1px solid var(--color-primary);
-	}
-
-	.mode-banner-icon {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 20px;
-		height: 20px;
-		border-radius: var(--border-radius-full);
-		font-size: var(--font-size-xs);
-		font-weight: var(--font-weight-semibold);
+	.mode-banner :global(svg) {
 		flex-shrink: 0;
 	}
 
-	.mode-banner.warning .mode-banner-icon {
-		background: var(--color-warning);
-		color: white;
+	.mode-banner.warning {
+		background: var(--color-warning-light);
+		border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+		color: var(--color-warning);
 	}
 
-	.mode-banner.info .mode-banner-icon {
-		background: var(--color-primary);
-		color: white;
+	.mode-banner.info {
+		background: var(--color-info-light);
+		border: 1px solid color-mix(in srgb, var(--color-info) 35%, transparent);
+		color: var(--color-info);
 	}
 
 	.mode-banner-content {
@@ -711,65 +691,121 @@
 		gap: var(--spacing-xs);
 	}
 
-	.mode-banner-title {
+	.mode-banner-content strong {
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-text-primary);
 	}
 
-	.mode-banner-text {
+	.mode-banner-content span {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
 	}
 
-	/* Checkbox Group */
-	.checkbox-group {
+	/* Selective sub-options enclosure */
+	.selective-box {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-md);
+		border: 1px dashed var(--color-border);
+		border-radius: var(--border-radius-md);
+		padding: 0 var(--spacing-md);
 	}
 
-	.checkbox-item {
+	/* Toggle rows: text block on the left, control on the right */
+	.toggle-row {
 		display: flex;
 		align-items: flex-start;
-		gap: var(--spacing-md);
+		justify-content: space-between;
+		gap: var(--spacing-lg);
+		padding: var(--spacing-md) 0;
+	}
+
+	.toggle-row + .toggle-row {
+		border-top: 1px solid var(--color-border-light);
+	}
+
+	label.toggle-row {
 		cursor: pointer;
-		padding: var(--spacing-sm);
-		border-radius: var(--border-radius-md);
-		transition: background-color var(--transition-fast);
 	}
 
-	.checkbox-item:hover {
-		background: var(--color-bg-hover);
-	}
-
-	.checkbox-item input[type='checkbox'] {
-		width: 18px;
-		height: 18px;
-		accent-color: var(--color-primary);
-		cursor: pointer;
-		margin-top: 2px;
-		flex-shrink: 0;
-	}
-
-	.checkbox-content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.checkbox-label {
+	.toggle-text strong {
+		display: block;
+		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 	}
 
-	.checkbox-description {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
+	.toggle-text span {
+		display: block;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		margin-top: 2px;
+		max-width: 56ch;
 	}
 
-	.checkbox-description.warning {
+	.toggle-text span.warning {
 		color: var(--color-warning);
+	}
+
+	.toggle-stack {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.toggle-stack .toggle-row,
+	.form-section > .toggle-row {
+		padding: var(--spacing-sm) 0;
+	}
+
+	/* Timeout fields */
+	.field-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--spacing-md);
+	}
+
+	@media (max-width: 768px) {
+		.field-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.timeout-field :global(input) {
+		width: 140px;
+	}
+
+	/* Audit retention + actions row */
+	.audit-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
+		flex-wrap: wrap;
+	}
+
+	.audit-row.disabled {
+		opacity: 0.55;
+	}
+
+	.retention-field :global(input) {
+		width: 110px;
+	}
+
+	.audit-buttons {
+		margin-left: auto;
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
+	}
+
+	.audit-buttons :global(button) {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	.audit-buttons a {
+		gap: var(--spacing-xs);
 	}
 
 	/* Info Cards container (for Auto/Manual modes) */
@@ -808,11 +844,6 @@
 		color: var(--color-warning);
 	}
 
-	.item-badge.enabled {
-		background: color-mix(in srgb, var(--color-primary) 15%, transparent);
-		color: var(--color-primary);
-	}
-
 	.item-badge.running {
 		background: color-mix(in srgb, var(--color-success) 15%, transparent);
 		color: var(--color-success);
@@ -839,11 +870,8 @@
 		font-style: italic;
 	}
 
-	/* Actions */
-	/* Sticky save bar: stays visible while the long form scrolls beneath it.
-	   Opaque surface, no backdrop blur: a blurred sticky bar forces WebKitGTK
-	   to re-blur the content scrolling behind it on every frame. */
-	.settings-actions {
+	/* Sticky save bar: stays visible while the long form scrolls beneath it. */
+	.form-actions {
 		position: sticky;
 		bottom: 0;
 		display: flex;
@@ -852,10 +880,13 @@
 		gap: var(--spacing-md);
 		padding: var(--spacing-md) 0;
 		border-top: 1px solid var(--color-border);
-		background: var(--color-bg-primary);
+		background: var(--surface-1);
 	}
 
-	.unsaved-hint {
+	.dirty-hint {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-xs);
 		margin-right: auto;
 		font-size: var(--font-size-xs);
 		color: var(--color-warning);

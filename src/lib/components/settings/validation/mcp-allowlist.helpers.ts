@@ -136,27 +136,14 @@ export function removePreservedEntry(
 
 /**
  * Whether EVERY displayed tool of a server is currently auto-approved — drives
- * the "select all / none" toggle state (and its checkbox `checked`). An empty
- * displayed list is treated as "not all selected" so the toggle stays an
- * arm-all action rather than appearing pre-checked with nothing to arm.
+ * the disabled state of the per-server "arm all" header action. An empty
+ * displayed list is treated as "not all armed" so the action never looks
+ * satisfied with nothing to arm.
  */
 export function areAllToolsArmed(displayedNames: string[], armedNames: string[]): boolean {
 	if (displayedNames.length === 0) return false;
 	const armed = new Set(armedNames);
 	return displayedNames.every((n) => armed.has(n));
-}
-
-/**
- * Computes the new armed-tool list for a "select all / none" click on one
- * server. When not all displayed tools are armed yet, arms them all (union of
- * the displayed tools with any already-armed orphans, so orphans are never
- * dropped). When all are already armed, clears the selection entirely (none).
- */
-export function toggleAllServerTools(displayedNames: string[], armedNames: string[]): string[] {
-	if (areAllToolsArmed(displayedNames, armedNames)) return [];
-	const merged = new Set<string>(armedNames);
-	for (const n of displayedNames) merged.add(n);
-	return [...merged];
 }
 
 /** A tool row shown for an editable server: exposed, or an armed orphan. */
