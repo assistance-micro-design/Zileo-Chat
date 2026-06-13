@@ -918,6 +918,10 @@
 	"layout_configuration": "Paramètres",
 	"layout_agent": "Agent",
 	"layout_kanban": "Tableau de tâches",
+	"layout_zoom": "Zoom",
+	"layout_zoom_in": "Zoom avant",
+	"layout_zoom_out": "Zoom arrière",
+	"layout_zoom_reset": "Réinitialiser le zoom",
 
 	"kanban_page_title": "Tableau de tâches",
 	"kanban_board_aria": "Tableau de tâches",

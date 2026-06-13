@@ -917,6 +917,10 @@
 	"layout_configuration": "Settings",
 	"layout_agent": "Agent",
 	"layout_kanban": "Task board",
+	"layout_zoom": "Zoom",
+	"layout_zoom_in": "Zoom in",
+	"layout_zoom_out": "Zoom out",
+	"layout_zoom_reset": "Reset zoom",
 
 	"kanban_page_title": "Task board",
 	"kanban_board_aria": "Task board",

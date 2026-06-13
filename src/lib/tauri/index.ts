@@ -27,6 +27,7 @@ export * from './environment';
 export * from './core';
 export * from './events';
 export * from './window';
+export * from './webview';
 export * from './dialog';
 export * from './opener';
 export * from './app';

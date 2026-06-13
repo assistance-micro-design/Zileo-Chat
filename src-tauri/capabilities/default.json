@@ -41,6 +41,7 @@
 		},
 		"core:window:allow-theme",
 		"core:window:allow-set-theme",
+		"core:webview:allow-set-webview-zoom",
 		"opener:deny-open-path",
 		"opener:allow-reveal-item-in-dir",
 		"dialog:allow-open",

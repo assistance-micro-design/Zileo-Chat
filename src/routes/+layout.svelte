@@ -26,6 +26,7 @@
 	} from '$lib/tauri';
 	import '../styles/global.css';
 	import { theme } from '$lib/stores/theme';
+	import { uiZoom, zoomActionForKey } from '$lib/stores/ui-zoom';
 	import { localeStore } from '$lib/stores/locale';
 	import { onboardingStore } from '$lib/stores/onboarding';
 	import { i18n } from '$lib/i18n';
@@ -194,6 +195,9 @@
 		}
 
 		theme.init();
+		// Re-apply the persisted UI zoom: the native webview zoom resets to 100%
+		// on every app launch, so the saved factor must be pushed back on startup.
+		uiZoom.init();
 		localeStore.init();
 
 		// Initialise the background workflows store at the app root so its
@@ -300,7 +304,22 @@
 	function handleOnboardingComplete(): void {
 		showOnboarding = false;
 	}
+
+	/**
+	 * Global zoom shortcuts (Ctrl/Cmd + + / - / 0). `preventDefault` is required
+	 * so WebKitGTK does not fire its own native zoom on top of ours, which would
+	 * double-apply and desync from the persisted factor.
+	 */
+	function handleZoomKeydown(event: KeyboardEvent): void {
+		const action = zoomActionForKey(event);
+		if (action) {
+			event.preventDefault();
+			uiZoom.step(action);
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleZoomKeydown} />
 
 <svelte:head>
 	<!-- Fonts self-hosted in /static/fonts/ (no external CDN dependency) -->

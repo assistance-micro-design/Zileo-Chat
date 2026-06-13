@@ -20,6 +20,7 @@ import { openDialog, saveDialog } from '../dialog';
 import { tauriListen } from '../events';
 import { openExternalUrl } from '../opener';
 import { setTauriWindowTheme } from '../window';
+import { setTauriWebviewZoom } from '../webview';
 
 describe('Tauri adapter browser fallbacks', () => {
 	afterEach(() => {
@@ -37,6 +38,10 @@ describe('Tauri adapter browser fallbacks', () => {
 
 	it('does not throw when applying the native window theme outside Tauri', async () => {
 		await expect(setTauriWindowTheme('dark')).resolves.toBeUndefined();
+	});
+
+	it('does not throw when applying the native webview zoom outside Tauri', async () => {
+		await expect(setTauriWebviewZoom(1.5)).resolves.toBeUndefined();
 	});
 
 	it('throws a controlled error for invoke outside Tauri', async () => {
