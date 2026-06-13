@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MemoryType } from '$types/memory';
 import {
 	buildMemoryTypeOptions,
+	formatDateShort,
 	formatImportFailureMessage,
 	formatScope,
 	getExportMetadata,
@@ -25,12 +26,17 @@ describe('MemoryList helpers', () => {
 		expect(formatScope('abcdefghijklm', 'General')).toBe('abcdefghijkl...');
 	});
 
-	it('maps memory types to badge variants with a primary fallback', () => {
-		expect(getTypeVariant('user_pref')).toBe('primary');
+	it('maps memory types to badge variants with a neutral fallback', () => {
+		expect(getTypeVariant('user_pref')).toBe('neutral');
 		expect(getTypeVariant('context')).toBe('success');
-		expect(getTypeVariant('knowledge')).toBe('warning');
-		expect(getTypeVariant('decision')).toBe('error');
-		expect(getTypeVariant('unknown' as MemoryType)).toBe('primary');
+		expect(getTypeVariant('knowledge')).toBe('primary');
+		expect(getTypeVariant('decision')).toBe('warning');
+		expect(getTypeVariant('unknown' as MemoryType)).toBe('neutral');
+	});
+
+	it('formats a date string as a short date without time', () => {
+		expect(formatDateShort('2026-06-09T12:00:00.000Z', 'en-US')).toBe('Jun 9, 2026');
+		expect(formatDateShort('2026-06-09T12:00:00.000Z', 'fr-FR')).toBe('9 juin 2026');
 	});
 
 	it('builds memory type options in the existing order', () => {

@@ -1,7 +1,7 @@
 import type { ExportFormat } from '$types/embedding';
 import type { MemoryType } from '$types/memory';
 
-export type BadgeVariant = 'primary' | 'success' | 'warning' | 'error';
+export type BadgeVariant = 'primary' | 'success' | 'warning' | 'error' | 'neutral';
 
 export interface MemoryTypeOptionLabels {
 	all: string;
@@ -40,14 +40,23 @@ export function formatDate(dateStr: string, locale?: string | string[]): string 
 	});
 }
 
+export function formatDateShort(dateStr: string, locale?: string | string[]): string {
+	const date = new Date(dateStr);
+	return date.toLocaleDateString(locale, {
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric'
+	});
+}
+
 export function getTypeVariant(type: MemoryType): BadgeVariant {
 	const variants: Record<MemoryType, BadgeVariant> = {
-		user_pref: 'primary',
+		user_pref: 'neutral',
 		context: 'success',
-		knowledge: 'warning',
-		decision: 'error'
+		knowledge: 'primary',
+		decision: 'warning'
 	};
-	return variants[type] || 'primary';
+	return variants[type] || 'neutral';
 }
 
 export function formatScope(workflowId: string | undefined | null, generalLabel: string): string {

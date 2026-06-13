@@ -18,14 +18,15 @@
 Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
-MemoryStatsCard - Displays memory statistics with category breakdown.
-Extracted from MemorySettings.svelte.
+MemoryStatsCard - Memory statistics as metric chips with category breakdown.
 -->
 
 <script lang="ts">
 	import { Card, Badge, ProgressBar } from '$lib/components/ui';
 	import type { MemoryStats, MemoryTokenStats } from '$types/embedding';
-	import { i18n } from '$lib/i18n';
+	import { i18n, t } from '$lib/i18n';
+	import { getTypeVariant } from './MemoryList.helpers';
+	import type { MemoryType } from '$types/memory';
 
 	interface Props {
 		/** Memory statistics */
@@ -36,62 +37,40 @@ Extracted from MemorySettings.svelte.
 
 	let { stats, tokenStats }: Props = $props();
 
-	/**
-	 * Format large numbers for display
-	 */
-	function formatNumber(n: number): string {
-		if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-		if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-		return n.toString();
-	}
+	/** Localized labels for memory types (badges show readable names) */
+	const typeLabels = $derived<Record<string, string>>({
+		user_pref: t('memory_type_user_pref'),
+		context: t('memory_type_context'),
+		knowledge: t('memory_type_knowledge'),
+		decision: t('memory_type_decision')
+	});
 
-	/**
-	 * Get badge variant based on memory type
-	 */
-	function getTypeVariant(type: string): 'primary' | 'success' | 'warning' | 'error' {
-		switch (type) {
-			case 'knowledge':
-				return 'warning';
-			case 'context':
-				return 'success';
-			case 'decision':
-				return 'error';
-			case 'user_pref':
-				return 'primary';
-			default:
-				return 'primary';
-		}
+	function typeLabel(type: string): string {
+		return typeLabels[type] ?? type;
 	}
 </script>
 
 {#if stats || tokenStats}
-	<Card>
-		{#snippet header()}
-			<h3 class="card-title">{$i18n('memory_stats_title')}</h3>
-		{/snippet}
+	<Card title={$i18n('memory_stats_title')}>
 		{#snippet body()}
 			<div class="unified-stats">
-				<!-- Summary Row -->
-				<div class="summary-stats">
-					<div class="summary-item">
-						<span class="summary-value"
-							>{formatNumber(stats?.total ?? tokenStats?.total_memories ?? 0)}</span
-						>
-						<span class="summary-label">{$i18n('memory_total_memories')}</span>
+				<!-- Summary chips -->
+				<div class="metric-grid">
+					<div class="metric-chip">
+						<span>{$i18n('memory_total_memories')}</span>
+						<strong>{(stats?.total ?? tokenStats?.total_memories ?? 0).toLocaleString()}</strong>
 					</div>
-					<div class="summary-item">
-						<span class="summary-value">{formatNumber(tokenStats?.total_chars ?? 0)}</span>
-						<span class="summary-label">{$i18n('memory_total_characters')}</span>
+					<div class="metric-chip">
+						<span>{$i18n('memory_with_embeddings')}</span>
+						<strong>{(stats?.with_embeddings ?? 0).toLocaleString()}</strong>
 					</div>
-					<div class="summary-item">
-						<span class="summary-value"
-							>{formatNumber(tokenStats?.total_estimated_tokens ?? 0)}</span
-						>
-						<span class="summary-label">{$i18n('memory_est_tokens')}</span>
+					<div class="metric-chip">
+						<span>{$i18n('memory_total_characters')}</span>
+						<strong>{(tokenStats?.total_chars ?? 0).toLocaleString()}</strong>
 					</div>
-					<div class="summary-item">
-						<span class="summary-value">{stats?.with_embeddings ?? 0}/{stats?.total ?? 0}</span>
-						<span class="summary-label">{$i18n('memory_with_embeddings')}</span>
+					<div class="metric-chip">
+						<span>{$i18n('memory_est_tokens')}</span>
+						<strong>~{(tokenStats?.total_estimated_tokens ?? 0).toLocaleString()}</strong>
 					</div>
 				</div>
 
@@ -103,7 +82,9 @@ Extracted from MemorySettings.svelte.
 							{#each tokenStats.categories as cat (cat.memory_type)}
 								<div class="category-item">
 									<div class="category-header">
-										<Badge variant={getTypeVariant(cat.memory_type)}>{cat.memory_type}</Badge>
+										<Badge variant={getTypeVariant(cat.memory_type as MemoryType)}>
+											{typeLabel(cat.memory_type)}
+										</Badge>
 										<span class="category-count">{cat.count} {$i18n('memory_memories_count')}</span>
 										<span class="embedding-status"
 											>{cat.with_embeddings}/{cat.count} {$i18n('memory_embedded')}</span
@@ -111,10 +92,10 @@ Extracted from MemorySettings.svelte.
 									</div>
 									<div class="category-details">
 										<span class="token-count"
-											>{formatNumber(cat.estimated_tokens)} {$i18n('memory_tokens')}</span
+											>{cat.estimated_tokens.toLocaleString()} {$i18n('memory_tokens')}</span
 										>
 										<span class="char-count"
-											>({formatNumber(cat.total_chars)} {$i18n('memory_chars')})</span
+											>({cat.total_chars.toLocaleString()} {$i18n('memory_chars')})</span
 										>
 									</div>
 									<ProgressBar
@@ -133,7 +114,7 @@ Extracted from MemorySettings.svelte.
 						<div class="type-list">
 							{#each Object.entries(stats.by_type) as [type, count] (type)}
 								<div class="type-item">
-									<Badge variant={getTypeVariant(type)}>{type}</Badge>
+									<Badge variant={getTypeVariant(type as MemoryType)}>{typeLabel(type)}</Badge>
 									<span class="type-count">{count}</span>
 								</div>
 							{/each}
@@ -146,43 +127,34 @@ Extracted from MemorySettings.svelte.
 {/if}
 
 <style>
-	.card-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-	}
-
 	.unified-stats {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-lg);
 	}
 
-	.summary-stats {
+	.metric-grid {
 		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: var(--spacing-md);
-		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-md);
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--spacing-sm);
 	}
 
-	.summary-item {
+	.metric-chip {
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		text-align: center;
-	}
-
-	.summary-value {
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-bold);
-		color: var(--color-accent-deep);
-	}
-
-	.summary-label {
+		justify-content: space-between;
+		gap: var(--spacing-xs);
+		padding: 0.3rem 0.6rem;
 		font-size: var(--font-size-xs);
+		font-variant-numeric: tabular-nums;
 		color: var(--color-text-secondary);
+		background: var(--surface-2);
+		border: 1px solid var(--color-border-light);
+		border-radius: var(--border-radius-full);
+	}
+
+	.metric-chip strong {
+		color: var(--color-text-primary);
 	}
 
 	.categories-section {
@@ -266,14 +238,8 @@ Extracted from MemorySettings.svelte.
 		color: var(--color-text-primary);
 	}
 
-	@media (max-width: 768px) {
-		.summary-stats {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-
 	@media (max-width: 480px) {
-		.summary-stats {
+		.metric-grid {
 			grid-template-columns: 1fr;
 		}
 

@@ -19,10 +19,11 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 MemorySettings - Embedding configuration for Memory Tool.
-Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
-Chunking parameters are no longer exposed: they are fixed constants in
-`tools/memory/chunker.rs` (512/50). The dimension is locked at 1024 by the
-HNSW index schema.
+Two rows of two cards: config + connectivity test, then statistics +
+operations (reindex, purge). The config is edited in place; saving is
+explicit via the card footer. Chunking parameters are fixed constants in
+`tools/memory/chunker.rs` (512/50); the dimension is locked at 1024 by
+the HNSW index schema.
 -->
 
 <script lang="ts">
@@ -30,11 +31,10 @@ HNSW index schema.
 	import { tauriInvoke, tauriListen, type TauriUnlistenFn } from '$lib/tauri';
 	import {
 		Button,
-		Select,
 		Card,
 		StatusIndicator,
-		Modal,
 		ErrorBanner,
+		ProgressBar,
 		DeleteConfirmModal
 	} from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
@@ -50,7 +50,7 @@ HNSW index schema.
 	import { getErrorMessage } from '$lib/utils/error';
 	import { LocalStorage, STORAGE_KEYS } from '$lib/services/localStorage.service';
 	import { toastStore } from '$lib/stores/toast';
-	import { RefreshCw, DatabaseZap, Trash2 } from '@lucide/svelte';
+	import { RefreshCw, Trash2 } from '@lucide/svelte';
 	import EmbeddingConfigCard from './EmbeddingConfigCard.svelte';
 	import EmbeddingTestCard from './EmbeddingTestCard.svelte';
 	import MemoryStatsCard from './MemoryStatsCard.svelte';
@@ -63,8 +63,7 @@ HNSW index schema.
 
 	let { onsave }: Props = $props();
 
-	/** Config state */
-	let config = $state<EmbeddingConfig>({ ...DEFAULT_EMBEDDING_CONFIG });
+	/** Config state — edited in place, persisted on explicit save. */
 	let editConfig = $state<EmbeddingConfig>({ ...DEFAULT_EMBEDDING_CONFIG });
 
 	/** Stats state */
@@ -75,11 +74,7 @@ HNSW index schema.
 	let loading = $state(true);
 	let saving = $state(false);
 	let errorMessage = $state<string | null>(null);
-	let modalError = $state<string | null>(null);
 	let configExists = $state(false);
-
-	/** Modal state */
-	let showConfigModal = $state(false);
 
 	/** Delete confirmation state */
 	let showDeleteConfirm = $state(false);
@@ -98,11 +93,6 @@ HNSW index schema.
 		chunksPurged: number;
 	}
 	const reindexRunning = $derived(reindexProgress?.status === 'running');
-	const reindexPct = $derived(
-		reindexProgress && reindexProgress.total > 0
-			? Math.round((reindexProgress.processed / reindexProgress.total) * 100)
-			: 0
-	);
 
 	/** Provider options (reactive to locale) */
 	const providerOptions = $derived<SelectOption[]>([
@@ -119,8 +109,8 @@ HNSW index schema.
 	 * Loads the current embedding configuration.
 	 *
 	 * `get_embedding_config` returns `null` when no row exists; in that case
-	 * we keep `config = defaults` for the modal and flag `configExists = false`
-	 * so the UI shows the "no config" empty state instead of editable fields.
+	 * the card keeps the defaults and flags `configExists = false` so the
+	 * status badge reads "not configured".
 	 */
 	async function loadConfig(): Promise<void> {
 		loading = true;
@@ -131,11 +121,9 @@ HNSW index schema.
 				tauriInvoke<MemoryTokenStats>('get_memory_token_stats', { typeFilter: null })
 			]);
 			if (loadedConfig) {
-				config = loadedConfig;
 				editConfig = { ...loadedConfig };
 				configExists = true;
 			} else {
-				config = { ...DEFAULT_EMBEDDING_CONFIG };
 				editConfig = { ...DEFAULT_EMBEDDING_CONFIG };
 				configExists = false;
 			}
@@ -166,37 +154,19 @@ HNSW index schema.
 	}
 
 	/**
-	 * Opens the config modal for adding/editing
-	 */
-	function openConfigModal(): void {
-		editConfig = { ...config };
-		modalError = null;
-		showConfigModal = true;
-	}
-
-	/**
-	 * Closes the config modal
-	 */
-	function closeConfigModal(): void {
-		showConfigModal = false;
-	}
-
-	/**
 	 * Saves the embedding configuration
 	 */
 	async function handleSave(): Promise<void> {
 		saving = true;
-		modalError = null;
 
 		try {
 			await tauriInvoke('save_embedding_config', { config: editConfig });
-			config = { ...editConfig };
 			configExists = true;
-			showConfigModal = false;
 			errorMessage = null;
+			notifyToast('success', t('memory_config_saved'));
 			onsave?.();
 		} catch (err) {
-			modalError = t('memory_failed_save').replace('{error}', getErrorMessage(err));
+			notifyToast('error', t('memory_failed_save').replace('{error}', getErrorMessage(err)));
 		} finally {
 			saving = false;
 		}
@@ -220,11 +190,11 @@ HNSW index schema.
 		deleteDeleting = true;
 		try {
 			await tauriInvoke('delete_embedding_config');
-			config = { ...DEFAULT_EMBEDDING_CONFIG };
 			editConfig = { ...DEFAULT_EMBEDDING_CONFIG };
 			configExists = false;
 			errorMessage = null;
 			showDeleteConfirm = false;
+			notifyToast('success', t('memory_config_deleted'));
 		} catch (err) {
 			errorMessage = t('memory_failed_delete').replace('{error}', getErrorMessage(err));
 		} finally {
@@ -240,7 +210,7 @@ HNSW index schema.
 	}
 
 	/**
-	 * Handle provider change in modal
+	 * Handle provider change
 	 */
 	function handleProviderChange(event: Event & { currentTarget: HTMLSelectElement }): void {
 		const provider = event.currentTarget.value as EmbeddingProviderType;
@@ -254,7 +224,7 @@ HNSW index schema.
 	}
 
 	/**
-	 * Handle model change in modal
+	 * Handle model change
 	 */
 	function handleModelChange(event: Event & { currentTarget: HTMLSelectElement }): void {
 		editConfig.model = event.currentTarget.value;
@@ -439,148 +409,93 @@ HNSW index schema.
 			{/snippet}
 		</Card>
 	{:else}
-		<!-- Embedding Configuration Card -->
-		<EmbeddingConfigCard
-			{config}
-			{configExists}
-			{providerOptions}
-			onOpenConfigModal={openConfigModal}
-			onDelete={handleDeleteRequest}
-		/>
+		<!-- Row 1: embedding configuration + connectivity test -->
+		<div class="row-grid">
+			<EmbeddingConfigCard
+				config={editConfig}
+				{configExists}
+				{saving}
+				{providerOptions}
+				{modelOptions}
+				onProviderChange={handleProviderChange}
+				onModelChange={handleModelChange}
+				onSave={handleSave}
+				onDelete={handleDeleteRequest}
+			/>
+			<EmbeddingTestCard {configExists} />
+		</div>
 
-		<!-- Operations section: Test + Reindex (only when config exists) -->
-		{#if configExists}
-			<section class="operations-section" aria-label={$i18n('memory_operations_title')}>
-				<header class="section-header">
-					<h2 class="section-title">{$i18n('memory_operations_title')}</h2>
-				</header>
-				<div class="operations-grid">
-					<EmbeddingTestCard {configExists} />
+		<!-- Row 2: statistics + operations -->
+		<div class="row-grid">
+			<MemoryStatsCard {stats} {tokenStats} />
 
-					<!-- Purge Expired Card -->
-					<Card>
-						{#snippet header()}
-							<div class="card-header-text">
-								<div class="title-row">
-									<Trash2 size={18} aria-hidden="true" />
-									<h3 class="card-title">{$i18n('memory_purge_title')}</h3>
-								</div>
-								<p class="card-subtitle">{$i18n('memory_purge_subtitle')}</p>
+			<Card title={$i18n('memory_operations_title')}>
+				{#snippet body()}
+					<div class="operations-body">
+						<div class="operation">
+							<div class="operation-head">
+								<span class="operation-title">{$i18n('memory_reindex_button')}</span>
+								{#if !reindexRunning}
+									<Button
+										variant="outline"
+										size="sm"
+										onclick={handleReindex}
+										disabled={reindexStarting || !configExists}
+									>
+										<RefreshCw size={14} aria-hidden="true" />
+										<span>
+											{reindexStarting
+												? $i18n('memory_reindex_starting')
+												: $i18n('memory_reindex_action')}
+										</span>
+									</Button>
+								{/if}
 							</div>
-						{/snippet}
-						{#snippet body()}
-							<div class="reindex-body">
-								<Button variant="secondary" onclick={handlePurgeExpired} disabled={purging}>
-									<Trash2 size={16} />
+							<p class="operation-help">{$i18n('memory_reindex_subtitle')}</p>
+							{#if reindexRunning && reindexProgress}
+								<div class="operation-progress">
+									<div class="progress-track">
+										<ProgressBar
+											value={reindexProgress.processed}
+											max={Math.max(reindexProgress.total, 1)}
+											label={$i18n('memory_reindex_button')}
+										/>
+									</div>
+									<span class="progress-text">
+										{$i18n('memory_reindex_progress')
+											.replace('{current}', String(reindexProgress.processed))
+											.replace('{total}', String(reindexProgress.total))}
+									</span>
+									<Button
+										variant="ghost"
+										size="sm"
+										onclick={handleCancelReindex}
+										disabled={!reindexJobId}
+									>
+										{$i18n('memory_reindex_cancel_button')}
+									</Button>
+								</div>
+							{/if}
+						</div>
+
+						<div class="operation separated">
+							<div class="operation-head">
+								<span class="operation-title">{$i18n('memory_purge_title')}</span>
+								<Button variant="outline" size="sm" onclick={handlePurgeExpired} disabled={purging}>
+									<Trash2 size={14} aria-hidden="true" />
 									<span>
 										{purging ? $i18n('memory_purge_running') : $i18n('memory_purge_button')}
 									</span>
 								</Button>
 							</div>
-						{/snippet}
-					</Card>
-
-					<!-- Reindex Card -->
-					<Card>
-						{#snippet header()}
-							<div class="card-header-text">
-								<div class="title-row">
-									<DatabaseZap size={18} aria-hidden="true" />
-									<h3 class="card-title">{$i18n('memory_reindex_button')}</h3>
-								</div>
-								<p class="card-subtitle">{$i18n('memory_reindex_subtitle')}</p>
-							</div>
-						{/snippet}
-						{#snippet body()}
-							<div class="reindex-body">
-								{#if reindexRunning && reindexProgress}
-									<p class="reindex-status">
-										{$i18n('memory_reindex_progress')
-											.replace('{current}', String(reindexProgress.processed))
-											.replace('{total}', String(reindexProgress.total))}
-									</p>
-									<progress
-										class="reindex-progress"
-										value={reindexProgress.processed}
-										max={Math.max(reindexProgress.total, 1)}
-										aria-valuenow={reindexProgress.processed}
-										aria-valuemax={reindexProgress.total}
-										aria-label={$i18n('memory_reindex_button')}
-									></progress>
-									<p class="reindex-meta">
-										{reindexPct}% · {reindexProgress.chunksCreated} chunks
-									</p>
-									<Button variant="ghost" onclick={handleCancelReindex} disabled={!reindexJobId}>
-										{$i18n('memory_reindex_cancel_button')}
-									</Button>
-								{:else}
-									<Button variant="secondary" onclick={handleReindex} disabled={reindexStarting}>
-										<RefreshCw size={16} />
-										<span>
-											{reindexStarting
-												? $i18n('memory_reindex_starting')
-												: $i18n('memory_reindex_button')}
-										</span>
-									</Button>
-								{/if}
-							</div>
-						{/snippet}
-					</Card>
-				</div>
-			</section>
-
-			<!-- Memory Statistics Card -->
-			<MemoryStatsCard {stats} {tokenStats} />
-		{/if}
+							<p class="operation-help">{$i18n('memory_purge_subtitle')}</p>
+						</div>
+					</div>
+				{/snippet}
+			</Card>
+		</div>
 	{/if}
 </div>
-
-<!-- Configuration Modal -->
-<Modal open={showConfigModal} title={$i18n('memory_embedding_config')} onclose={closeConfigModal}>
-	{#snippet body()}
-		<div class="modal-form">
-			<!-- Embedding Model Section -->
-			<div class="modal-section">
-				<h4 class="modal-section-title">{$i18n('memory_embedding_model')}</h4>
-				<div class="form-row">
-					<Select
-						label={$i18n('memory_provider')}
-						options={providerOptions}
-						value={editConfig.provider}
-						onchange={handleProviderChange}
-						help={$i18n('memory_select_provider_help')}
-					/>
-
-					<Select
-						label={$i18n('memory_model')}
-						options={modelOptions}
-						value={editConfig.model}
-						onchange={handleModelChange}
-						help={editConfig.provider === 'mistral'
-							? $i18n('memory_mistral_help')
-							: $i18n('memory_ollama_help')}
-					/>
-				</div>
-			</div>
-
-			{#if modalError}
-				<div class="modal-error">
-					{modalError}
-				</div>
-			{/if}
-		</div>
-	{/snippet}
-	{#snippet footer()}
-		<div class="modal-actions">
-			<Button variant="ghost" onclick={closeConfigModal} disabled={saving}>
-				{$i18n('common_cancel')}
-			</Button>
-			<Button variant="primary" onclick={handleSave} disabled={saving}>
-				{saving ? $i18n('common_saving') : $i18n('memory_save_config')}
-			</Button>
-		</div>
-	{/snippet}
-</Modal>
 
 <!-- Delete Configuration Confirmation Modal -->
 <DeleteConfirmModal
@@ -599,6 +514,13 @@ HNSW index schema.
 		gap: var(--spacing-lg);
 	}
 
+	.row-grid {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--spacing-md);
+		align-items: start;
+	}
+
 	.loading-state {
 		display: flex;
 		align-items: center;
@@ -607,152 +529,61 @@ HNSW index schema.
 		padding: var(--spacing-xl);
 	}
 
-	/* Modal Form */
-	.modal-form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-lg);
-	}
-
-	.modal-section {
+	.operations-body {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
 	}
 
-	.modal-section-title {
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-		padding-bottom: var(--spacing-sm);
-		border-bottom: 1px solid var(--color-border);
-	}
-
-	.form-row {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-lg);
-	}
-
-	.card-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-	}
-
-	.card-header-text {
+	.operation {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-2xs);
 	}
 
-	.title-row {
+	.operation.separated {
+		border-top: 1px solid var(--color-border-light);
+		padding-top: var(--spacing-md);
+	}
+
+	.operation-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-sm);
+	}
+
+	.operation-title {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+	}
+
+	.operation-help {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+	}
+
+	.operation-progress {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
-		color: var(--color-text-primary);
+		margin-top: var(--spacing-sm);
 	}
 
-	.card-subtitle {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
+	.progress-track {
+		flex: 1;
+		min-width: 0;
 	}
 
-	.operations-section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
-	.section-header {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		padding-bottom: var(--spacing-2xs);
-		border-bottom: 1px solid var(--color-border);
-	}
-
-	.section-title {
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--color-text-secondary);
-		margin: 0;
-	}
-
-	.operations-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-		gap: var(--spacing-lg);
-		align-items: start;
-	}
-
-	.reindex-body {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
-	}
-
-	.reindex-status {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
-	.reindex-progress {
-		width: 100%;
-		height: 8px;
-		appearance: none;
-		border: none;
-		border-radius: 4px;
-		overflow: hidden;
-		background: var(--color-bg-tertiary);
-	}
-
-	.reindex-progress::-webkit-progress-bar {
-		background: var(--color-bg-tertiary);
-		border-radius: 4px;
-	}
-
-	.reindex-progress::-webkit-progress-value {
-		background: var(--color-accent);
-		border-radius: 4px;
-	}
-
-	.reindex-progress::-moz-progress-bar {
-		background: var(--color-accent);
-		border-radius: 4px;
-	}
-
-	.reindex-meta {
-		margin: 0;
+	.progress-text {
 		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
+		color: var(--color-text-tertiary);
+		white-space: nowrap;
 	}
 
-	.modal-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: var(--spacing-md);
-	}
-
-	.modal-error {
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-md);
-		font-size: var(--font-size-sm);
-		text-align: center;
-		background: var(--color-error-light);
-		color: var(--color-error);
-	}
-
-	@media (max-width: 768px) {
-		.form-row {
-			grid-template-columns: 1fr;
-		}
-
-		.operations-grid {
+	@media (max-width: 900px) {
+		.row-grid {
 			grid-template-columns: 1fr;
 		}
 	}

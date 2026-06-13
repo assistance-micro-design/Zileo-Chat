@@ -100,20 +100,19 @@ Manages memory configuration and memory list with lazy loading.
 	.memory-subsections {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-2xl);
+		gap: var(--spacing-xl);
 	}
 
 	.memory-subsection {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-lg);
+		gap: var(--spacing-sm);
 	}
 
 	.subsection-title {
 		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-secondary);
-		padding-bottom: var(--spacing-sm);
-		border-bottom: 1px solid var(--color-border);
+		color: var(--color-text-primary);
+		margin: 0;
 	}
 </style>

@@ -19,14 +19,14 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 EmbeddingTestCard - Test embedding generation with sample text.
-Extracted from MemorySettings.svelte.
+Results render in a monospace code panel; the action sits in the footer.
 -->
 
 <script lang="ts">
 	import { tauriInvoke } from '$lib/tauri';
 	import { Card, Button, Textarea } from '$lib/components/ui';
 	import type { EmbeddingTestResult } from '$types/embedding';
-	import { FlaskConical } from '@lucide/svelte';
+	import { Zap } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { toastStore } from '$lib/stores/toast';
@@ -43,6 +43,20 @@ Extracted from MemorySettings.svelte.
 	let testText = $state('');
 	let testingEmbedding = $state(false);
 	let testResult = $state<EmbeddingTestResult | null>(null);
+
+	/** Preformatted result lines for the code panel */
+	const resultLines = $derived.by(() => {
+		if (!testResult || !testResult.success) return '';
+		const preview = testResult.preview
+			.slice(0, 3)
+			.map((v) => v.toFixed(4))
+			.join(', ');
+		return [
+			`${t('memory_dimension')} ${testResult.dimension}`,
+			`${t('memory_duration')} ${testResult.duration_ms} ms`,
+			`${t('memory_preview')} [${preview}, …]`
+		].join('\n');
+	});
 
 	function notify(type: ToastType, text: string): void {
 		toastStore.add({ type, title: text, message: '', persistent: false, duration: 5000 });
@@ -78,153 +92,62 @@ Extracted from MemorySettings.svelte.
 	}
 </script>
 
-<Card>
-	{#snippet header()}
-		<div class="card-header-text">
-			<div class="title-row">
-				<FlaskConical size={18} aria-hidden="true" />
-				<h3 class="card-title">{$i18n('memory_test_title')}</h3>
-			</div>
-			<p class="card-subtitle">{$i18n('memory_test_subtitle')}</p>
-		</div>
-	{/snippet}
+<Card title={$i18n('memory_test_title')} description={$i18n('memory_test_subtitle')}>
 	{#snippet body()}
 		<div class="test-section">
 			<Textarea
 				label={$i18n('memory_test_text_label')}
 				value={testText}
 				placeholder={$i18n('memory_test_text_placeholder')}
-				rows={3}
+				rows={2}
 				oninput={(e) => (testText = e.currentTarget.value)}
 			/>
-			<div class="test-actions">
-				<Button
-					variant="secondary"
-					onclick={handleTestEmbedding}
-					disabled={!testText.trim() || testingEmbedding || !configExists}
-				>
-					{testingEmbedding ? $i18n('memory_testing') : $i18n('memory_test_button')}
-				</Button>
-			</div>
 
 			{#if testResult}
-				<div
-					class="test-result"
-					class:success={testResult.success}
-					class:error={!testResult.success}
-				>
-					{#if testResult.success}
-						<div class="result-row">
-							<span class="result-label">{$i18n('memory_dimension')}</span>
-							<span class="result-value">{testResult.dimension}</span>
-						</div>
-						<div class="result-row">
-							<span class="result-label">{$i18n('memory_duration')}</span>
-							<span class="result-value">{testResult.duration_ms}ms</span>
-						</div>
-						<div class="result-row">
-							<span class="result-label">{$i18n('memory_provider')}</span>
-							<span class="result-value">{testResult.provider}</span>
-						</div>
-						<div class="result-row">
-							<span class="result-label">{$i18n('memory_model')}</span>
-							<span class="result-value">{testResult.model}</span>
-						</div>
-						<div class="result-row">
-							<span class="result-label">{$i18n('memory_preview')}</span>
-							<span class="result-value preview"
-								>[{testResult.preview
-									.slice(0, 3)
-									.map((v) => v.toFixed(4))
-									.join(', ')}...]</span
-							>
-						</div>
-					{:else}
-						<p class="error-text">{testResult.error}</p>
-					{/if}
-				</div>
+				{#if testResult.success}
+					<pre class="code-panel">{resultLines}</pre>
+				{:else}
+					<pre class="code-panel error">{testResult.error}</pre>
+				{/if}
 			{/if}
 		</div>
+	{/snippet}
+	{#snippet footer()}
+		<Button
+			variant="primary"
+			size="sm"
+			onclick={handleTestEmbedding}
+			disabled={!testText.trim() || testingEmbedding || !configExists}
+		>
+			<Zap size={14} aria-hidden="true" />
+			<span>{testingEmbedding ? $i18n('memory_testing') : $i18n('memory_test_button')}</span>
+		</Button>
 	{/snippet}
 </Card>
 
 <style>
-	.card-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-	}
-
-	.card-header-text {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-2xs);
-	}
-
-	.title-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		color: var(--color-text-primary);
-	}
-
-	.card-subtitle {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
 	.test-section {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
 	}
 
-	.test-actions {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-	}
-
-	.test-result {
-		padding: var(--spacing-md);
+	.code-panel {
+		margin: 0;
+		padding: 0.7rem 0.85rem;
+		background: var(--surface-2);
+		border: 1px solid var(--color-border-light);
 		border-radius: var(--border-radius-md);
-		font-size: var(--font-size-sm);
-	}
-
-	.test-result.success {
-		background: var(--color-success-light);
-		border: 1px solid var(--color-success);
-	}
-
-	.test-result.error {
-		background: var(--color-error-light);
-		border: 1px solid var(--color-error);
-	}
-
-	.result-row {
-		display: flex;
-		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-xs);
-	}
-
-	.result-label {
-		font-weight: var(--font-weight-medium);
-		color: var(--color-text-secondary);
-		min-width: 80px;
-	}
-
-	.result-value {
-		color: var(--color-text-primary);
-	}
-
-	.result-value.preview {
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
+		line-height: 1.6;
+		overflow-x: auto;
+		white-space: pre;
 	}
 
-	.error-text {
+	.code-panel.error {
 		color: var(--color-error);
-		margin: 0;
+		border-color: var(--color-error);
+		white-space: pre-wrap;
 	}
 </style>

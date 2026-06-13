@@ -200,7 +200,13 @@ Provides fields for memory type, content, and metadata.
 
 	<div class="slider-field">
 		<span class="slider-label">
-			{$i18n('memory_form_priority_label').replace('{value}', formData.priority.toFixed(1))}
+			{$i18n('memory_form_priority_label').replace(
+				'{value}',
+				formData.priority.toLocaleString(undefined, {
+					minimumFractionDigits: 1,
+					maximumFractionDigits: 1
+				})
+			)}
 		</span>
 		<input
 			type="range"
@@ -208,7 +214,7 @@ Provides fields for memory type, content, and metadata.
 			max="1"
 			step="0.1"
 			bind:value={formData.priority}
-			class="slider"
+			class="form-range"
 			aria-label={$i18n('memory_form_priority_label').replace('{value}', '')}
 		/>
 		<span class="slider-help">{$i18n('memory_form_priority_help')}</span>
@@ -255,32 +261,11 @@ Provides fields for memory type, content, and metadata.
 		color: var(--color-text-primary);
 	}
 
-	.slider {
+	.form-range {
 		width: 100%;
-		height: 8px;
-		border-radius: 4px;
-		background: var(--color-bg-tertiary);
-		outline: none;
+		height: 0.25rem;
+		accent-color: var(--color-accent-deep);
 		cursor: pointer;
-	}
-
-	.slider::-webkit-slider-thumb {
-		-webkit-appearance: none;
-		appearance: none;
-		width: 20px;
-		height: 20px;
-		border-radius: 50%;
-		background: var(--color-accent);
-		cursor: pointer;
-	}
-
-	.slider::-moz-range-thumb {
-		width: 20px;
-		height: 20px;
-		border-radius: 50%;
-		background: var(--color-accent);
-		cursor: pointer;
-		border: none;
 	}
 
 	.slider-help {
@@ -291,7 +276,9 @@ Provides fields for memory type, content, and metadata.
 	.form-actions {
 		display: flex;
 		justify-content: flex-end;
-		gap: var(--spacing-md);
+		gap: var(--spacing-sm);
 		margin-top: var(--spacing-md);
+		padding-top: var(--spacing-md);
+		border-top: 1px solid var(--color-border);
 	}
 </style>
