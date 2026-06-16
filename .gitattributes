@@ -1,0 +1,20 @@
+# Normalize line endings: store everything with LF in the repo and check it
+# out with LF on every platform. Prevents CRLF/LF churn between Windows and
+# CI (Prettier is configured for LF).
+* text=auto eol=lf
+
+# Binary assets must never be normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.tar.gz binary
+*.AppImage binary
+*.appimage binary

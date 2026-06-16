@@ -25,6 +25,7 @@ ScioNos contributions include several audit-driven fixes and frontend maintenanc
 - [#130](https://github.com/assistance-micro-design/Zileo-Chat/pull/130) — Centralized frontend Tauri access through the `$lib/tauri` adapter layer and updated frontend tests/mocks. Merged upstream.
 - [#133](https://github.com/assistance-micro-design/Zileo-Chat/pull/133) — Vitest frontend configuration PR opened on upstream by mistake, then closed cleanly without merge.
 - [#140](https://github.com/assistance-micro-design/Zileo-Chat/pull/140) — Large frontend component refactor with helper extraction and targeted tests. Merged upstream.
+- [#3](https://github.com/ScioNos/Zileo-Chat/pull/3) — Audit-driven hardening release (v0.28.1): custom-provider SSRF screening, Windows `is_system_directory` fix, retry classification, frontend listener/reactivity fixes, `ssr`/`prerender` centralization, line-ending normalization, executable AES-GCM tests and gating production `npm audit`.
 
 ## How to Contribute
 

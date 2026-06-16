@@ -375,6 +375,11 @@ the HNSW index schema.
 		loadConfig();
 		void restoreReindexFromStorage();
 
+		// The listen() promise may resolve after the component unmounts (fast
+		// navigation out of Settings > Memory). Guard with a cancellation flag so
+		// the listener is torn down immediately on late resolution instead of
+		// leaking an orphan handler that writes into destroyed $state.
+		let cancelled = false;
 		let unlistenFn: TauriUnlistenFn | undefined;
 		void tauriListen<ReindexJobStatus>('reindex-progress', (event) => {
 			// Strict filter: events from other jobs (rare but possible if the
@@ -385,10 +390,12 @@ the HNSW index schema.
 				handleTerminalStatus(event.payload);
 			}
 		}).then((fn) => {
-			unlistenFn = fn;
+			if (cancelled) fn();
+			else unlistenFn = fn;
 		});
 
 		return () => {
+			cancelled = true;
 			unlistenFn?.();
 		};
 	});

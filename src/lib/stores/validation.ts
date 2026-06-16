@@ -123,6 +123,16 @@ let resolvedUnlistener: UnlistenFn | null = null;
 let isInitialized = false;
 
 /**
+ * Memoized in-flight init promise. Guards against concurrent `init()` calls
+ * (e.g. the GlobalValidationModal remounting, or HMR in dev) registering
+ * duplicate `validation_required` / `validation_resolved` listeners — which
+ * would process each validation twice. Mirrors the pattern used by
+ * `background-workflows.ts` and `kanban-events.ts`. Reset to null in
+ * `cleanup()` and on init failure.
+ */
+let initPromise: Promise<void> | null = null;
+
+/**
  * Converts a ValidationRequiredEvent to a ValidationRequest for the modal.
  */
 function convertToValidationRequest(event: ValidationRequiredEvent): ValidationRequest {
@@ -152,11 +162,31 @@ export const validationStore = {
 	 * Call this when the agent page mounts.
 	 */
 	async init(): Promise<void> {
-		// Safety check: cleanup existing listener if already initialized
+		// Concurrent callers share the same in-flight promise so listeners are
+		// registered exactly once; a fully-initialized store is a no-op. A fresh
+		// init only happens after `cleanup()` nulls both flags.
+		if (initPromise) {
+			return initPromise;
+		}
 		if (isInitialized) {
-			await this.cleanup();
+			return;
 		}
 
+		initPromise = this.registerListeners();
+
+		try {
+			await initPromise;
+		} catch (e) {
+			initPromise = null;
+			throw e;
+		}
+	},
+
+	/**
+	 * Registers the two Tauri event listeners and flips `isInitialized`.
+	 * Extracted so `init()` can memoize it via `initPromise`.
+	 */
+	async registerListeners(): Promise<void> {
 		// Listen for validation_required events. APPEND to the FIFO queue: a new
 		// request never overwrites one already awaiting a decision (F1).
 		// Defensive de-dup: ignore a repeat of an id already queued.
@@ -314,6 +344,7 @@ export const validationStore = {
 			resolvedUnlistener = null;
 		}
 		isInitialized = false;
+		initPromise = null;
 	},
 
 	/**

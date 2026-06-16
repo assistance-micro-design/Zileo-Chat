@@ -6,23 +6,23 @@ import { defineConfig } from 'vite';
 // (resolved by SvelteKit) and test aliases.
 
 export default defineConfig({
-  plugins: [sveltekit()],
-  clearScreen: false,
-  server: {
-    port: 5173,
-    strictPort: true,
-    host: 'localhost',
-    watch: {
-      ignored: ['**/src-tauri/target/**']
-    }
-  },
-  envPrefix: ['VITE_', 'TAURI_'],
-  build: {
-    // Tauri 2 ships modern WebView (WebKit on macOS/Linux, Edge WebView2 on
-    // Windows). chrome105 / safari15 covers all platforms — older targets
-    // emit unnecessary polyfills.
-    target: ['es2022', 'chrome105', 'safari15'],
-    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
-    sourcemap: !!process.env.TAURI_DEBUG
-  }
+	plugins: [sveltekit()],
+	clearScreen: false,
+	server: {
+		port: 5173,
+		strictPort: true,
+		host: 'localhost',
+		watch: {
+			ignored: ['**/src-tauri/target/**']
+		}
+	},
+	envPrefix: ['VITE_', 'TAURI_'],
+	build: {
+		// Tauri 2 ships modern WebView (WebKit on macOS/Linux, Edge WebView2 on
+		// Windows). chrome105 / safari15 covers all platforms — older targets
+		// emit unnecessary polyfills.
+		target: ['es2022', 'chrome105', 'safari15'],
+		minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
+		sourcemap: !!process.env.TAURI_DEBUG
+	}
 });

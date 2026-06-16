@@ -8,8 +8,7 @@
 
 import { redirect } from '@sveltejs/kit';
 
-export const ssr = false;
-export const prerender = false;
+// ssr/prerender are disabled globally in +layout.ts (client-only SPA).
 
 export const load = (): never => {
 	throw redirect(307, '/settings/providers');

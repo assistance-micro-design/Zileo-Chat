@@ -4,7 +4,7 @@
   Kanban page — board for orchestrating recurring agent workflows.
 -->
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { get } from 'svelte/store';
 	import { i18n } from '$lib/i18n';
@@ -144,10 +144,16 @@
 	// workflow finished, a verdict was applied, or stale cards were purged) —
 	// including while the user was on another page. Reads the page's current
 	// agent filter so the scoped view is preserved.
+	//
+	// `agentFilter` is read via `untrack` so this effect fires ONLY on a
+	// dirty-seq bump — the primary effect above already owns filter changes.
+	// Without untrack, changing the filter would trigger this effect (and the
+	// proposedDirtySeq one) too, firing three concurrent `loadCards` that can
+	// resolve out of order and leave the board inconsistent.
 	$effect(() => {
 		// Touch the counter so this effect re-runs on every bump.
 		void $boardDirtySeq;
-		void kanbanStore.loadCards(agentFilter || undefined);
+		void kanbanStore.loadCards(untrack(() => agentFilter) || undefined);
 	});
 
 	// Drain a buffered approve/reject verdict: open the report viewer on the
@@ -326,7 +332,9 @@
 	// its proposed card without a manual refresh.
 	$effect(() => {
 		void $proposedDirtySeq;
-		void kanbanStore.loadCards(agentFilter || undefined);
+		// See the boardDirtySeq effect: filter read is untracked so this fires
+		// only on a proposed-dirty bump, not on every agentFilter change.
+		void kanbanStore.loadCards(untrack(() => agentFilter) || undefined);
 	});
 
 	function agentName(id: string): string {

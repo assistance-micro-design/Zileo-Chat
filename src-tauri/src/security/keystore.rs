@@ -328,6 +328,73 @@ mod tests {
         assert!(matches!(result, Err(KeyStoreError::InvalidProvider(_))));
     }
 
+    /// Builds a cipher from a fixed key so the AES-GCM round-trip can be tested
+    /// without bootstrapping the OS keyring. `encrypt`/`decrypt` take the cipher
+    /// as a parameter, so a `new_without_encryption()` store (cipher: None) is a
+    /// fine receiver for the method calls.
+    fn fixed_cipher() -> Aes256Gcm {
+        let key = [0x42u8; AES_KEY_SIZE];
+        Aes256Gcm::new_from_slice(&key).expect("32-byte key is valid")
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_roundtrip() {
+        let store = KeyStore::new_without_encryption();
+        let cipher = fixed_cipher();
+        let plaintext = b"sk-super-secret-api-key-1234567890";
+
+        let encrypted = store.encrypt(&cipher, plaintext).unwrap();
+
+        // Nonce (12 bytes) is prepended, and GCM appends a 16-byte tag, so the
+        // output is strictly longer than the plaintext and never equals it.
+        assert!(encrypted.len() > NONCE_SIZE + plaintext.len());
+        assert_ne!(encrypted.as_slice(), plaintext.as_slice());
+
+        let decrypted = store.decrypt(&cipher, &encrypted).unwrap();
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_encrypt_uses_fresh_nonce_each_time() {
+        let store = KeyStore::new_without_encryption();
+        let cipher = fixed_cipher();
+        let plaintext = b"identical plaintext";
+
+        let a = store.encrypt(&cipher, plaintext).unwrap();
+        let b = store.encrypt(&cipher, plaintext).unwrap();
+
+        // A random per-message nonce means two encryptions of the same input
+        // must differ (no nonce reuse), yet both decrypt back correctly.
+        assert_ne!(a, b);
+        assert_eq!(store.decrypt(&cipher, &a).unwrap(), plaintext);
+        assert_eq!(store.decrypt(&cipher, &b).unwrap(), plaintext);
+    }
+
+    #[test]
+    fn test_decrypt_rejects_too_short_buffer() {
+        let store = KeyStore::new_without_encryption();
+        let cipher = fixed_cipher();
+
+        // Fewer bytes than the nonce: cannot even split off a nonce.
+        let result = store.decrypt(&cipher, &[0u8; NONCE_SIZE - 1]);
+        assert!(matches!(result, Err(KeyStoreError::InvalidFormat(_))));
+    }
+
+    #[test]
+    fn test_decrypt_rejects_tampered_ciphertext() {
+        let store = KeyStore::new_without_encryption();
+        let cipher = fixed_cipher();
+        let plaintext = b"authenticated payload";
+
+        let mut encrypted = store.encrypt(&cipher, plaintext).unwrap();
+        // Flip the last byte (inside the GCM tag): authentication must fail.
+        let last = encrypted.len() - 1;
+        encrypted[last] ^= 0xFF;
+
+        let result = store.decrypt(&cipher, &encrypted);
+        assert!(matches!(result, Err(KeyStoreError::EncryptionError(_))));
+    }
+
     // Note: Full integration tests require actual keychain access
     // which may not be available in CI environments.
     // Run manually with: cargo test -- --ignored

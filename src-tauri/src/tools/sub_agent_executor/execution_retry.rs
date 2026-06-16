@@ -151,28 +151,19 @@ impl SubAgentExecutor {
     pub fn is_retryable_error(error_message: &str) -> bool {
         let lower = error_message.to_lowercase();
 
-        let retryable_patterns = [
-            "timeout",
-            "timed out",
-            "temporarily unavailable",
-            "temporary failure",
-            "connection refused",
-            "connection reset",
-            "network error",
-            "network unreachable",
-            "rate limit",
-            "rate_limit",
-            "too many requests",
-            "503",
-            "502",
-            "429",
-            "retry",
-            "try again",
-            "service unavailable",
-            "server busy",
-            "overloaded",
-            "capacity",
-        ];
+        // Retryable HTTP status codes are checked FIRST, before the text
+        // patterns. A transient 5xx/429 response body often embeds words like
+        // "invalid" or "not found" (e.g. `503: invalid upstream, retry later`);
+        // letting the non-retryable text patterns win there would wrongly drop
+        // a retry. Codes are matched as whole tokens so "503" does not match
+        // inside an unrelated number such as a request id.
+        const RETRYABLE_STATUS: [&str; 4] = ["429", "502", "503", "504"];
+        if RETRYABLE_STATUS
+            .iter()
+            .any(|code| contains_numeric_token(&lower, code))
+        {
+            return true;
+        }
 
         let non_retryable_patterns = [
             "cancelled",
@@ -187,7 +178,27 @@ impl SubAgentExecutor {
             "authentication",
         ];
 
-        // Check non-retryable first (takes precedence)
+        let retryable_patterns = [
+            "timeout",
+            "timed out",
+            "temporarily unavailable",
+            "temporary failure",
+            "connection refused",
+            "connection reset",
+            "network error",
+            "network unreachable",
+            "rate limit",
+            "rate_limit",
+            "too many requests",
+            "retry",
+            "try again",
+            "service unavailable",
+            "server busy",
+            "overloaded",
+            "capacity",
+        ];
+
+        // Text patterns: non-retryable takes precedence over retryable.
         for pattern in &non_retryable_patterns {
             if lower.contains(pattern) {
                 return false;
@@ -218,4 +229,23 @@ impl SubAgentExecutor {
         }
         total
     }
+}
+
+/// Returns true if `token` (a numeric HTTP status like "503") appears in
+/// `haystack` as a standalone number — i.e. not surrounded by other digits.
+/// This avoids matching "503" inside an unrelated id such as "req-5039".
+fn contains_numeric_token(haystack: &str, token: &str) -> bool {
+    let bytes = haystack.as_bytes();
+    let mut start = 0;
+    while let Some(pos) = haystack[start..].find(token) {
+        let idx = start + pos;
+        let before_ok = idx == 0 || !bytes[idx - 1].is_ascii_digit();
+        let after = idx + token.len();
+        let after_ok = after >= bytes.len() || !bytes[after].is_ascii_digit();
+        if before_ok && after_ok {
+            return true;
+        }
+        start = idx + token.len();
+    }
+    false
 }

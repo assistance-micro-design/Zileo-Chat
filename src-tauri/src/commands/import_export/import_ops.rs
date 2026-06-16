@@ -430,10 +430,25 @@ pub async fn import_custom_providers(
                 name,
                 is_overwrite,
             } => {
+                // SSRF screen under the strict IMPORT policy: an imported file is
+                // untrusted, so loopback/private/metadata base URLs are all
+                // refused (unlike runtime creation, no LAN opt-in applies here).
+                let normalized_url = provider.base_url.trim_end_matches('/');
+                if let Err(reason) = crate::mcp::ssrf::screen_request_url(
+                    normalized_url,
+                    crate::mcp::ssrf::ScreenPolicy::IMPORT,
+                ) {
+                    t.errors.push(ImportError {
+                        entity_type: "custom_provider".to_string(),
+                        entity_id: provider.name.clone(),
+                        error: format!("Base URL refused: {reason}"),
+                    });
+                    continue;
+                }
                 let data = sanitize_for_surrealdb(serde_json::json!({
                     "name": name,
                     "display_name": provider.display_name,
-                    "base_url": provider.base_url,
+                    "base_url": normalized_url,
                     "enabled": provider.enabled,
                     "supports_cache_control": provider.supports_cache_control,
                     "supports_reasoning_param": provider.supports_reasoning_param,

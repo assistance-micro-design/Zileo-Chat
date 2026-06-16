@@ -154,18 +154,40 @@ fn check_path_authorized(canonical_path: &Path, authorized_folders: &[PathBuf]) 
     )))
 }
 
+/// Normalizes a path string for forbidden-dir comparison.
+///
+/// On Windows the match must be case-insensitive (NTFS is) and separator-
+/// agnostic, otherwise `c:\windows` or a forward-slash variant would slip past
+/// the back-slashed, capitalized `FORBIDDEN_SYSTEM_DIRS` entries. On Unix paths
+/// are case-sensitive, so the string is returned unchanged.
+#[cfg(target_os = "windows")]
+fn normalize_for_system_check(s: &str) -> String {
+    s.to_ascii_lowercase().replace('/', "\\")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn normalize_for_system_check(s: &str) -> String {
+    s.to_string()
+}
+
 /// Check if a path is in a system directory.
 fn is_system_directory(path_str: &str) -> bool {
     let path = Path::new(path_str);
+    let sep = std::path::MAIN_SEPARATOR;
 
-    // Check each component and build path progressively
+    // Check each component and build path progressively. Both sides are
+    // normalized so the comparison is correct on the running platform (the
+    // descendant check uses the native separator, not a hard-coded '/').
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component);
-        let current_str = current.to_string_lossy();
+        let current_norm = normalize_for_system_check(&current.to_string_lossy());
 
         for forbidden in FORBIDDEN_SYSTEM_DIRS {
-            if current_str == *forbidden || current_str.starts_with(&format!("{}/", forbidden)) {
+            let forbidden_norm = normalize_for_system_check(forbidden);
+            if current_norm == forbidden_norm
+                || current_norm.starts_with(&format!("{forbidden_norm}{sep}"))
+            {
                 return true;
             }
         }

@@ -46,6 +46,25 @@ fn validate_provider_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// SSRF-screens a custom provider base URL before it is persisted or used.
+///
+/// Unlike the MCP HTTP path, the shared LLM `reqwest` client has no SSRF
+/// resolver attached (it is reused by Mistral/Ollama), so the only guard is
+/// here at the trust boundary: a `base_url` pointing at cloud metadata
+/// (`169.254.169.254`), loopback, or — unless the LAN opt-in is on — a private
+/// range is rejected before we ever send the `Authorization: Bearer` header to
+/// it. Reuses the same `ScreenPolicy::runtime` + LAN toggle as MCP so the two
+/// surfaces stay consistent. Also rejects non-http(s) schemes.
+fn screen_custom_provider_url(url: &str) -> Result<(), String> {
+    let allow_private =
+        crate::mcp::network_settings::current_network_settings().allow_private_network;
+    crate::mcp::ssrf::screen_request_url(
+        url,
+        crate::mcp::ssrf::ScreenPolicy::runtime(allow_private),
+    )
+    .map_err(|reason| format!("Base URL refused: {reason}"))
+}
+
 /// Lists all providers (builtin + custom).
 ///
 /// Returns a unified list of provider metadata for the frontend.
@@ -166,6 +185,9 @@ pub async fn create_custom_provider(
     // Normalize base URL
     let normalized_url = base_url.trim_end_matches('/').to_string();
 
+    // SSRF screen before persisting: block metadata/loopback/private targets.
+    screen_custom_provider_url(&normalized_url)?;
+
     // Insert into DB. The two strict-mode flags are persisted only when the
     // caller explicitly opts in or out — leaving them unset keeps the row
     // NONE in SurrealDB, which the wire path treats as OpenRouter-style
@@ -261,6 +283,9 @@ fn build_provider_update_clauses(
             return Err("Base URL must be 1-512 characters".into());
         }
         let normalized = url.trim_end_matches('/');
+        // SSRF screen on update too: a provider could be re-pointed at an
+        // internal target after creation.
+        screen_custom_provider_url(normalized)?;
         set_parts.push(format!(
             "base_url = {}",
             serialize_for_query(normalized, "base_url")?

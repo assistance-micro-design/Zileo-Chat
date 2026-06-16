@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-06-16
+
+Audit-driven hardening and maintenance release (no user-facing feature change).
+
+### Security
+
+- **SSRF screening for custom OpenAI-compatible providers** (`src-tauri/src/commands/custom_provider.rs`, `src-tauri/src/commands/import_export/import_ops.rs`) -- a custom provider `base_url` is now screened through the same `screen_request_url` / `ScreenPolicy` guard as the MCP HTTP path, at create, update and import time. Targets resolving to cloud metadata (`169.254.169.254`), loopback or private/LAN ranges are refused before the `Authorization: Bearer` header is ever sent, and non-`http(s)` schemes are rejected. Runtime reuses the MCP LAN opt-in; imports use the strict policy.
+
+### Fixed
+
+- **Listener leak in the memory settings page** (`src/lib/components/settings/memory/MemorySettings.svelte`) -- the `reindex-progress` listener cleanup was returned synchronously while the unlisten handle only resolved later, so a fast unmount left an orphan handler writing into destroyed state. A cancellation flag now detaches it on late resolution.
+- **Validation store double-initialization** (`src/lib/stores/validation.ts`) -- `init()` had no guard against concurrent calls (modal remount / HMR) and could register the `validation_required` / `validation_resolved` listeners twice, processing each validation twice. It now memoizes an in-flight `initPromise`, matching the `background-workflows` / `kanban-events` stores.
+- **Concurrent board reloads on the Kanban page** (`src/routes/kanban/+page.svelte`) -- three `$effect` blocks each read `agentFilter` and triggered a `loadCards`, firing three concurrent IPC reloads on a filter change. The secondary effects (driven by `boardDirtySeq` / `proposedDirtySeq`) now read the filter via `untrack`, leaving the primary effect solely responsible for filter changes.
+- **`is_system_directory` ineffective on Windows** (`src-tauri/src/tools/file_manager/security.rs`) -- the descendant check used a hard-coded `/` separator (never present in a Windows path) and a case-sensitive comparison (NTFS is case-insensitive). The comparison is now case- and separator-normalized under `cfg(windows)`; Unix behavior is unchanged.
+- **Retryable-error misclassification** (`src-tauri/src/tools/sub_agent_executor/execution_retry.rs`) -- a transient 5xx/429 whose body embedded a non-retryable word (e.g. `503: invalid upstream`) was wrongly treated as permanent. Retryable HTTP status codes (429/502/503/504) are now checked first, matched as whole numeric tokens.
+
+### Changed
+
+- **`ssr` / `prerender` centralized** (`src/routes/+layout.ts`) -- the client-only SPA flags move to the root layout (inherited by every route) so a new page cannot accidentally re-enable SSR/prerender and break `adapter-static`. Redundant per-page declarations removed.
+- **Line-ending normalization** (`.gitattributes`, `.editorconfig`, `.prettierrc.json`) -- repo-wide `eol=lf` with an explicit Prettier `endOfLine` and an editor config, ending CRLF/LF churn on Windows checkouts. Root config files (eslint/svelte/vite/vitest) are now covered by the format glob.
+- **Tauri config schema** (`src-tauri/tauri.conf.json`) -- `$schema` added for IDE validation and autocompletion.
+
+### Tests / CI
+
+- **Executable AES-256-GCM round-trip tests** (`src-tauri/src/security/keystore.rs`) -- replace an `#[ignore]` keychain-dependent test with key-fixed unit tests covering round-trip, fresh-nonce-per-message, short-buffer rejection and tampered-tag rejection.
+- **Production `npm audit` is now gating** (`.github/workflows/validate.yml`) -- a high/critical CVE in a shipped dependency blocks the PR (dev-only advisories excluded via `--omit=dev`).
+- **E2E specs are type-checked** (`tsconfig.json`) -- `tests/**` is included in `npm run check`; the three type errors thereby surfaced are fixed.
+
 ## [0.28.0] - 2026-06-13
 
 ### Added

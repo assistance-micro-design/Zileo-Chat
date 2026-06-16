@@ -3,6 +3,10 @@ name: Validate
 on:
   pull_request:
     branches: [main]
+  # Also run on direct pushes to the audit branch so the build/test status is
+  # visible without opening a PR. Remove once the branch is merged.
+  push:
+    branches: [audit/technical-fixes]
 
 # Cancel in-progress runs for the same branch/PR
 concurrency:
@@ -39,12 +43,13 @@ jobs:
       - name: Test
         run: npm run test
 
-      # npm audit: fail only on production-only high/critical vulnerabilities.
+      # npm audit: fail the build on production high/critical vulnerabilities.
       # Dev-only advisories are noise on this branch (mostly typescript-eslint,
-      # vitest plugins, ...) and we don't ship them.
+      # vitest plugins, ...) and we don't ship them, so they are excluded via
+      # --omit=dev rather than silenced. This step is gating: a high/critical
+      # CVE in a shipped dependency must block the PR.
       - name: npm audit (production deps)
         run: npm audit --omit=dev --audit-level=high
-        continue-on-error: true
 
   backend-fmt:
     runs-on: ubuntu-latest

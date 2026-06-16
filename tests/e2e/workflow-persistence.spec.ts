@@ -216,7 +216,7 @@ test.describe('Workflow Persistence', () => {
 			expect(
 				styles.animation !== 'none' ||
 				styles.animationName !== 'none' ||
-				styles.animationName !== ''
+				styles.animationName.length > 0
 			).toBeTruthy();
 		}
 	});

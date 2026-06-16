@@ -1,6 +1,6 @@
 {
 	"name": "zileo-chat",
-	"version": "0.28.0",
+	"version": "0.28.1",
 	"description": "Zileo Chat - Multi-agent AI desktop application",
 	"license": "Apache-2.0",
 	"author": {
@@ -31,8 +31,8 @@
 		"preview": "vite preview",
 		"check": "svelte-check --tsconfig ./tsconfig.json",
 		"lint": "eslint .",
-		"format": "prettier --write \"src/**/*.{ts,svelte,json}\" \"*.{json,md}\"",
-		"format:check": "prettier --check \"src/**/*.{ts,svelte,json}\" \"*.{json,md}\"",
+		"format": "prettier --write \"src/**/*.{ts,svelte,json}\" \"tests/**/*.ts\" \"*.{js,ts,json,md}\"",
+		"format:check": "prettier --check \"src/**/*.{ts,svelte,json}\" \"tests/**/*.ts\" \"*.{js,ts,json,md}\"",
 		"test": "vitest",
 		"test:e2e": "playwright test",
 		"tauri": "tauri",

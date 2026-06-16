@@ -262,6 +262,30 @@ fn test_is_retryable_error_unknown_errors() {
 }
 
 #[test]
+fn test_is_retryable_error_status_code_beats_text_pattern() {
+    // A transient 5xx/429 whose body embeds a non-retryable word must still
+    // retry: the HTTP status takes precedence over the text patterns.
+    assert!(SubAgentExecutor::is_retryable_error(
+        "503: invalid upstream response, retry later"
+    ));
+    assert!(SubAgentExecutor::is_retryable_error(
+        "HTTP 429 - resource not found in cache, slow down"
+    ));
+    assert!(SubAgentExecutor::is_retryable_error("504 Gateway Timeout"));
+}
+
+#[test]
+fn test_is_retryable_error_status_code_is_whole_token() {
+    // "503" inside a larger number must NOT be treated as a status code; with
+    // no other retryable signal this stays non-retryable.
+    assert!(!SubAgentExecutor::is_retryable_error(
+        "request id req-5039 was rejected: forbidden"
+    ));
+    // A non-retryable 4xx (not in the retryable set) is unaffected.
+    assert!(!SubAgentExecutor::is_retryable_error("404 not found"));
+}
+
+#[test]
 fn test_create_execution_record_with_parent_default_none() {
     use crate::models::sub_agent::SubAgentExecutionCreate;
 

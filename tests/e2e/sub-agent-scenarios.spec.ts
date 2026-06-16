@@ -224,9 +224,9 @@ test.describe('Sub-Agent Streaming Events Display', () => {
 			const styleSheets = document.styleSheets;
 			for (let i = 0; i < styleSheets.length; i++) {
 				try {
-					const rules = styleSheets[i].cssRules;
+					const rules = styleSheets[i]?.cssRules ?? [];
 					for (let j = 0; j < rules.length; j++) {
-						if (rules[j].type === CSSRule.KEYFRAMES_RULE) {
+						if (rules[j]?.type === CSSRule.KEYFRAMES_RULE) {
 							return true;
 						}
 					}
