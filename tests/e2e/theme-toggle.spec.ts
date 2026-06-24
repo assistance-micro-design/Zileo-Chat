@@ -157,7 +157,9 @@ test.describe('Theme Toggle', () => {
 
 		// Check background color variable
 		const bgColor = await page.evaluate(() => {
-			return getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim();
+			return getComputedStyle(document.documentElement)
+				.getPropertyValue('--color-bg-primary')
+				.trim();
 		});
 
 		// Light theme should have white-ish background
@@ -172,7 +174,9 @@ test.describe('Theme Toggle', () => {
 
 		// Check background color variable
 		const bgColor = await page.evaluate(() => {
-			return getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim();
+			return getComputedStyle(document.documentElement)
+				.getPropertyValue('--color-bg-primary')
+				.trim();
 		});
 
 		// Dark theme should have darker background

@@ -31,8 +31,8 @@ test.describe('Chat Interaction', () => {
 		// Empty state should have icon
 		const emptyIcon = page.locator('.empty-state .empty-icon');
 		// Check that empty-icon class or svg exists
-		const hasIcon = await emptyIcon.count() > 0 ||
-			await page.locator('.empty-state svg').count() > 0;
+		const hasIcon =
+			(await emptyIcon.count()) > 0 || (await page.locator('.empty-state svg').count()) > 0;
 		expect(hasIcon).toBe(true);
 	});
 

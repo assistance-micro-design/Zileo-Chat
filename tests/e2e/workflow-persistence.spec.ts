@@ -215,8 +215,8 @@ test.describe('Workflow Persistence', () => {
 			// Animation should be defined (not 'none')
 			expect(
 				styles.animation !== 'none' ||
-				styles.animationName !== 'none' ||
-				styles.animationName.length > 0
+					styles.animationName !== 'none' ||
+					styles.animationName.length > 0
 			).toBeTruthy();
 		}
 	});

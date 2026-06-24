@@ -1496,7 +1496,8 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.28.1...HEAD
+[0.28.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.28.1
 [0.28.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.28.0
 [0.27.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.27.0
 [0.26.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.26.0

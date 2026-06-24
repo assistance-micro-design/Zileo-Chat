@@ -14,7 +14,9 @@ test.describe('Accessibility - WCAG 2.1 AA', () => {
 			await page.goto('/');
 
 			// Tab through elements and verify focus visibility
-			const interactiveElements = page.locator('button, a, input, select, textarea, [tabindex="0"]');
+			const interactiveElements = page.locator(
+				'button, a, input, select, textarea, [tabindex="0"]'
+			);
 			const count = await interactiveElements.count();
 
 			for (let i = 0; i < Math.min(count, 10); i++) {

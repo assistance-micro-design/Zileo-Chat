@@ -66,7 +66,10 @@ test.describe('Workflow CRUD', () => {
 		const searchInput = page.locator('.sidebar input[type="search"]');
 
 		// Search input should be visible (unless sidebar collapsed)
-		const sidebarCollapsed = await page.locator('.sidebar.collapsed').isVisible().catch(() => false);
+		const sidebarCollapsed = await page
+			.locator('.sidebar.collapsed')
+			.isVisible()
+			.catch(() => false);
 
 		if (!sidebarCollapsed) {
 			await expect(searchInput).toBeVisible();
