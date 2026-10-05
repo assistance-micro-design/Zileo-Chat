@@ -21,7 +21,8 @@ Browse, filter, export and purge the validation audit log (see commands/validati
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { saveDialog, tauriInvoke, isTauriRuntime } from '$lib/tauri';
+	import { saveDialog, isTauriRuntime } from '$lib/tauri';
+	import { saveExportToFile } from '$lib/api/settings.api';
 	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { AuditLogStats, AuditLogFilters, AuditLogList } from '$lib/components/settings/audit-log';
 	import { ErrorBanner } from '$lib/components/ui';
@@ -80,7 +81,7 @@ Browse, filter, export and purge the validation audit log (see commands/validati
 				title: $i18n('audit_export_dialog_title')
 			});
 			if (!filePath) return;
-			await tauriInvoke('save_export_to_file', { path: filePath, content: csv });
+			await saveExportToFile(filePath, csv);
 			showToast('success', $i18n('audit_export_success'));
 		} catch (err) {
 			showToast('error', getErrorMessage(err));

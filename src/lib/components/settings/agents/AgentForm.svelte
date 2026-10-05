@@ -39,7 +39,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import type { SkillSummary } from '$types/skill';
 	import { Button, Input, Textarea, Card, Select, Switch } from '$lib/components/ui';
 	import { TriangleAlert } from '@lucide/svelte';
-	import { tauriInvoke } from '$lib/tauri';
+	import { listSkills } from '$lib/api/agents.api';
 	import { onMount } from 'svelte';
 	import { i18n, t } from '$lib/i18n';
 	import {
@@ -393,7 +393,7 @@ Be concise, factual, and conservative in your judgements.`;
 		}
 
 		try {
-			availableSkillSummaries = await tauriInvoke<SkillSummary[]>('list_skills');
+			availableSkillSummaries = await listSkills();
 		} catch {
 			warnings.push(t('agents_skills_load_failed'));
 		}

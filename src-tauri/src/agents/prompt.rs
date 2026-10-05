@@ -344,7 +344,8 @@ mod tests {
 
     #[test]
     fn test_report_enforcement_prompt_is_valid() {
-        assert!(!REPORT_ENFORCEMENT_PROMPT.is_empty());
+        // (No `is_empty` assert: `contains` below already proves non-emptiness,
+        // and `clippy::const_is_empty` rejects it on a const.)
         assert!(REPORT_ENFORCEMENT_PROMPT.contains("markdown"));
         assert!(REPORT_ENFORCEMENT_PROMPT.contains("report"));
     }

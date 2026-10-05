@@ -21,7 +21,7 @@ Manages MCP server configuration.
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { invoke } from '@tauri-apps/api/core';
+	import { getMcpNetworkSettings, updateMcpNetworkSettings } from '$lib/api/settings.api';
 	import MCPSection from '$lib/components/settings/MCPSection.svelte';
 	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { Card, Switch } from '$lib/components/ui';
@@ -30,7 +30,6 @@ Manages MCP server configuration.
 	import { toastStore } from '$lib/stores/toast';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { TriangleAlert } from '@lucide/svelte';
-	import type { McpNetworkSettings } from '$types/mcp-network';
 
 	/**
 	 * Component reference for the reload fallback (MCPSection owns local
@@ -48,7 +47,7 @@ Manages MCP server configuration.
 
 	onMount(async () => {
 		try {
-			const settings = await invoke<McpNetworkSettings>('get_mcp_network_settings');
+			const settings = await getMcpNetworkSettings();
 			allowPrivateNetwork = settings.allowPrivateNetwork;
 		} catch (err) {
 			toastStore.add({
@@ -68,9 +67,7 @@ Manages MCP server configuration.
 		allowPrivateNetwork = next;
 		networkSaving = true;
 		try {
-			const updated = await invoke<McpNetworkSettings>('update_mcp_network_settings', {
-				request: { allowPrivateNetwork: next }
-			});
+			const updated = await updateMcpNetworkSettings({ allowPrivateNetwork: next });
 			allowPrivateNetwork = updated.allowPrivateNetwork;
 			toastStore.add({
 				type: 'success',

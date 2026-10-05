@@ -25,7 +25,15 @@ single card; row actions are quiet icon buttons.
 
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { tauriInvoke, saveDialog, isTauriRuntime } from '$lib/tauri';
+	import { saveDialog, isTauriRuntime } from '$lib/tauri';
+	import {
+		deleteMemory,
+		exportMemories,
+		importMemories,
+		listMemories,
+		searchMemories
+	} from '$lib/api/memory.api';
+	import { saveExportToFile } from '$lib/api/settings.api';
 	import {
 		Button,
 		Input,
@@ -35,8 +43,7 @@ single card; row actions are quiet icon buttons.
 		Modal,
 		DeleteConfirmModal
 	} from '$lib/components/ui';
-	import type { Memory, MemoryType, ChunkSearchResult } from '$types/memory';
-	import type { ImportResult } from '$types/embedding';
+	import type { Memory, MemoryType } from '$types/memory';
 	import MemoryForm from './MemoryForm.svelte';
 	import { Trash2, Pencil, Eye, Download, Upload, Plus, Search } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
@@ -122,10 +129,7 @@ single card; row actions are quiet icon buttons.
 		try {
 			const filter = typeFilter || undefined;
 			// Pass workflowId as null to get ALL memories (both workflow-scoped and general)
-			memories = await tauriInvoke<Memory[]>('list_memories', {
-				typeFilter: filter,
-				workflowId: null
-			});
+			memories = await listMemories(filter, null);
 		} catch (err) {
 			notify('error', t('memory_failed_load').replace('{error}', getErrorMessage(err)));
 		} finally {
@@ -150,7 +154,7 @@ single card; row actions are quiet icon buttons.
 
 		searching = true;
 		try {
-			const results = await tauriInvoke<ChunkSearchResult[]>('search_memories', {
+			const results = await searchMemories({
 				query: searchQuery,
 				limit: 50,
 				typeFilter: typeFilter || undefined,
@@ -247,7 +251,7 @@ single card; row actions are quiet icon buttons.
 		if (!memoryToDelete) return;
 		deleting = true;
 		try {
-			await tauriInvoke('delete_memory', { memoryId: memoryToDelete.id });
+			await deleteMemory(memoryToDelete.id);
 			memories = memories.filter((m) => m.id !== memoryToDelete!.id);
 			notify('success', t('memory_deleted'));
 			showDeleteConfirm = false;
@@ -275,10 +279,10 @@ single card; row actions are quiet icon buttons.
 		actionLoading = true;
 		try {
 			const exportMetadata = getExportMetadata(format);
-			const data = await tauriInvoke<string>('export_memories', {
-				format: exportMetadata.exportFormat,
-				typeFilter: typeFilter || undefined
-			});
+			const data = await exportMemories(
+				exportMetadata.exportFormat,
+				typeFilter || undefined
+			);
 
 			if (!isTauriRuntime()) {
 				downloadBrowserFile(exportMetadata.defaultFilename, data, exportMetadata.mimeType);
@@ -297,7 +301,7 @@ single card; row actions are quiet icon buttons.
 				return;
 			}
 
-			await tauriInvoke('save_export_to_file', { path: filePath, content: data });
+			await saveExportToFile(filePath, data);
 
 			notify('success', t('memory_exported').replace('{count}', String(memories.length)));
 		} catch (err) {
@@ -322,7 +326,7 @@ single card; row actions are quiet icon buttons.
 			actionLoading = true;
 			try {
 				const text = await file.text();
-				const result = await tauriInvoke<ImportResult>('import_memories', { data: text });
+				const result = await importMemories(text);
 
 				if (result.imported > 0) {
 					notify('success', t('memory_imported').replace('{count}', String(result.imported)));

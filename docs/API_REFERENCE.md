@@ -4,15 +4,34 @@
 
 ## IPC Architecture
 
-Frontend (`invoke()`) -> Tauri IPC (camelCase to snake_case auto-conversion) ->
+Frontend (typed `$lib/api/*.api.ts` clients) -> Tauri IPC (camelCase to snake_case auto-conversion) ->
 Rust commands (`#[tauri::command] async fn -> Result<T, String>`) -> Backend services.
 
-All commands are async on both sides. Frontend calls use `invoke()` from
-`@tauri-apps/api/core`.
+All commands are async on both sides. UI code (components, routes, stores,
+services) calls one function per command from `$lib/api/` (7 domain modules:
+`agents`, `workflows`, `kanban`, `scheduler`, `memory`, `mcp`, `settings`),
+which encapsulate `tauriInvoke()` from `$lib/tauri`. No command-name string
+literals exist outside `src/lib/api/`, and only `src/lib/tauri/core.ts`
+imports `@tauri-apps/api/core` directly.
 
 **IPC naming convention**: TypeScript uses camelCase parameter names, Tauri
 automatically converts to snake_case for Rust. Example: `defaultModelId` (TS)
 becomes `default_model_id` (Rust).
+
+### Typed clients (`src/lib/api/`)
+
+Each command below is wrapped 1:1 by a typed function; call the wrapper,
+never the command-name string:
+
+| Module | Rust commands covered |
+|--------|----------------------|
+| `agents.api.ts` | agents, LLM models, provider settings, custom providers, prompts, skills, STT transcription, tooling helpers |
+| `workflows.api.ts` | workflows, folders, tasks, messages, tool executions, thinking steps, sub-agent executions, streaming, validation, audit, user questions |
+| `kanban.api.ts` | cards, interactions, review chat, compose, analysis |
+| `scheduler.api.ts` | scheduler budget + recurrence schedules |
+| `memory.api.ts` | memories + embedding service |
+| `mcp.api.ts` | MCP servers, lifecycle, tools |
+| `settings.api.ts` | Kanban/MCP-network/STT settings, API keys, import/export, trash, migrations |
 
 ---
 
@@ -419,9 +438,13 @@ History of skill edits. Same contract as prompt versions.
 | `restore_skill_version` | Restore a prior version (writes a fresh snapshot first). |
 | `delete_skill_version` | Delete a version snapshot. Refuses the last remaining version. |
 
-### Scheduler (`commands/scheduler.rs`)
+### Scheduler (`commands/scheduler.rs` + `commands/scheduler/`)
 
-Background tokio loop driving the Kanban board.
+Background tokio loop driving the Kanban board (`runner.rs` tick loop,
+`recovery.rs` orphan/stuck/stale recovery, `queue.rs` due-schedule
+processing, `concurrency.rs` promotion budget and atomic claim,
+`service.rs` card lifecycle; scheduling constants stay `pub` on the
+façade).
 
 | Command | Description |
 |---------|-------------|

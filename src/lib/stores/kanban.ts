@@ -17,20 +17,26 @@
  */
 
 import { derived } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	createKanbanCard,
+	deleteKanbanCard,
+	getKanbanCard,
+	listKanbanCards,
+	moveKanbanCard,
+	updateKanbanCard
+} from '$lib/api/kanban.api';
 import { createCRUDStore, createDerivedStores } from './factory/createCRUDStore';
 import { getErrorMessage } from '$lib/utils/error';
 import type { KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanColumn } from '$types/kanban';
 
 const baseStore = createCRUDStore<KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanCard>({
 	name: 'kanban',
-	idParamName: 'cardId',
-	commands: {
-		list: 'list_kanban_cards',
-		get: 'get_kanban_card',
-		create: 'create_kanban_card',
-		update: 'update_kanban_card',
-		delete: 'delete_kanban_card'
+	endpoints: {
+		list: () => listKanbanCards(),
+		get: getKanbanCard,
+		create: createKanbanCard,
+		update: (id, config) => updateKanbanCard(id, config),
+		remove: (id) => deleteKanbanCard(id)
 	}
 });
 
@@ -44,9 +50,7 @@ export const kanbanStore = {
 	async loadCards(kanbanAgentId?: string): Promise<void> {
 		baseStore._store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const cards = await invoke<KanbanCard[]>('list_kanban_cards', {
-				kanbanAgentId: kanbanAgentId ?? null
-			});
+			const cards = await listKanbanCards(kanbanAgentId ?? null);
 			baseStore._store.update((s) => ({ ...s, items: cards, loading: false }));
 		} catch (e) {
 			baseStore._store.update((s) => ({
@@ -68,11 +72,7 @@ export const kanbanStore = {
 	async moveCard(cardId: string, newColumn: KanbanColumn, newOrder: number): Promise<KanbanCard> {
 		baseStore._store.update((s) => ({ ...s, error: null }));
 		try {
-			const updated = await invoke<KanbanCard>('move_kanban_card', {
-				cardId,
-				newColumn,
-				newOrder
-			});
+			const updated = await moveKanbanCard(cardId, newColumn, newOrder);
 			baseStore._store.update((s) => ({
 				...s,
 				items: s.items.map((c) => (c.id === cardId ? updated : c))

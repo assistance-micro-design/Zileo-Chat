@@ -18,7 +18,7 @@
  * @fileoverview Thin service layer in front of the `transcribe_audio` IPC call.
  */
 
-import { tauriInvoke as invoke } from '$lib/tauri';
+import { transcribeAudio } from '$lib/api/agents.api';
 import type { TranscriptionResult } from '$types/stt';
 
 export interface TranscribeParams {
@@ -35,7 +35,7 @@ export interface TranscribeParams {
  * caller to translate into a toast.
  */
 export async function transcribe(params: TranscribeParams): Promise<TranscriptionResult> {
-	return invoke<TranscriptionResult>('transcribe_audio', {
+	return transcribeAudio({
 		audioBase64: params.audioBase64,
 		mimeType: params.mimeType,
 		contextBias: params.contextBias,

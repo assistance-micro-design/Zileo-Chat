@@ -23,7 +23,8 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { invoke } from '@tauri-apps/api/core';
+	import { getKanbanSettings, updateKanbanSettings } from '$lib/api/settings.api';
+	import { listAgents, previewKanbanRolePrompt } from '$lib/api/agents.api';
 	import { Card, Input, Button, Select } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
 	import { RefreshCw, Eye } from '@lucide/svelte';
@@ -103,8 +104,8 @@
 	onMount(async () => {
 		try {
 			const [settings, agents] = await Promise.all([
-				invoke<KanbanSettings>('get_kanban_settings'),
-				invoke<AgentSummary[]>('list_agents')
+				getKanbanSettings(),
+				listAgents()
 			]);
 			kanbanAgents = agents.filter((a) => a.kind === 'kanban');
 			applyLoadedSettings(settings);
@@ -145,9 +146,7 @@
 		}
 		saving = true;
 		try {
-			const updated = await invoke<KanbanSettings>('update_kanban_settings', {
-				request: { composeTimeoutSecs: next }
-			});
+			const updated = await updateKanbanSettings({ composeTimeoutSecs: next });
 			persistedTimeoutSecs = updated.composeTimeoutSecs;
 			composeTimeoutSecs = String(updated.composeTimeoutSecs);
 			toastStore.add({
@@ -186,7 +185,7 @@
 				composeAgentId: composeAgentId || null,
 				analyzeAgentId: analyzeAgentId || null
 			};
-			const updated = await invoke<KanbanSettings>('update_kanban_settings', { request });
+			const updated = await updateKanbanSettings(request);
 			persistedComposeAgentId = updated.composeAgentId ?? '';
 			persistedAnalyzeAgentId = updated.analyzeAgentId ?? '';
 			composeAgentId = persistedComposeAgentId;
@@ -224,10 +223,7 @@
 		}
 		previewLoading = true;
 		try {
-			previewText = await invoke<string>('preview_kanban_role_prompt', {
-				agentId: previewAgentId,
-				mode: previewMode
-			});
+			previewText = await previewKanbanRolePrompt(previewAgentId, previewMode);
 		} catch (err) {
 			previewError = `${$i18n('kanban_settings_prompt_preview_error')}: ${getErrorMessage(err)}`;
 		} finally {
@@ -239,7 +235,7 @@
 		// Re-load from backend to restore the persisted values.
 		loading = true;
 		try {
-			const settings = await invoke<KanbanSettings>('get_kanban_settings');
+			const settings = await getKanbanSettings();
 			applyLoadedSettings(settings);
 		} catch (err) {
 			toastStore.add({

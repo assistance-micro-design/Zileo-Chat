@@ -30,7 +30,7 @@
 	import { i18n } from '$lib/i18n';
 	import { scale } from 'svelte/transition';
 	import { Button, Card, Badge } from '$lib/components/ui';
-	import { tauriInvoke } from '$lib/tauri';
+	import { executeImport, validateImport } from '$lib/api/settings.api';
 	import { onboardingStore } from '$lib/stores/onboarding';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { motionDuration } from '$lib/utils/motion';
@@ -41,7 +41,6 @@
 	} from '$lib/components/settings/import-export/ImportPanel.helpers';
 	import type {
 		ConfigImportResult,
-		ImportValidation,
 		ImportWarning,
 		ConflictResolution,
 		MCPAdditions
@@ -109,7 +108,7 @@
 		try {
 			const text = await file.text();
 
-			const validation = await tauriInvoke<ImportValidation>('validate_import', { data: text });
+			const validation = await validateImport(text);
 
 			if (!validation.valid) {
 				needsFullImporter = true;
@@ -132,12 +131,7 @@
 			const resolutions: Record<string, ConflictResolution> = {};
 			const mcpAdditions: Record<string, MCPAdditions> = {};
 
-			result = await tauriInvoke<ConfigImportResult>('execute_import', {
-				data: text,
-				selection,
-				resolutions,
-				mcpAdditions
-			});
+			result = await executeImport({ data: text, selection, resolutions, mcpAdditions });
 
 			// Flag the import so navigation skips the getting-started step (its
 			// guidance assumes a from-scratch setup). A partial import (some

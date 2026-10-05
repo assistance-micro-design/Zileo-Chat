@@ -22,7 +22,14 @@
 import type { WorkflowFolder } from '$types/workflow';
 
 import { writable, derived } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	createWorkflowFolder,
+	deleteWorkflowFolder,
+	listWorkflowFolders,
+	renameWorkflowFolder,
+	reorderWorkflowFolders,
+	updateFolderColor
+} from '$lib/api/workflows.api';
 import { getErrorMessage } from '$lib/utils/error';
 import { LocalStorage, STORAGE_KEYS } from '$lib/services/localStorage.service';
 
@@ -76,7 +83,7 @@ export const folderStore = {
 	async loadFolders(): Promise<void> {
 		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const folders = await invoke<WorkflowFolder[]>('list_workflow_folders');
+			const folders = await listWorkflowFolders();
 			folderWritable.update((s) => ({ ...s, folders, loading: false }));
 		} catch (e) {
 			const error = getErrorMessage(e);
@@ -96,7 +103,7 @@ export const folderStore = {
 	async createFolder(name: string, color: string): Promise<string> {
 		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const folder = await invoke<WorkflowFolder>('create_workflow_folder', { name, color });
+			const folder = await createWorkflowFolder(name, color);
 			folderWritable.update((s) => ({
 				...s,
 				folders: [...s.folders, folder],
@@ -119,7 +126,7 @@ export const folderStore = {
 	async renameFolder(folderId: string, name: string): Promise<void> {
 		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const updated = await invoke<WorkflowFolder>('rename_workflow_folder', { folderId, name });
+			const updated = await renameWorkflowFolder(folderId, name);
 			folderWritable.update((s) => ({
 				...s,
 				folders: s.folders.map((f) => (f.id === updated.id ? updated : f)),
@@ -141,7 +148,7 @@ export const folderStore = {
 	async updateColor(folderId: string, color: string): Promise<void> {
 		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const updated = await invoke<WorkflowFolder>('update_folder_color', { folderId, color });
+			const updated = await updateFolderColor(folderId, color);
 			folderWritable.update((s) => ({
 				...s,
 				folders: s.folders.map((f) => (f.id === updated.id ? updated : f)),
@@ -162,7 +169,7 @@ export const folderStore = {
 	async deleteFolder(folderId: string): Promise<void> {
 		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			await invoke('delete_workflow_folder', { folderId });
+			await deleteWorkflowFolder(folderId);
 			folderWritable.update((s) => {
 				const expandedFolderIds = new Set(s.expandedFolderIds);
 				expandedFolderIds.delete(folderId);
@@ -189,7 +196,7 @@ export const folderStore = {
 	async reorderFolders(folderIds: string[]): Promise<void> {
 		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			await invoke('reorder_workflow_folders', { folderIds });
+			await reorderWorkflowFolders(folderIds);
 			folderWritable.update((s) => {
 				const reordered = folderIds
 					.map((id, i) => {

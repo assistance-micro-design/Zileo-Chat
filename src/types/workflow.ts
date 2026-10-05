@@ -297,3 +297,32 @@ export interface TokenDisplayData {
 	/** Cache hit rate percentage (cached_tokens / tokens_input * 100), null if no caching */
 	cache_hit_rate: number | null;
 }
+
+/**
+ * Batch workflow delete result.
+ *
+ * Mirrors Rust `BatchDeleteResult` (commands/workflow.rs). Field names are
+ * snake_case on the wire (no `rename_all` on the struct).
+ */
+export interface BatchDeleteResult {
+	/** Number of workflows successfully deleted */
+	deleted: number;
+	/** IDs of workflows skipped because they were running */
+	skipped_running: string[];
+}
+
+/**
+ * Task update payload for partial updates.
+ *
+ * Mirrors Rust `TaskUpdate` (models/task.rs): all fields optional, only
+ * provided fields are updated. Field names are snake_case on the wire.
+ */
+export interface TaskUpdate {
+	name?: string | null;
+	description?: string | null;
+	agent_assigned?: string | null;
+	priority?: number | null;
+	status?: 'pending' | 'in_progress' | 'completed' | 'blocked' | null;
+	dependencies?: string[] | null;
+	duration_ms?: number | null;
+}

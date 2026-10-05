@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
-	import { tauriInvoke as invoke } from '$lib/tauri';
+	import { getPrompt, updatePrompt } from '$lib/api/agents.api';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Modal, Button, Input, Textarea } from '$lib/components/ui';
 	import { RotateCcw } from '@lucide/svelte';
@@ -60,7 +60,7 @@
 		if (!promptId) return;
 		error = null;
 		try {
-			const full = await invoke<Prompt>('get_prompt', { promptId });
+			const full = await getPrompt(promptId);
 			prompt = full;
 			// When opened from an auto-analyze `needs_improvement` verdict, pre-fill
 			// the textarea with the analyzer's suggestion and seed the edit summary
@@ -98,12 +98,12 @@
 		}
 		submitting = true;
 		try {
-			await invoke('update_prompt', {
+			await updatePrompt(
 				promptId,
-				config: { content },
-				editedBy: kanbanAgentId ? `agent:${kanbanAgentId}` : 'user',
-				editSummary: summary.trim()
-			});
+				{ content },
+				kanbanAgentId ? `agent:${kanbanAgentId}` : 'user',
+				summary.trim()
+			);
 			return true;
 		} catch (e) {
 			error = getErrorMessage(e);

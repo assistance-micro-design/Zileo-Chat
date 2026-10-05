@@ -23,7 +23,8 @@ Uses Tauri's native file dialog to pick folders, validates via backend command.
 -->
 
 <script lang="ts">
-	import { tauriInvoke, openDialog, createTauriUnavailableError, isTauriRuntime } from '$lib/tauri';
+	import { openDialog, createTauriUnavailableError, isTauriRuntime } from '$lib/tauri';
+	import { validateAgentFolder } from '$lib/api/agents.api';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Button } from '$lib/components/ui';
@@ -84,7 +85,7 @@ Uses Tauri's native file dialog to pick folders, validates via backend command.
 			}
 
 			// Validate via backend (returns canonical path)
-			const canonicalPath = await tauriInvoke<string>('validate_agent_folder', { path });
+			const canonicalPath = await validateAgentFolder(path);
 
 			// Check canonical path for duplicates too
 			if (folders.includes(canonicalPath)) {

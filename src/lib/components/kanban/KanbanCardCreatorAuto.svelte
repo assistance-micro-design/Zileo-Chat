@@ -12,14 +12,13 @@
 	import { untrack } from 'svelte';
 	import { get } from 'svelte/store';
 	import { i18n } from '$lib/i18n';
-	import { tauriInvoke as invoke } from '$lib/tauri';
+	import { startComposeCard } from '$lib/api/kanban.api';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { locale } from '$lib/stores/locale';
 	import { Select, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
 	import { Info } from '@lucide/svelte';
 	import { composingStore, canStartCompose } from '$lib/stores/kanban-compose';
-	import type { ComposeStartResponse } from '$types/kanban';
 	import type { SupervisorRoleState } from '$lib/utils/kanban-supervisors';
 	import KanbanSupervisorNotice from './KanbanSupervisorNotice.svelte';
 
@@ -77,11 +76,11 @@
 			return false;
 		}
 		try {
-			const { card_id } = await invoke<ComposeStartResponse>('start_compose_card', {
-				kanbanAgentId: effectiveAgentId,
+			const { card_id } = await startComposeCard(
+				effectiveAgentId,
 				description,
-				locale: $locale
-			});
+				$locale
+			);
 			composingStore.register(card_id, description.slice(0, 80));
 			return true;
 		} catch (e) {

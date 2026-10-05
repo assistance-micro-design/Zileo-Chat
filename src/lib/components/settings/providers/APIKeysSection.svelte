@@ -22,7 +22,7 @@ manage their key from the edit-provider form.
 -->
 
 <script lang="ts">
-	import { tauriInvoke } from '$lib/tauri';
+	import { deleteApiKey, saveApiKey } from '$lib/api/settings.api';
 	import type { ProviderType } from '$types/llm';
 	import { Button, PasswordInput, Modal, DeleteConfirmModal } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
@@ -95,10 +95,7 @@ manage their key from the edit-provider form.
 			// backend canonicalizes built-in providers to their keystore key
 			// (e.g. "Mistral"), so the casing sent here does not have to match
 			// the read sites.
-			await tauriInvoke('save_api_key', {
-				provider: provider,
-				apiKey: apiKey
-			});
+			await saveApiKey(provider, apiKey);
 			apiKey = '';
 			onReload();
 			notify('success', $i18n('settings_api_key_saved'));
@@ -133,7 +130,7 @@ manage their key from the edit-provider form.
 
 		try {
 			// Same id as the save path — see confirmSaveApiKey.
-			await tauriInvoke('delete_api_key', { provider: provider });
+			await deleteApiKey(provider);
 			onReload();
 			notify('success', $i18n('settings_api_key_deleted'));
 			showDeleteConfirm = false;

@@ -11,7 +11,13 @@
  * @module stores/kanban-schedule
  */
 
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	createKanbanSchedule,
+	deleteKanbanSchedule,
+	getKanbanSchedule,
+	listKanbanSchedules,
+	updateKanbanSchedule
+} from '$lib/api/scheduler.api';
 import { createCRUDStore, createDerivedStores } from './factory/createCRUDStore';
 import { getErrorMessage } from '$lib/utils/error';
 import type { KanbanSchedule, KanbanScheduleCreate, KanbanScheduleUpdate } from '$types/kanban';
@@ -23,13 +29,12 @@ const baseStore = createCRUDStore<
 	KanbanSchedule
 >({
 	name: 'kanban-schedule',
-	idParamName: 'id',
-	commands: {
-		list: 'list_kanban_schedules',
-		get: 'get_kanban_schedule',
-		create: 'create_kanban_schedule',
-		update: 'update_kanban_schedule',
-		delete: 'delete_kanban_schedule'
+	endpoints: {
+		list: listKanbanSchedules,
+		get: getKanbanSchedule,
+		create: createKanbanSchedule,
+		update: (id, config) => updateKanbanSchedule(id, config),
+		remove: deleteKanbanSchedule
 	}
 });
 
@@ -43,7 +48,7 @@ export const kanbanScheduleStore = {
 	async loadSchedules(): Promise<void> {
 		baseStore._store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const items = await invoke<KanbanSchedule[]>('list_kanban_schedules');
+			const items = await listKanbanSchedules();
 			baseStore._store.update((s) => ({ ...s, items, loading: false }));
 		} catch (e) {
 			baseStore._store.update((s) => ({

@@ -19,7 +19,18 @@
  * @module stores/mcp/actions
  */
 
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	callMcpTool,
+	createMcpServer,
+	deleteMcpServer,
+	listMcpLegacyHttpAuth,
+	listMcpServers,
+	listMcpTools,
+	startMcpServer,
+	stopMcpServer,
+	testMcpServer,
+	updateMcpServer
+} from '$lib/api/mcp.api';
 import type {
 	LegacyHttpAuthWarning,
 	MCPServer,
@@ -68,7 +79,7 @@ export async function loadServers(forceRefresh = false): Promise<MCPServer[]> {
 		return mcpCache.servers;
 	}
 
-	const servers = await invoke<MCPServer[]>('list_mcp_servers');
+	const servers = await listMcpServers();
 
 	mcpCache = {
 		servers,
@@ -89,7 +100,7 @@ export async function loadServers(forceRefresh = false): Promise<MCPServer[]> {
  * @returns Promise resolving to server response with optional warning
  */
 export async function createServer(config: MCPServerConfigWithSecret): Promise<MCPServerResponse> {
-	const response = await invoke<MCPServerResponse>('create_mcp_server', { config });
+	const response = await createMcpServer(config);
 	invalidateMCPCache();
 	return response;
 }
@@ -110,7 +121,7 @@ export async function updateServerConfig(
 	id: string,
 	config: MCPServerConfigWithSecret
 ): Promise<MCPServerResponse> {
-	const response = await invoke<MCPServerResponse>('update_mcp_server', { id, config });
+	const response = await updateMcpServer(id, config);
 	invalidateMCPCache();
 	return response;
 }
@@ -121,7 +132,7 @@ export async function updateServerConfig(
  * @returns Promise resolving when complete
  */
 export async function deleteServer(id: string): Promise<void> {
-	await invoke<void>('delete_mcp_server', { id });
+	await deleteMcpServer(id);
 	invalidateMCPCache();
 }
 
@@ -131,7 +142,7 @@ export async function deleteServer(id: string): Promise<void> {
  * @returns Promise resolving to test result
  */
 export async function testServer(config: MCPServerConfig): Promise<MCPTestResult> {
-	return invoke<MCPTestResult>('test_mcp_server', { config });
+	return testMcpServer(config);
 }
 
 /**
@@ -140,7 +151,7 @@ export async function testServer(config: MCPServerConfig): Promise<MCPTestResult
  * @returns Promise resolving to updated server
  */
 export async function startServer(id: string): Promise<MCPServer> {
-	return invoke<MCPServer>('start_mcp_server', { id });
+	return startMcpServer(id);
 }
 
 /**
@@ -149,7 +160,7 @@ export async function startServer(id: string): Promise<MCPServer> {
  * @returns Promise resolving to updated server
  */
 export async function stopServer(id: string): Promise<MCPServer> {
-	return invoke<MCPServer>('stop_mcp_server', { id });
+	return stopMcpServer(id);
 }
 
 /**
@@ -158,7 +169,7 @@ export async function stopServer(id: string): Promise<MCPServer> {
  * @returns Promise resolving to tool call result
  */
 export async function callTool(request: MCPToolCallRequest): Promise<MCPToolCallResult> {
-	return invoke<MCPToolCallResult>('call_mcp_tool', { request });
+	return callMcpTool(request);
 }
 
 /**
@@ -167,7 +178,7 @@ export async function callTool(request: MCPToolCallRequest): Promise<MCPToolCall
  * @returns Promise resolving to array of tools
  */
 export async function listServerTools(serverName: string): Promise<MCPTool[]> {
-	return invoke<MCPTool[]>('list_mcp_tools', { serverName });
+	return listMcpTools(serverName);
 }
 
 /**
@@ -179,5 +190,5 @@ export async function listServerTools(serverName: string): Promise<MCPTool[]> {
  * @returns Promise resolving to one warning entry per affected server
  */
 export async function listLegacyHttpAuth(): Promise<LegacyHttpAuthWarning[]> {
-	return invoke<LegacyHttpAuthWarning[]>('list_mcp_legacy_http_auth');
+	return listMcpLegacyHttpAuth();
 }

@@ -20,7 +20,7 @@
  * @module lib/services/sub-agent-execution
  */
 
-import { tauriInvoke as invoke } from '$lib/tauri';
+import { loadWorkflowSubAgentExecutions } from '$lib/api/workflows.api';
 import type { SubAgentExecution } from '$types/sub-agent';
 
 /**
@@ -37,9 +37,7 @@ export const SubAgentExecutionService = {
 	 */
 	async loadSubAgentExecutions(workflowId: string): Promise<SubAgentExecution[]> {
 		try {
-			return await invoke<SubAgentExecution[]>('load_workflow_sub_agent_executions', {
-				workflowId
-			});
+			return await loadWorkflowSubAgentExecutions(workflowId);
 		} catch {
 			return [];
 		}

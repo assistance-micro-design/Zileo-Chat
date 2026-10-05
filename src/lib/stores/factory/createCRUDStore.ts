@@ -24,7 +24,6 @@
  */
 
 import { writable, derived, type Readable, type Writable } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
 import { getErrorMessage } from '$lib/utils/error';
 
 // ============================================================================
@@ -53,31 +52,33 @@ export interface CRUDStoreState<TSummary, TFull> {
 }
 
 /**
- * Configuration for CRUD store commands
+ * Typed backend endpoints backing a CRUD store.
+ *
+ * Each endpoint maps 1:1 to a function of `$lib/api` (which owns the Tauri
+ * command names). Stores pass API functions here instead of command strings
+ * so TypeScript checks the whole IPC path.
  */
-export interface CRUDCommands {
-	/** Command to list all items (returns TSummary[]) */
-	list: string;
-	/** Command to get full item (returns TFull) */
-	get: string;
-	/** Command to create item (returns string ID) */
-	create: string;
-	/** Command to update item */
-	update: string;
-	/** Command to delete item */
-	delete: string;
+export interface CRUDEndpoints<TFull, TCreate, TUpdate, TSummary> {
+	/** List all items (returns TSummary[]) */
+	list: () => Promise<TSummary[]>;
+	/** Get full item (returns TFull) */
+	get: (id: string) => Promise<TFull>;
+	/** Create item (returns string ID) */
+	create: (config: TCreate) => Promise<string>;
+	/** Update item */
+	update: (id: string, config: TUpdate) => Promise<unknown>;
+	/** Delete item */
+	remove: (id: string) => Promise<unknown>;
 }
 
 /**
  * Configuration for creating a CRUD store
  */
-export interface CRUDStoreConfig {
+export interface CRUDStoreConfig<TFull, TCreate, TUpdate, TSummary> {
 	/** Store name for debugging/logging */
 	name: string;
-	/** Parameter name for ID in IPC calls (e.g., 'agentId', 'promptId') */
-	idParamName: string;
-	/** Tauri IPC command names */
-	commands: CRUDCommands;
+	/** Typed backend endpoints (see `CRUDEndpoints`) */
+	endpoints: CRUDEndpoints<TFull, TCreate, TUpdate, TSummary>;
 }
 
 /**
@@ -165,21 +166,20 @@ export interface CRUDDerivedStores<TSummary, TFull> {
  * ```typescript
  * const agentStore = createCRUDStore<AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary>({
  *   name: 'agent',
- *   idParamName: 'agentId',
- *   commands: {
- *     list: 'list_agents',
- *     get: 'get_agent_config',
- *     create: 'create_agent',
- *     update: 'update_agent',
- *     delete: 'delete_agent'
+ *   endpoints: {
+ *     list: listAgents,
+ *     get: getAgentConfig,
+ *     create: createAgent,
+ *     update: (id, config) => updateAgent(id, config),
+ *     remove: deleteAgent
  *   }
  * });
  * ```
  */
 export function createCRUDStore<TFull, TCreate, TUpdate, TSummary extends { id: string }>(
-	config: CRUDStoreConfig
+	config: CRUDStoreConfig<TFull, TCreate, TUpdate, TSummary>
 ): CRUDStore<TFull, TCreate, TUpdate, TSummary> {
-	const { idParamName, commands } = config;
+	const { endpoints } = config;
 
 	// Initial state
 	const initialState: CRUDStoreState<TSummary, TFull> = {
@@ -202,7 +202,7 @@ export function createCRUDStore<TFull, TCreate, TUpdate, TSummary extends { id: 
 		async loadItems(): Promise<void> {
 			store.update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				const items = await invoke<TSummary[]>(commands.list);
+				const items = await endpoints.list();
 				store.update((s) => ({ ...s, items, loading: false }));
 			} catch (e) {
 				store.update((s) => ({ ...s, error: getErrorMessage(e), loading: false }));
@@ -210,13 +210,13 @@ export function createCRUDStore<TFull, TCreate, TUpdate, TSummary extends { id: 
 		},
 
 		async getItem(id: string): Promise<TFull> {
-			return await invoke<TFull>(commands.get, { [idParamName]: id });
+			return await endpoints.get(id);
 		},
 
 		async createItem(itemConfig: TCreate): Promise<string> {
 			store.update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				const id = await invoke<string>(commands.create, { config: itemConfig });
+				const id = await endpoints.create(itemConfig);
 				await this.loadItems();
 				store.update((s) => ({ ...s, formMode: null }));
 				return id;
@@ -229,7 +229,7 @@ export function createCRUDStore<TFull, TCreate, TUpdate, TSummary extends { id: 
 		async updateItem(id: string, itemConfig: TUpdate): Promise<void> {
 			store.update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				await invoke(commands.update, { [idParamName]: id, config: itemConfig });
+				await endpoints.update(id, itemConfig);
 				await this.loadItems();
 				store.update((s) => ({ ...s, formMode: null, editing: null }));
 			} catch (e) {
@@ -241,7 +241,7 @@ export function createCRUDStore<TFull, TCreate, TUpdate, TSummary extends { id: 
 		async deleteItem(id: string): Promise<void> {
 			store.update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				await invoke(commands.delete, { [idParamName]: id });
+				await endpoints.remove(id);
 				await this.loadItems();
 				store.update((s) => ({
 					...s,

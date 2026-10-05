@@ -28,7 +28,7 @@ Orchestrates the multi-step import process:
 -->
 
 <script lang="ts">
-	import { tauriInvoke } from '$lib/tauri';
+	import { executeImport as executeImportApi, validateImport } from '$lib/api/settings.api';
 	import { Button, Card, Badge } from '$lib/components/ui';
 	import ImportPreview from './ImportPreview.svelte';
 	import ConflictResolver from './ConflictResolver.svelte';
@@ -178,7 +178,7 @@ Orchestrates the multi-step import process:
 			importData = data;
 
 			// Validate import
-			validation = await tauriInvoke<ImportValidation>('validate_import', { data: text });
+			validation = await validateImport(text);
 
 			if (!validation.valid) {
 				error = `${$i18n('ie_invalid_import_file')}: ${validation.errors.join(', ')}`;
@@ -279,7 +279,7 @@ Orchestrates the multi-step import process:
 		try {
 			const importDataStr = JSON.stringify(importData);
 
-			result = await tauriInvoke<ConfigImportResult>('execute_import', {
+			result = await executeImportApi({
 				data: importDataStr,
 				selection,
 				resolutions,

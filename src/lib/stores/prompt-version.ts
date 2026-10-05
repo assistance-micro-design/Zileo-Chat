@@ -16,7 +16,11 @@
  */
 
 import { writable, derived } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	getPromptVersion,
+	listPromptVersions,
+	restorePromptVersion
+} from '$lib/api/agents.api';
 import { getErrorMessage } from '$lib/utils/error';
 import type { PromptVersion, PromptVersionSummary } from '$types/prompt_version';
 
@@ -41,9 +45,7 @@ export const promptVersionStore = {
 	async loadVersions(promptId: string): Promise<PromptVersionSummary[]> {
 		store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const versions = await invoke<PromptVersionSummary[]>('list_prompt_versions', {
-				promptId
-			});
+			const versions = await listPromptVersions(promptId);
 			store.update((s) => ({
 				...s,
 				versionsByPrompt: { ...s.versionsByPrompt, [promptId]: versions },
@@ -57,13 +59,13 @@ export const promptVersionStore = {
 	},
 
 	async getVersion(versionId: string): Promise<PromptVersion> {
-		return invoke<PromptVersion>('get_prompt_version', { versionId });
+		return getPromptVersion(versionId);
 	},
 
 	async restoreVersion(promptId: string, versionId: string, editedBy = 'user'): Promise<void> {
 		store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			await invoke('restore_prompt_version', { promptId, versionId, editedBy });
+			await restorePromptVersion(promptId, versionId, editedBy);
 			// Refresh after restore so the new HEAD shows up.
 			await this.loadVersions(promptId);
 		} catch (e) {

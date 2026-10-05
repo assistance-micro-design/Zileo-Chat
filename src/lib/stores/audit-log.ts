@@ -21,7 +21,12 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	exportValidationAuditCsv,
+	getValidationAuditStats,
+	listValidationAudit,
+	purgeValidationAuditNow
+} from '$lib/api/workflows.api';
 import type {
 	AuditFilter,
 	AuditStats,
@@ -76,7 +81,7 @@ function createAuditLogStore() {
 				limit: state.pageSize,
 				offset: state.page * state.pageSize
 			};
-			const entries = await invoke<ValidationAuditEntry[]>('list_validation_audit', { params });
+			const entries = await listValidationAudit(params);
 			store.update((s) => ({
 				...s,
 				entries,
@@ -98,7 +103,7 @@ function createAuditLogStore() {
 		async loadStats(): Promise<void> {
 			store.update((s) => ({ ...s, loadingStats: true, error: null }));
 			try {
-				const stats = await invoke<AuditStats>('get_validation_audit_stats');
+				const stats = await getValidationAuditStats();
 				store.update((s) => ({ ...s, stats, loadingStats: false }));
 			} catch (err) {
 				store.update((s) => ({ ...s, error: getErrorMessage(err), loadingStats: false }));
@@ -148,7 +153,7 @@ function createAuditLogStore() {
 			store.update((s) => ({ ...s, exporting: true, error: null }));
 			try {
 				const state = get(store);
-				const csv = await invoke<string>('export_validation_audit_csv', { filter: state.filter });
+				const csv = await exportValidationAuditCsv(state.filter);
 				store.update((s) => ({ ...s, exporting: false }));
 				return csv;
 			} catch (err) {
@@ -164,7 +169,7 @@ function createAuditLogStore() {
 		async purgeNow(): Promise<number> {
 			store.update((s) => ({ ...s, purging: true, error: null }));
 			try {
-				const purged = await invoke<number>('purge_validation_audit_now');
+				const purged = await purgeValidationAuditNow();
 				store.update((s) => ({ ...s, purging: false }));
 				await reloadPage();
 				return purged;

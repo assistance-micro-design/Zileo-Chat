@@ -173,3 +173,14 @@ export interface MemoryDescribeResult {
 	/** Newest memory timestamp (ISO string) */
 	newest?: string;
 }
+
+/**
+ * Result of `purge_expired_memories`.
+ *
+ * Mirrors Rust `PurgeExpiredResult` (commands/memory.rs, `rename_all =
+ * "camelCase"`).
+ */
+export interface PurgeExpiredResult {
+	memoriesPurged: number;
+	chunksPurged: number;
+}

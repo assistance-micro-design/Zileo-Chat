@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.2] - 2026-09-29
+
+Internal refactoring release (no user-facing feature change), by external
+contributor [@ScioNos](https://github.com/ScioNos).
+
+### Changed
+
+- **Backend split into submodules, public paths unchanged** — les 4
+  monolithes deviennent des façades avec ré-exports :
+  - `agents/execution/tools.rs` (2413 lignes) → `tools/{governance,
+    collection, factory, definitions, permissions, validation,
+    dispatcher, tests}` ;
+  - `agents/execution/tool_loop.rs` → `tool_loop/{metrics, context,
+    init, policy, runner, tests}` ;
+  - `llm/sse.rs` → `sse/{shared, openai, mistral, parser, stream,
+    tests}` ;
+  - `commands/scheduler.rs` → `scheduler/{runner, recovery, queue,
+    concurrency, service, tests}` (constantes `pub` gardées en façade).
+  Visibilité élargie au strict minimum (`pub(crate)` sur les helpers
+  transverses). `persistence`/`events` restent inline dans les
+  dispatchers (refactor logique, pas mécanique).
+- **Typed Tauri API clients** (`src/lib/api/`) — 7 modules par domaine
+  (`agents`, `workflows`, `kanban`, `scheduler`, `memory`, `mcp`,
+  `settings`) + `index.ts` + `internal.ts`, couvrant les 180 commandes
+  du `invoke_handler` en 1:1 (nom centralisé, params typés, retours
+  `$types/`, clés camelCase). Plus aucun nom de commande en dur ni
+  import direct de `@tauri-apps/api/core` hors `src/lib/tauri/core.ts` ;
+  les noms de commandes dynamiques (`VersionsHistoryModal`) deviennent
+  des branches typées ; `createCRUDStore` prend des endpoints typés
+  (`CRUDEndpoints`) au lieu de chaînes. Payloads IPC byte-identiques
+  (`undefined` strippés, `null` explicites préservés).
+- **Types IPC complétés** (`src/types/`) — `BatchDeleteResult`,
+  `TaskUpdate`, `PaginatedMessages`, `ImageReadResult`,
+  `PurgeExpiredResult`, `AnalyzeReport`/`AnalyzeVerdict` (miroirs des
+  structs Rust, casing wire documenté).
+
+### Fixed
+
+- **Onboarding connection test read a nonexistent field**
+  (`StepApiKey.svelte`) — `result.error` → `result.error_message`
+  (le vrai champ de `ConnectionTestResult`), le message d'erreur réel
+  s'affiche au lieu du fallback générique.
+
 ## [0.28.1] - 2026-06-16
 
 Audit-driven hardening and maintenance release (no user-facing feature change).
@@ -1496,7 +1539,8 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.28.1...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.28.2...HEAD
+[0.28.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.28.2
 [0.28.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.28.1
 [0.28.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.28.0
 [0.27.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.27.0

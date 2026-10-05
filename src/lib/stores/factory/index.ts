@@ -23,7 +23,7 @@ export {
 	createCRUDStore,
 	createDerivedStores,
 	type CRUDStoreState,
-	type CRUDCommands,
+	type CRUDEndpoints,
 	type CRUDStoreConfig,
 	type CRUDStore,
 	type CRUDDerivedStores

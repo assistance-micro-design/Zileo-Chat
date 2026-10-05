@@ -23,8 +23,12 @@
 		RefreshCw
 	} from '@lucide/svelte';
 	import { goto } from '$app/navigation';
-	import { tauriInvoke as invoke } from '$lib/tauri';
-	import type { KanbanCard, CardReviewChatInit } from '$types/kanban';
+	import { openCardReviewChat } from '$lib/api/kanban.api';
+	import {
+		cancelWorkflowStreaming,
+		loadWorkflowMessages
+	} from '$lib/api/workflows.api';
+	import type { KanbanCard } from '$types/kanban';
 	import type { AgentSummary } from '$types/agent';
 	import type { PromptSummary } from '$types/prompt';
 	import type { Message, MessageAttachment } from '$types/message';
@@ -280,10 +284,7 @@
 		chatInitLoading = true;
 		chatError = null;
 		try {
-			const init = await invoke<CardReviewChatInit>('open_card_review_chat', {
-				cardId,
-				locale: languageTag()
-			});
+			const init = await openCardReviewChat(cardId, languageTag());
 			// Guard against a fast card switch while the await was in flight
 			// (ERR_FRONT_001): only apply if this is still the loaded card.
 			if (chatLoadedCardId !== cardId) return;
@@ -316,7 +317,7 @@
 	 * card or attached a schedule). */
 	async function reloadChatConversation(wf: string, cardId: string): Promise<void> {
 		try {
-			const reloaded = await invoke<Message[]>('load_workflow_messages', { workflowId: wf });
+			const reloaded = await loadWorkflowMessages(wf);
 			if (chatLoadedCardId !== cardId) return;
 			chatMessages = reloaded;
 			chatMessageBlocks.clear();
@@ -387,7 +388,7 @@
 		const wf = chatWorkflowId;
 		if (!wf) return;
 		try {
-			await invoke('cancel_workflow_streaming', { workflowId: wf });
+			await cancelWorkflowStreaming(wf);
 		} catch (e) {
 			chatError = getErrorMessage(e);
 		} finally {

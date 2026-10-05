@@ -19,7 +19,22 @@
  * @module stores/llm/actions
  */
 
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	createCustomProvider as createCustomProviderApi,
+	createModel as createModelApi,
+	deleteCustomProvider as deleteCustomProviderApi,
+	deleteModel as deleteModelApi,
+	getModel as getModelApi,
+	getModelByApiName as getModelByApiNameApi,
+	getProviderSettings as getProviderSettingsApi,
+	listModels as listModelsApi,
+	listProviders as listProvidersApi,
+	seedBuiltinModels as seedBuiltinModelsApi,
+	testProviderConnection as testProviderConnectionApi,
+	updateCustomProvider as updateCustomProviderApi,
+	updateModel as updateModelApi,
+	updateProviderSettings as updateProviderSettingsApi
+} from '$lib/api/agents.api';
 import type {
 	LLMModel,
 	CreateModelRequest,
@@ -64,14 +79,14 @@ export function invalidateLLMCache(): void {
  * Loads all LLM models from the backend.
  */
 export async function loadModels(provider?: ProviderType): Promise<LLMModel[]> {
-	return invoke<LLMModel[]>('list_models', { provider: provider ?? null });
+	return listModelsApi(provider ?? null);
 }
 
 /**
  * Gets a single model by ID.
  */
 export async function fetchModel(id: string): Promise<LLMModel> {
-	return invoke<LLMModel>('get_model', { id });
+	return getModelApi(id);
 }
 
 /**
@@ -81,14 +96,14 @@ export async function fetchModelByApiName(
 	apiName: string,
 	provider: ProviderType
 ): Promise<LLMModel> {
-	return invoke<LLMModel>('get_model_by_api_name', { apiName, provider });
+	return getModelByApiNameApi(apiName, provider);
 }
 
 /**
  * Creates a new custom model.
  */
 export async function createModel(data: CreateModelRequest): Promise<LLMModel> {
-	const model = await invoke<LLMModel>('create_model', { data });
+	const model = await createModelApi(data);
 	invalidateLLMCache();
 	return model;
 }
@@ -97,7 +112,7 @@ export async function createModel(data: CreateModelRequest): Promise<LLMModel> {
  * Updates an existing model.
  */
 export async function updateModel(id: string, data: UpdateModelRequest): Promise<LLMModel> {
-	const model = await invoke<LLMModel>('update_model', { id, data });
+	const model = await updateModelApi(id, data);
 	invalidateLLMCache();
 	return model;
 }
@@ -106,7 +121,7 @@ export async function updateModel(id: string, data: UpdateModelRequest): Promise
  * Deletes a custom model.
  */
 export async function deleteModel(id: string): Promise<boolean> {
-	const result = await invoke<boolean>('delete_model', { id });
+	const result = await deleteModelApi(id);
 	invalidateLLMCache();
 	return result;
 }
@@ -119,7 +134,7 @@ export async function deleteModel(id: string): Promise<boolean> {
  * Loads provider settings from the backend.
  */
 export async function loadProviderSettings(provider: ProviderType): Promise<ProviderSettings> {
-	return invoke<ProviderSettings>('get_provider_settings', { provider });
+	return getProviderSettingsApi(provider);
 }
 
 /**
@@ -130,11 +145,7 @@ export async function updateProviderSettings(
 	enabled?: boolean,
 	baseUrl?: string
 ): Promise<ProviderSettings> {
-	const settings = await invoke<ProviderSettings>('update_provider_settings', {
-		provider,
-		enabled: enabled ?? null,
-		baseUrl: baseUrl ?? null
-	});
+	const settings = await updateProviderSettingsApi(provider, enabled, baseUrl);
 	invalidateLLMCache();
 	return settings;
 }
@@ -143,14 +154,14 @@ export async function updateProviderSettings(
  * Tests connection to a provider.
  */
 export async function testConnection(provider: ProviderType): Promise<ConnectionTestResult> {
-	return invoke<ConnectionTestResult>('test_provider_connection', { provider });
+	return testProviderConnectionApi(provider);
 }
 
 /**
  * Seeds the database with builtin models.
  */
 export async function seedBuiltinModels(): Promise<number> {
-	return invoke<number>('seed_builtin_models');
+	return seedBuiltinModelsApi();
 }
 
 // ============================================================================
@@ -161,7 +172,7 @@ export async function seedBuiltinModels(): Promise<number> {
  * Lists all providers (builtin + custom) from the backend.
  */
 export async function listProviders(): Promise<ProviderInfo[]> {
-	return invoke<ProviderInfo[]>('list_providers');
+	return listProvidersApi();
 }
 
 /**
@@ -178,13 +189,13 @@ export async function createCustomProvider(
 	supportsCacheControl?: boolean,
 	supportsReasoningParam?: boolean
 ): Promise<CustomProviderResponse> {
-	const result = await invoke<CustomProviderResponse>('create_custom_provider', {
+	const result = await createCustomProviderApi({
 		name,
 		displayName,
 		baseUrl,
 		apiKey,
-		supportsCacheControl: supportsCacheControl ?? null,
-		supportsReasoningParam: supportsReasoningParam ?? null
+		supportsCacheControl,
+		supportsReasoningParam
 	});
 	invalidateLLMCache();
 	return result;
@@ -202,14 +213,13 @@ export async function updateCustomProvider(
 	supportsCacheControl?: boolean,
 	supportsReasoningParam?: boolean
 ): Promise<CustomProviderResponse> {
-	const result = await invoke<CustomProviderResponse>('update_custom_provider', {
-		name,
-		displayName: displayName ?? null,
-		baseUrl: baseUrl ?? null,
-		apiKey: apiKey ?? null,
-		enabled: enabled ?? null,
-		supportsCacheControl: supportsCacheControl ?? null,
-		supportsReasoningParam: supportsReasoningParam ?? null
+	const result = await updateCustomProviderApi(name, {
+		displayName,
+		baseUrl,
+		apiKey,
+		enabled,
+		supportsCacheControl,
+		supportsReasoningParam
 	});
 	invalidateLLMCache();
 	return result;
@@ -219,7 +229,7 @@ export async function updateCustomProvider(
  * Deletes a custom provider.
  */
 export async function deleteCustomProvider(name: string): Promise<void> {
-	await invoke<void>('delete_custom_provider', { name });
+	await deleteCustomProviderApi(name);
 	invalidateLLMCache();
 }
 

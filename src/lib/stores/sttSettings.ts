@@ -20,7 +20,11 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	getSttSettings,
+	resetSttSettings,
+	updateSttSettings
+} from '$lib/api/settings.api';
 import type { STTSettings, UpdateSTTSettingsRequest } from '$types/stt';
 import { getErrorMessage } from '$lib/utils/error';
 
@@ -47,7 +51,7 @@ function createSTTSettingsStore() {
 		async loadSettings(): Promise<void> {
 			store.update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				const settings = await invoke<STTSettings>('get_stt_settings');
+				const settings = await getSttSettings();
 				store.update((s) => ({ ...s, settings, loading: false }));
 			} catch (err) {
 				const errorMsg = getErrorMessage(err);
@@ -59,7 +63,7 @@ function createSTTSettingsStore() {
 		async updateSettings(config: UpdateSTTSettingsRequest): Promise<void> {
 			store.update((s) => ({ ...s, saving: true, error: null }));
 			try {
-				const settings = await invoke<STTSettings>('update_stt_settings', { config });
+				const settings = await updateSttSettings(config);
 				store.update((s) => ({ ...s, settings, saving: false }));
 			} catch (err) {
 				const errorMsg = getErrorMessage(err);
@@ -71,7 +75,7 @@ function createSTTSettingsStore() {
 		async resetToDefaults(): Promise<void> {
 			store.update((s) => ({ ...s, saving: true, error: null }));
 			try {
-				const settings = await invoke<STTSettings>('reset_stt_settings');
+				const settings = await resetSttSettings();
 				store.update((s) => ({ ...s, settings, saving: false }));
 			} catch (err) {
 				const errorMsg = getErrorMessage(err);

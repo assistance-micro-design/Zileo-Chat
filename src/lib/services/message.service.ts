@@ -20,7 +20,11 @@
  * @module lib/services/message
  */
 
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	getWorkflowLastAssistantMessageMetrics,
+	loadWorkflowMessages,
+	saveMessage
+} from '$lib/api/workflows.api';
 import type { Message, MessageAttachment, MessageMetrics, SubAgentSummary } from '$types/message';
 import type { SubAgentExecution } from '$types/sub-agent';
 import type { WorkflowMetrics } from '$types/workflow';
@@ -121,7 +125,7 @@ export const MessageService = {
 	): Promise<{ messages: Message[]; executions: SubAgentExecution[]; error?: string }> {
 		try {
 			const [messages, executions] = await Promise.all([
-				invoke<Message[]>('load_workflow_messages', { workflowId }),
+				loadWorkflowMessages(workflowId),
 				SubAgentExecutionService.loadSubAgentExecutions(workflowId)
 			]);
 			return { messages: enrichMessagesWithSubAgents(messages, executions), executions };
@@ -137,7 +141,7 @@ export const MessageService = {
 	 * @returns ID of the saved message
 	 */
 	async save(params: MessageCreate): Promise<string> {
-		return invoke<string>('save_message', {
+		return saveMessage({
 			workflowId: params.workflowId,
 			role: params.role,
 			content: params.content,
@@ -207,9 +211,7 @@ export const MessageService = {
 	 */
 	async getLastAssistantMetrics(workflowId: string): Promise<MessageMetrics | null> {
 		try {
-			return await invoke<MessageMetrics | null>('get_workflow_last_assistant_message_metrics', {
-				workflowId
-			});
+			return await getWorkflowLastAssistantMessageMetrics(workflowId);
 		} catch {
 			// Non-blocking: fall back to an empty session display. The user is
 			// not waiting on this metrics call; surfacing the error here would

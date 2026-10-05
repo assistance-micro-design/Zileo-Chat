@@ -21,6 +21,13 @@
  */
 
 import { createCRUDStore, createDerivedStores } from './factory/createCRUDStore';
+import {
+	createAgent,
+	deleteAgent,
+	getAgentConfig,
+	listAgents,
+	updateAgent
+} from '$lib/api/agents.api';
 import type { AgentConfig, AgentSummary, AgentConfigCreate, AgentConfigUpdate } from '$types/agent';
 
 // ============================================================================
@@ -57,13 +64,12 @@ const baseCrudStore = createCRUDStore<
 	AgentSummary
 >({
 	name: 'agent',
-	idParamName: 'agentId',
-	commands: {
-		list: 'list_agents',
-		get: 'get_agent_config',
-		create: 'create_agent',
-		update: 'update_agent',
-		delete: 'delete_agent'
+	endpoints: {
+		list: listAgents,
+		get: getAgentConfig,
+		create: createAgent,
+		update: (id, config) => updateAgent(id, config),
+		remove: deleteAgent
 	}
 });
 

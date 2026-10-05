@@ -28,7 +28,7 @@
 	 * the explicit Reset / Save actions plus the unsaved-changes hint.
 	 */
 	import { onMount } from 'svelte';
-	import { tauriInvoke } from '$lib/tauri';
+	import { listAvailableTools } from '$lib/api/agents.api';
 	import { Button, Card, ErrorBanner, Input, Select, Switch } from '$lib/components/ui';
 	import { ExternalLink, Info, Trash2, TriangleAlert } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
@@ -150,7 +150,7 @@
 		loadingResources = true;
 		try {
 			const [tools, servers] = await Promise.all([
-				tauriInvoke<AvailableToolInfo[]>('list_available_tools'),
+				listAvailableTools(),
 				loadServers(true) // Force refresh
 			]);
 			availableTools = tools;

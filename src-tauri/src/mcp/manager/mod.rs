@@ -175,7 +175,7 @@ impl MCPManager {
         // First, add running servers (HashMap is keyed by NAME, but we track by config.id)
         {
             let clients = self.clients.read().await;
-            for (_name, client) in clients.iter() {
+            for client in clients.values() {
                 // Track by ID for deduplication with database configs
                 seen_ids.insert(client.config().id.clone());
                 servers.push(MCPServer {

@@ -25,7 +25,7 @@ Version history is reached from the prompt list rows, not from this form.
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { tauriInvoke } from '$lib/tauri';
+	import { listSkills } from '$lib/api/agents.api';
 	import { Button, Input, Textarea, Select } from '$lib/components/ui';
 	import type { Prompt, PromptCreate, PromptCategory } from '$types/prompt';
 	import { PROMPT_CATEGORY_I18N_KEYS } from '$types/prompt';
@@ -65,7 +65,7 @@ Version history is reached from the prompt list rows, not from this form.
 	onMount(async () => {
 		contentTextarea = document.getElementById(contentTextareaId) as HTMLTextAreaElement | null;
 		try {
-			const skills = await tauriInvoke<SkillSummary[]>('list_skills');
+			const skills = await listSkills();
 			availableSkills = skills.filter((s) => s.enabled);
 		} catch {
 			// Non-blocking: skill insertion is an optional feature.

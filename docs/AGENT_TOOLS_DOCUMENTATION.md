@@ -455,8 +455,8 @@ Wraps `move_kanban_card_core`. `is_transition_allowed` permits: `Review→Done` 
 ### Architecture
 
 - `src-tauri/src/agents/llm_agent.rs` -- Struct, constructors
-- `src-tauri/src/agents/execution/tools.rs` -- Tool setup, auto-injection
-- `src-tauri/src/agents/execution/tool_loop.rs` -- Execution loop
+- `src-tauri/src/agents/execution/tools.rs` façade + `tools/` -- Tool setup, auto-injection (`factory.rs`), governance (`governance.rs`, `validation.rs`), dispatch (`dispatcher.rs`)
+- `src-tauri/src/agents/execution/tool_loop.rs` façade + `tool_loop/` -- Execution loop (`runner.rs`, `policy.rs`, `metrics.rs`)
 - `src-tauri/src/agents/prompt.rs` -- System prompt construction
 
 ### Execution Flow
@@ -470,7 +470,7 @@ Wraps `move_kanban_card_core`. `is_transition_allowed` permits: `Review→Done` 
 
 ### `opening_tool_choice`
 
-`execute_with_tools` takes an `opening_tool_choice` applied to the first iteration only (`tool_choice_for_iteration` reverts to `Auto` afterwards). The standard workflow path passes `Auto` end-to-end. The Kanban analyze and compose flows pass `Required` so the model must emit their mandatory capture-slot tool call (`SubmitAnalysisTool` / `SubmitComposedCardTool`) on the opening turn — a blanket `Auto` could finish with an empty slot, while a blanket `Required` would never let the loop terminate. See `src-tauri/src/agents/execution/tool_loop.rs`.
+`execute_with_tools` takes an `opening_tool_choice` applied to the first iteration only (`tool_choice_for_iteration` reverts to `Auto` afterwards). The standard workflow path passes `Auto` end-to-end. The Kanban analyze and compose flows pass `Required` so the model must emit their mandatory capture-slot tool call (`SubmitAnalysisTool` / `SubmitComposedCardTool`) on the opening turn — a blanket `Auto` could finish with an empty slot, while a blanket `Required` would never let the loop terminate. See `src-tauri/src/agents/execution/tool_loop/runner.rs` + `policy.rs`.
 
 ### Constructor
 
@@ -480,10 +480,10 @@ Wraps `move_kanban_card_core`. `is_transition_allowed` permits: `Review→Done` 
 
 | Method | File | Description |
 |--------|------|-------------|
-| `create_local_tools()` | `agents/execution/tools.rs` | Creates tool instances + auto-injects ReadSkillTool |
-| `collect_tool_definitions()` | `agents/execution/tools.rs` | Collects local + MCP tool definitions for the system prompt |
+| `create_local_tools()` | `agents/execution/tools/factory.rs` | Creates tool instances + auto-injects ReadSkillTool |
+| `collect_tool_definitions()` | `agents/execution/tools/definitions.rs` | Collects local + MCP tool definitions for the system prompt |
 | `build_system_prompt_with_tools()` | `agents/prompt.rs` | Injects tool definitions into system prompt (rebuilt per turn) |
-| `build_initial_messages()` | `agents/execution/tool_loop.rs` | Builds the first message vector: [system, user] (first call) or [system, ...history] (continuation) |
+| `build_initial_messages()` | `agents/execution/tool_loop/init.rs` | Builds the first message vector: [system, user] (first call) or [system, ...history] (continuation) |
 | `adapter.parse_tool_calls()` | `llm/tool_adapter.rs` | Parses tool_calls JSON from LLM response |
 | `adapter.format_tool_result()` | `llm/tool_adapter.rs` | Formats results as JSON for LLM |
 

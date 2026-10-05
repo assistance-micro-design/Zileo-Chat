@@ -20,9 +20,26 @@
  * @module lib/services/workflow
  */
 
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	cancelWorkflowStreaming,
+	createWorkflow,
+	deleteWorkflow,
+	deleteWorkflowsBatch,
+	executeWorkflowStreaming,
+	loadWorkflowFullState,
+	loadWorkflows,
+	moveWorkflowToFolder,
+	moveWorkflowsToFolder,
+	renameWorkflow,
+	toggleWorkflowPinned
+} from '$lib/api/workflows.api';
 import type { MessageAttachment } from '$types/message';
-import type { Workflow, WorkflowResult, WorkflowFullState } from '$types/workflow';
+import type {
+	BatchDeleteResult,
+	Workflow,
+	WorkflowFullState,
+	WorkflowResult
+} from '$types/workflow';
 
 /**
  * Service for workflow operations.
@@ -36,7 +53,7 @@ export const WorkflowService = {
 	 * @returns Array of all workflows
 	 */
 	async loadAll(): Promise<Workflow[]> {
-		return invoke<Workflow[]>('load_workflows');
+		return loadWorkflows();
 	},
 
 	/**
@@ -47,7 +64,7 @@ export const WorkflowService = {
 	 * @returns ID of the created workflow
 	 */
 	async create(name: string, agentId: string): Promise<string> {
-		return invoke<string>('create_workflow', { name, agentId });
+		return createWorkflow(name, agentId);
 	},
 
 	/**
@@ -58,7 +75,7 @@ export const WorkflowService = {
 	 * @returns Updated workflow entity
 	 */
 	async rename(workflowId: string, name: string): Promise<Workflow> {
-		return invoke<Workflow>('rename_workflow', { workflowId, name });
+		return renameWorkflow(workflowId, name);
 	},
 
 	/**
@@ -67,7 +84,7 @@ export const WorkflowService = {
 	 * @param workflowId - Workflow ID to delete
 	 */
 	async delete(workflowId: string): Promise<void> {
-		return invoke<void>('delete_workflow', { workflowId });
+		return deleteWorkflow(workflowId);
 	},
 
 	/**
@@ -86,7 +103,7 @@ export const WorkflowService = {
 		locale: string,
 		attachments?: MessageAttachment[]
 	): Promise<WorkflowResult> {
-		return invoke<WorkflowResult>('execute_workflow_streaming', {
+		return executeWorkflowStreaming({
 			workflowId,
 			message,
 			agentId,
@@ -101,7 +118,7 @@ export const WorkflowService = {
 	 * @param workflowId - Workflow ID to cancel
 	 */
 	async cancel(workflowId: string): Promise<void> {
-		return invoke<void>('cancel_workflow_streaming', { workflowId });
+		return cancelWorkflowStreaming(workflowId);
 	},
 
 	/**
@@ -110,12 +127,8 @@ export const WorkflowService = {
 	 * @param workflowIds - Array of workflow IDs to delete
 	 * @returns Result with deleted count and skipped running IDs
 	 */
-	async deleteBatch(
-		workflowIds: string[]
-	): Promise<{ deleted: number; skipped_running: string[] }> {
-		return invoke<{ deleted: number; skipped_running: string[] }>('delete_workflows_batch', {
-			workflowIds
-		});
+	async deleteBatch(workflowIds: string[]): Promise<BatchDeleteResult> {
+		return deleteWorkflowsBatch(workflowIds);
 	},
 
 	/**
@@ -126,7 +139,7 @@ export const WorkflowService = {
 	 * @returns Updated workflow entity
 	 */
 	async moveToFolder(workflowId: string, folderId: string | null): Promise<Workflow> {
-		return invoke<Workflow>('move_workflow_to_folder', { workflowId, folderId });
+		return moveWorkflowToFolder(workflowId, folderId);
 	},
 
 	/**
@@ -137,7 +150,7 @@ export const WorkflowService = {
 	 * @returns Number of workflows moved
 	 */
 	async moveBatchToFolder(workflowIds: string[], folderId: string | null): Promise<number> {
-		return invoke<number>('move_workflows_to_folder', { workflowIds, folderId });
+		return moveWorkflowsToFolder(workflowIds, folderId);
 	},
 
 	/**
@@ -147,7 +160,7 @@ export const WorkflowService = {
 	 * @returns Updated workflow entity
 	 */
 	async togglePinned(workflowId: string): Promise<Workflow> {
-		return invoke<Workflow>('toggle_workflow_pinned', { workflowId });
+		return toggleWorkflowPinned(workflowId);
 	},
 
 	/**
@@ -157,6 +170,6 @@ export const WorkflowService = {
 	 * @returns Complete workflow state
 	 */
 	async getFullState(workflowId: string): Promise<WorkflowFullState> {
-		return invoke<WorkflowFullState>('load_workflow_full_state', { workflowId });
+		return loadWorkflowFullState(workflowId);
 	}
 };

@@ -8,14 +8,14 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { i18n } from '$lib/i18n';
-	import { tauriInvoke as invoke } from '$lib/tauri';
+	import { getPrompt } from '$lib/api/agents.api';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Select, Input, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
 	import KanbanScheduleForm from './KanbanScheduleForm.svelte';
 	import KanbanSupervisorNotice from './KanbanSupervisorNotice.svelte';
 	import type { AgentSummary } from '$types/agent';
-	import type { Prompt, PromptSummary, PromptVariable } from '$types/prompt';
+	import type { PromptSummary, PromptVariable } from '$types/prompt';
 	import type { WorkflowFolder } from '$types/workflow';
 	import type { KanbanCardCreate, KanbanScheduleCreate } from '$types/kanban';
 	import type { SupervisorRoleState } from '$lib/utils/kanban-supervisors';
@@ -71,7 +71,7 @@
 			return;
 		}
 		try {
-			const full = await invoke<Prompt>('get_prompt', { promptId: id });
+			const full = await getPrompt(id);
 			selectedPromptVariables = full.variables ?? [];
 			const next: Record<string, string> = {};
 			for (const v of selectedPromptVariables) {

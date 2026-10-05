@@ -23,7 +23,7 @@ Results render in a monospace code panel; the action sits in the footer.
 -->
 
 <script lang="ts">
-	import { tauriInvoke } from '$lib/tauri';
+	import { testEmbedding } from '$lib/api/memory.api';
 	import { Card, Button, Textarea } from '$lib/components/ui';
 	import type { EmbeddingTestResult } from '$types/embedding';
 	import { Zap } from '@lucide/svelte';
@@ -75,7 +75,7 @@ Results render in a monospace code panel; the action sits in the footer.
 		testResult = null;
 
 		try {
-			testResult = await tauriInvoke<EmbeddingTestResult>('test_embedding', { text: testText });
+			testResult = await testEmbedding(testText);
 			if (testResult.success) {
 				notify(
 					'success',

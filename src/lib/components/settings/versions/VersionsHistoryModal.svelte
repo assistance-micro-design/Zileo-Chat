@@ -11,7 +11,16 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { tauriInvoke as invoke } from '$lib/tauri';
+	import {
+		deletePromptVersion,
+		deleteSkillVersion,
+		getPromptVersion,
+		getSkillVersion,
+		listPromptVersions,
+		listSkillVersions,
+		restorePromptVersion,
+		restoreSkillVersion
+	} from '$lib/api/agents.api';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Button, Badge, DeleteConfirmModal } from '$lib/components/ui';
@@ -44,14 +53,6 @@
 	let deleting = $state(false);
 	let pendingDelete = $state<{ id: string; version: number } | null>(null);
 
-	const listCmd = $derived(kind === 'prompt' ? 'list_prompt_versions' : 'list_skill_versions');
-	const getCmd = $derived(kind === 'prompt' ? 'get_prompt_version' : 'get_skill_version');
-	const restoreCmd = $derived(
-		kind === 'prompt' ? 'restore_prompt_version' : 'restore_skill_version'
-	);
-	const deleteCmd = $derived(kind === 'prompt' ? 'delete_prompt_version' : 'delete_skill_version');
-	const idParam = $derived(kind === 'prompt' ? 'promptId' : 'skillId');
-
 	/** Highest version number, badged on the brand color (older ones stay neutral). */
 	const latestVersion = $derived(
 		versions.length > 0 ? Math.max(...versions.map((v) => v.version)) : 0
@@ -61,7 +62,10 @@
 		loading = true;
 		error = null;
 		try {
-			versions = await invoke<AnyVersionSummary[]>(listCmd, { [idParam]: resourceId });
+			versions =
+				kind === 'prompt'
+					? await listPromptVersions(resourceId)
+					: await listSkillVersions(resourceId);
 		} catch (e) {
 			error = getErrorMessage(e);
 		} finally {
@@ -71,7 +75,8 @@
 
 	async function loadPreview(versionId: string) {
 		try {
-			preview = await invoke<AnyVersion>(getCmd, { versionId });
+			preview =
+				kind === 'prompt' ? await getPromptVersion(versionId) : await getSkillVersion(versionId);
 		} catch (e) {
 			error = getErrorMessage(e);
 		}
@@ -81,7 +86,11 @@
 		restoring = true;
 		error = null;
 		try {
-			await invoke(restoreCmd, { [idParam]: resourceId, versionId, editedBy: 'user' });
+			if (kind === 'prompt') {
+				await restorePromptVersion(resourceId, versionId, 'user');
+			} else {
+				await restoreSkillVersion(resourceId, versionId, 'user');
+			}
 			onchanged?.();
 			onclose();
 		} catch (e) {
@@ -105,7 +114,11 @@
 		deleting = true;
 		error = null;
 		try {
-			await invoke(deleteCmd, { versionId });
+			if (kind === 'prompt') {
+				await deletePromptVersion(versionId);
+			} else {
+				await deleteSkillVersion(versionId);
+			}
 			if (preview && preview.id === versionId) {
 				preview = null;
 			}

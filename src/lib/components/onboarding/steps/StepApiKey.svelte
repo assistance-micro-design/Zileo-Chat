@@ -21,7 +21,8 @@
 	 */
 	import { i18n } from '$lib/i18n';
 	import { scale } from 'svelte/transition';
-	import { tauriInvoke } from '$lib/tauri';
+	import { saveApiKey } from '$lib/api/settings.api';
+import { testProviderConnection } from '$lib/api/agents.api';
 	import { onboardingStore, onboardingLoading } from '$lib/stores/onboarding';
 	import { Button, Input } from '$lib/components/ui';
 	import { getErrorMessage } from '$lib/utils/error';
@@ -68,7 +69,7 @@
 		if (trimmed.length < MIN_API_KEY_LEN || trimmed === savedKey) return;
 
 		try {
-			await tauriInvoke('save_api_key', { provider: 'mistral', apiKey: trimmed });
+			await saveApiKey('mistral', trimmed);
 			savedKey = trimmed;
 		} catch (e) {
 			testError = getErrorMessage(e);
@@ -98,20 +99,17 @@
 			// as the Linux secret-service. save_api_key also reconfigures the
 			// running provider, so the key works without an app restart.
 			const trimmed = apiKey.trim();
-			await tauriInvoke('save_api_key', { provider: 'mistral', apiKey: trimmed });
+			await saveApiKey('mistral', trimmed);
 			savedKey = trimmed;
 
 			// Then test the connection
-			const result = await tauriInvoke<{ success: boolean; latency_ms?: number; error?: string }>(
-				'test_provider_connection',
-				{ provider: 'mistral' }
-			);
+			const result = await testProviderConnection('mistral');
 
 			if (result.success) {
 				testSuccess = true;
 				onboardingStore.setApiKeyValid(true);
 			} else {
-				testError = result.error || $i18n('onboarding_apikey_invalid');
+				testError = result.error_message || $i18n('onboarding_apikey_invalid');
 				onboardingStore.setApiKeyValid(false);
 			}
 		} catch (e) {

@@ -12,7 +12,11 @@
  */
 
 import { writable, derived } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	getSkillVersion,
+	listSkillVersions,
+	restoreSkillVersion
+} from '$lib/api/agents.api';
 import { getErrorMessage } from '$lib/utils/error';
 import type { SkillVersion, SkillVersionSummary } from '$types/skill_version';
 
@@ -36,7 +40,7 @@ export const skillVersionStore = {
 	async loadVersions(skillId: string): Promise<SkillVersionSummary[]> {
 		store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const versions = await invoke<SkillVersionSummary[]>('list_skill_versions', { skillId });
+			const versions = await listSkillVersions(skillId);
 			store.update((s) => ({
 				...s,
 				versionsBySkill: { ...s.versionsBySkill, [skillId]: versions },
@@ -50,13 +54,13 @@ export const skillVersionStore = {
 	},
 
 	async getVersion(versionId: string): Promise<SkillVersion> {
-		return invoke<SkillVersion>('get_skill_version', { versionId });
+		return getSkillVersion(versionId);
 	},
 
 	async restoreVersion(skillId: string, versionId: string, editedBy = 'user'): Promise<void> {
 		store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			await invoke('restore_skill_version', { skillId, versionId, editedBy });
+			await restoreSkillVersion(skillId, versionId, editedBy);
 			await this.loadVersions(skillId);
 		} catch (e) {
 			store.update((s) => ({ ...s, error: getErrorMessage(e), loading: false }));

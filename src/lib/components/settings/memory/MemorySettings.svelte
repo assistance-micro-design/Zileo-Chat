@@ -28,7 +28,19 @@ the HNSW index schema.
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { tauriInvoke, tauriListen, type TauriUnlistenFn } from '$lib/tauri';
+	import { tauriListen, type TauriUnlistenFn } from '$lib/tauri';
+	import {
+		cancelReindexJob,
+		deleteEmbeddingConfig,
+		getEmbeddingConfig,
+		getMemoryStats,
+		getMemoryTokenStats,
+		getReindexJobStatus,
+		purgeExpiredMemories,
+		reindexMemoryChunks,
+		saveEmbeddingConfig
+	} from '$lib/api/memory.api';
+	import type { PurgeExpiredResult } from '$types/memory';
 	import {
 		Button,
 		Card,
@@ -87,11 +99,6 @@ the HNSW index schema.
 
 	/** Purge state */
 	let purging = $state(false);
-
-	interface PurgeResult {
-		memoriesPurged: number;
-		chunksPurged: number;
-	}
 	const reindexRunning = $derived(reindexProgress?.status === 'running');
 
 	/** Provider options (reactive to locale) */
@@ -116,9 +123,9 @@ the HNSW index schema.
 		loading = true;
 		try {
 			const [loadedConfig, loadedStats, loadedTokenStats] = await Promise.all([
-				tauriInvoke<EmbeddingConfig | null>('get_embedding_config'),
-				tauriInvoke<MemoryStats>('get_memory_stats'),
-				tauriInvoke<MemoryTokenStats>('get_memory_token_stats', { typeFilter: null })
+				getEmbeddingConfig(),
+				getMemoryStats(),
+				getMemoryTokenStats(null)
 			]);
 			if (loadedConfig) {
 				editConfig = { ...loadedConfig };
@@ -143,8 +150,8 @@ the HNSW index schema.
 	export async function reload(): Promise<void> {
 		try {
 			const [loadedStats, loadedTokenStats] = await Promise.all([
-				tauriInvoke<MemoryStats>('get_memory_stats'),
-				tauriInvoke<MemoryTokenStats>('get_memory_token_stats', { typeFilter: null })
+				getMemoryStats(),
+				getMemoryTokenStats(null)
 			]);
 			stats = loadedStats;
 			tokenStats = loadedTokenStats;
@@ -160,7 +167,7 @@ the HNSW index schema.
 		saving = true;
 
 		try {
-			await tauriInvoke('save_embedding_config', { config: editConfig });
+			await saveEmbeddingConfig(editConfig);
 			configExists = true;
 			errorMessage = null;
 			notifyToast('success', t('memory_config_saved'));
@@ -189,7 +196,7 @@ the HNSW index schema.
 	async function confirmDelete(): Promise<void> {
 		deleteDeleting = true;
 		try {
-			await tauriInvoke('delete_embedding_config');
+			await deleteEmbeddingConfig();
 			editConfig = { ...DEFAULT_EMBEDDING_CONFIG };
 			configExists = false;
 			errorMessage = null;
@@ -277,9 +284,7 @@ the HNSW index schema.
 		const persisted = LocalStorage.get<string | null>(STORAGE_KEYS.REINDEX_JOB_ID, null);
 		if (!persisted) return;
 		try {
-			const status = await tauriInvoke<ReindexJobStatus | null>('get_reindex_job_status', {
-				jobId: persisted
-			});
+			const status = await getReindexJobStatus(persisted);
 			if (!status) {
 				// App restart or 10-min retention purge: nothing to show.
 				LocalStorage.remove(STORAGE_KEYS.REINDEX_JOB_ID);
@@ -311,7 +316,7 @@ the HNSW index schema.
 	async function handleReindex(): Promise<void> {
 		reindexStarting = true;
 		try {
-			const jobId = await tauriInvoke<string>('reindex_memory_chunks');
+			const jobId = await reindexMemoryChunks();
 			reindexJobId = jobId;
 			LocalStorage.set(STORAGE_KEYS.REINDEX_JOB_ID, jobId);
 			// Reset visible progress; the first `reindex-progress` event will
@@ -338,7 +343,7 @@ the HNSW index schema.
 	async function handleCancelReindex(): Promise<void> {
 		if (!reindexJobId) return;
 		try {
-			await tauriInvoke('cancel_reindex_job', { jobId: reindexJobId });
+			await cancelReindexJob(reindexJobId);
 		} catch (err) {
 			notifyToast('error', t('memory_reindex_error').replace('{error}', getErrorMessage(err)));
 		}
@@ -351,7 +356,7 @@ the HNSW index schema.
 	async function handlePurgeExpired(): Promise<void> {
 		purging = true;
 		try {
-			const result = await tauriInvoke<PurgeResult>('purge_expired_memories');
+			const result: PurgeExpiredResult = await purgeExpiredMemories();
 			if (result.memoriesPurged === 0) {
 				notifyToast('info', t('memory_purge_empty'));
 			} else {

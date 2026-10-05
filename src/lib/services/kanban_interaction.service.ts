@@ -12,7 +12,7 @@
  * @module lib/services/kanban_interaction
  */
 
-import { tauriInvoke as invoke } from '$lib/tauri';
+import { loadCardInteractions as loadInteractions } from '$lib/api/kanban.api';
 import type { KanbanCardInteraction } from '$types/kanban_interaction';
 import { getErrorMessage } from '$lib/utils/error';
 
@@ -27,9 +27,7 @@ import { getErrorMessage } from '$lib/utils/error';
  */
 export async function loadCardInteractions(cardId: string): Promise<KanbanCardInteraction[]> {
 	try {
-		return await invoke<KanbanCardInteraction[]>('load_card_interactions', {
-			cardId
-		});
+		return await loadInteractions(cardId);
 	} catch (e) {
 		throw new Error(getErrorMessage(e));
 	}

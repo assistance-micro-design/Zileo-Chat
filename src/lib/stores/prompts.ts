@@ -24,7 +24,14 @@
  */
 
 import { derived } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	createPrompt,
+	deletePrompt,
+	getPrompt,
+	listPrompts,
+	searchPrompts as searchPromptsApi,
+	updatePrompt as updatePromptApi
+} from '$lib/api/agents.api';
 import { createCRUDStore, createDerivedStores } from './factory/createCRUDStore';
 import { getErrorMessage } from '$lib/utils/error';
 import type {
@@ -42,13 +49,12 @@ import type {
 
 const baseCrudStore = createCRUDStore<Prompt, PromptCreate, PromptUpdate, PromptSummary>({
 	name: 'prompt',
-	idParamName: 'promptId',
-	commands: {
-		list: 'list_prompts',
-		get: 'get_prompt',
-		create: 'create_prompt',
-		update: 'update_prompt',
-		delete: 'delete_prompt'
+	endpoints: {
+		list: listPrompts,
+		get: getPrompt,
+		create: createPrompt,
+		update: (id, config) => updatePromptApi(id, config),
+		remove: deletePrompt
 	}
 });
 
@@ -102,10 +108,7 @@ export const promptStore = {
 		// Store state before update
 		baseCrudStore._store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const updated = await invoke<Prompt>('update_prompt', {
-				promptId: id,
-				config: updates
-			});
+			const updated = await updatePromptApi(id, updates);
 			await baseCrudStore.loadItems();
 			baseCrudStore._store.update((s) => ({
 				...s,
@@ -132,10 +135,7 @@ export const promptStore = {
 	async searchPrompts(query?: string, category?: PromptCategory): Promise<PromptSummary[]> {
 		baseCrudStore._store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const prompts = await invoke<PromptSummary[]>('search_prompts', {
-				query: query || null,
-				category: category || null
-			});
+			const prompts = await searchPromptsApi(query || null, category || null);
 			baseCrudStore._store.update((s) => ({ ...s, items: prompts, loading: false }));
 			return prompts;
 		} catch (e) {

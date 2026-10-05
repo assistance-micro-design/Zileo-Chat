@@ -9,12 +9,12 @@
 -->
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
-	import { tauriInvoke as invoke } from '$lib/tauri';
+	import { getPrompt } from '$lib/api/agents.api';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Modal, Button, Select, Input, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
 	import type { AgentSummary } from '$types/agent';
-	import type { Prompt, PromptSummary, PromptVariable } from '$types/prompt';
+	import type { PromptSummary, PromptVariable } from '$types/prompt';
 	import type { WorkflowFolder } from '$types/workflow';
 	import type { KanbanCard, KanbanCardUpdate } from '$types/kanban';
 	import { kanbanStore } from '$lib/stores/kanban';
@@ -94,7 +94,7 @@
 			return;
 		}
 		try {
-			const full = await invoke<Prompt>('get_prompt', { promptId: id });
+			const full = await getPrompt(id);
 			selectedPromptVariables = full.variables ?? [];
 			// Preserve user-entered values when the schema overlaps, fill in defaults
 			// for newly-relevant variables.

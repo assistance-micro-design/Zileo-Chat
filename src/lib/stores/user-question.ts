@@ -22,7 +22,7 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import { skipQuestion, submitUserResponse } from '$lib/api/workflows.api';
 import type {
 	UserQuestion,
 	UserQuestionResponse,
@@ -183,7 +183,7 @@ export const userQuestionStore = {
 			get(store).pendingQuestions.find((q) => q.id === response.questionId)?.workflowId ?? '';
 
 		try {
-			await invoke('submit_user_response', {
+			await submitUserResponse({
 				questionId: response.questionId,
 				workflowId: answeredWorkflowId,
 				selectedOptions: response.selectedOptions,
@@ -234,7 +234,7 @@ export const userQuestionStore = {
 			get(store).pendingQuestions.find((q) => q.id === questionId)?.workflowId ?? '';
 
 		try {
-			await invoke('skip_question', { questionId, workflowId: skippedWorkflowId });
+			await skipQuestion(questionId, skippedWorkflowId);
 
 			store.update((s) => {
 				const remaining = s.pendingQuestions.filter((q) => q.id !== questionId);

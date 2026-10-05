@@ -24,7 +24,13 @@
  */
 
 import { derived } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	createSkill,
+	deleteSkill,
+	getSkill,
+	listSkills,
+	updateSkill as updateSkillApi
+} from '$lib/api/agents.api';
 import { createCRUDStore, createDerivedStores } from './factory/createCRUDStore';
 import { getErrorMessage } from '$lib/utils/error';
 import type { Skill, SkillCreate, SkillUpdate, SkillSummary, SkillStoreState } from '$types/skill';
@@ -35,13 +41,12 @@ import type { Skill, SkillCreate, SkillUpdate, SkillSummary, SkillStoreState } f
 
 const baseCrudStore = createCRUDStore<Skill, SkillCreate, SkillUpdate, SkillSummary>({
 	name: 'skill',
-	idParamName: 'skillId',
-	commands: {
-		list: 'list_skills',
-		get: 'get_skill',
-		create: 'create_skill',
-		update: 'update_skill',
-		delete: 'delete_skill'
+	endpoints: {
+		list: () => listSkills(),
+		get: getSkill,
+		create: createSkill,
+		update: (id, config) => updateSkillApi(id, config),
+		remove: deleteSkill
 	}
 });
 
@@ -86,10 +91,7 @@ export const skillStore = {
 	async updateSkill(id: string, updates: SkillUpdate): Promise<Skill> {
 		baseCrudStore._store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const updated = await invoke<Skill>('update_skill', {
-				skillId: id,
-				config: updates
-			});
+			const updated = await updateSkillApi(id, updates);
 			await baseCrudStore.loadItems();
 			baseCrudStore._store.update((s) => ({
 				...s,
@@ -126,10 +128,7 @@ export const skillStore = {
 
 		applyEnabled(enabled);
 		try {
-			await invoke('update_skill', {
-				skillId: id,
-				config: { enabled }
-			});
+			await updateSkillApi(id, { enabled });
 		} catch (e) {
 			applyEnabled(!enabled);
 			baseCrudStore._store.update((s) => ({ ...s, error: getErrorMessage(e) }));

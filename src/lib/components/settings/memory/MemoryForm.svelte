@@ -23,7 +23,7 @@ Provides fields for memory type, content, and metadata.
 -->
 
 <script lang="ts">
-	import { tauriInvoke } from '$lib/tauri';
+	import { addMemory, updateMemory } from '$lib/api/memory.api';
 	import { Button, Input, Select, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type { Memory, MemoryType } from '$types/memory';
@@ -127,18 +127,18 @@ Provides fields for memory type, content, and metadata.
 
 			if (mode === 'add') {
 				// Add new memory
-				await tauriInvoke<string>('add_memory', {
-					memoryType: formData.type,
-					content: formData.content.trim(),
-					metadata: Object.keys(metadata).length > 0 ? metadata : null
-				});
+				await addMemory(
+					formData.type,
+					formData.content.trim(),
+					Object.keys(metadata).length > 0 ? metadata : null
+				);
 			} else if (memory) {
 				// Update existing memory
-				await tauriInvoke<Memory>('update_memory', {
-					memoryId: memory.id,
-					content: formData.content.trim(),
-					metadata: Object.keys(metadata).length > 0 ? metadata : null
-				});
+				await updateMemory(
+					memory.id,
+					formData.content.trim(),
+					Object.keys(metadata).length > 0 ? metadata : null
+				);
 			}
 
 			onsave?.();

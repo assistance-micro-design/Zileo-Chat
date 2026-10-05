@@ -29,7 +29,8 @@
 -->
 <script lang="ts">
 	import { Send, BookOpen, CircleStop, Paperclip, X, Clock } from '@lucide/svelte';
-	import { openDialog, tauriInvoke as invoke } from '$lib/tauri';
+	import { openDialog } from '$lib/tauri';
+	import { readImageForAttachment } from '$lib/api/workflows.api';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import PromptSelectorModal from './PromptSelectorModal.svelte';
 	import { i18n } from '$lib/i18n';
@@ -55,16 +56,7 @@
 	/** Canvas resize threshold. ~1568px keeps Mistral/OpenAI happy. */
 	const MAX_DIMENSION = 1568;
 
-	/**
-	 * Tauri command response shape for the picker. Defined inline because the
-	 * shape is a backend implementation detail not used anywhere else.
-	 */
-	interface ImageReadResult {
-		data_base64: string;
-		mime_type: string;
-		size_bytes: number;
-		name: string;
-	}
+	/** Picker result shape lives in `$types/message` (backend IPC mirror). */
 
 	/**
 	 * ChatInput props
@@ -292,9 +284,7 @@
 					break;
 				}
 				try {
-					const result = await invoke<ImageReadResult>('read_image_for_attachment', {
-						path
-					});
+					const result = await readImageForAttachment(path);
 					pushAttachment(result);
 					attachmentError = null;
 				} catch (e) {

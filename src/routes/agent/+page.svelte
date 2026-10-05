@@ -37,7 +37,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import { i18n } from '$lib/i18n';
 
 	// Service imports
-	import { tauriInvoke } from '$lib/tauri';
+	import { listWorkflowTasks } from '$lib/api/workflows.api';
 	import {
 		WorkflowService,
 		MessageService,
@@ -100,7 +100,7 @@ Uses extracted components, services, and stores for clean architecture.
 		selectDisplayTasksSource,
 		shouldRestoreStatusFilter
 	} from './agent-page.helpers';
-	import type { Workflow, WorkflowFolder, PersistedTask } from '$types/workflow';
+	import type { Workflow, WorkflowFolder } from '$types/workflow';
 	import type { ProviderType } from '$types/llm';
 
 	/**
@@ -215,7 +215,7 @@ Uses extracted components, services, and stores for clean architecture.
 			// Load persisted tasks for this workflow
 			persistedTasks = [];
 			try {
-				const tasks = await tauriInvoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
+				const tasks = await listWorkflowTasks(workflowId);
 				if (!isStillSelected()) return;
 				persistedTasks = mapPersistedTasksToDisplay(tasks);
 			} catch {
@@ -551,9 +551,7 @@ Uses extracted components, services, and stores for clean architecture.
 		// switches to persistedTasks which must be fresh from DB.
 		if (isStillSelected()) {
 			try {
-				const tasks = await tauriInvoke<PersistedTask[]>('list_workflow_tasks', {
-					workflowId: executionWorkflowId
-				});
+				const tasks = await listWorkflowTasks(executionWorkflowId);
 				if (isStillSelected()) {
 					persistedTasks = mapPersistedTasksToDisplay(tasks);
 				}

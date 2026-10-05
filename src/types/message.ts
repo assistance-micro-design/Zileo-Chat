@@ -159,3 +159,33 @@ export interface MessageMetrics {
 	/** `llm_model.id` of the model that produced the response (for pricing lookup). */
 	model_id_used: string | null;
 }
+
+/**
+ * Response for paginated message loading.
+ *
+ * Mirrors Rust `PaginatedMessages` (models/message.rs).
+ */
+export interface PaginatedMessages {
+	/** Messages in the current page */
+	messages: Message[];
+	/** Total number of messages available */
+	total: number;
+	/** Current offset (number of messages skipped) */
+	offset: number;
+	/** Page size limit */
+	limit: number;
+	/** Whether more messages are available after this page */
+	has_more: boolean;
+}
+
+/**
+ * Result of reading an image file for a chat attachment.
+ *
+ * Mirrors the `read_image_for_attachment` command payload (snake_case fields).
+ */
+export interface ImageReadResult {
+	data_base64: string;
+	mime_type: string;
+	size_bytes: number;
+	name: string;
+}

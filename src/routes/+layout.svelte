@@ -19,11 +19,11 @@
 	import { goto } from '$app/navigation';
 	import {
 		tauriListen,
-		tauriInvoke,
 		getAppVersion,
 		isTauriRuntime,
 		type TauriUnlistenFn
 	} from '$lib/tauri';
+	import { bootReadyState } from '$lib/api/workflows.api';
 	import '../styles/global.css';
 	import { theme } from '$lib/stores/theme';
 	import { uiZoom, zoomActionForKey } from '$lib/stores/ui-zoom';
@@ -184,7 +184,7 @@
 			});
 
 			try {
-				if (await tauriInvoke<boolean>('boot_ready_state')) {
+				if (await bootReadyState()) {
 					requestDismiss();
 				}
 			} catch {

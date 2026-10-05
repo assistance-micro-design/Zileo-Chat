@@ -8,7 +8,18 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { get } from 'svelte/store';
 	import { i18n } from '$lib/i18n';
-	import { tauriListen, tauriInvoke as invoke, type TauriUnlistenFn } from '$lib/tauri';
+	import { tauriListen, type TauriUnlistenFn } from '$lib/tauri';
+	import {
+		analyzeCardReport,
+		approveProposedCard as approveProposedCardApi,
+		duplicateKanbanCardAsTemplate,
+		setKanbanCardWorkflowId
+	} from '$lib/api/kanban.api';
+	import { getPrompt } from '$lib/api/agents.api';
+	import {
+		createWorkflow,
+		moveWorkflowToFolder
+	} from '$lib/api/workflows.api';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { locale } from '$lib/stores/locale';
 	import { Badge, Button, DeleteConfirmModal, Spinner } from '$lib/components/ui';
@@ -345,7 +356,7 @@
 	async function approveProposedCard(card: KanbanCard): Promise<void> {
 		pageError = null;
 		try {
-			await invoke('approve_proposed_card', { cardId: card.id });
+			await approveProposedCardApi(card.id);
 			await kanbanStore.loadCards(agentFilter || undefined);
 		} catch (e) {
 			pageError = getErrorMessage(e);
@@ -458,7 +469,7 @@
 	 * Errors are propagated so the viewer surfaces them inline.
 	 */
 	async function reanalyzeCard(card: KanbanCard): Promise<void> {
-		await invoke('analyze_card_report', { cardId: card.id });
+		await analyzeCardReport(card.id);
 	}
 
 	function openView(card: KanbanCard): void {
@@ -537,7 +548,7 @@
 	async function performDuplicate(card: KanbanCard): Promise<void> {
 		pageError = null;
 		try {
-			await invoke<KanbanCard>('duplicate_kanban_card_as_template', { cardId: card.id });
+			await duplicateKanbanCardAsTemplate(card.id);
 			// Reload schedules first so the badge follows the new template card,
 			// then refresh the board so the source disappears and the clone shows
 			// up in `todo` (or `doing` if the scheduler promoted it immediately).
@@ -650,9 +661,7 @@
 		// Build the message: inline_prompt or fetch the prompt content.
 		let message = card.inline_prompt ?? '';
 		if (!message && card.prompt_id) {
-			const prompt = await invoke<{ content: string }>('get_prompt', {
-				promptId: card.prompt_id
-			});
+			const prompt = await getPrompt(card.prompt_id);
 			message = prompt.content;
 		}
 
@@ -669,17 +678,11 @@
 		});
 
 		// Create the workflow + attach to the card folder (if any) + execute.
-		const workflowId = await invoke<string>('create_workflow', {
-			name: card.title,
-			agentId: card.target_agent_id
-		});
+		const workflowId = await createWorkflow(card.title, card.target_agent_id);
 
 		if (card.target_folder_id) {
 			try {
-				await invoke('move_workflow_to_folder', {
-					workflowId,
-					folderId: card.target_folder_id
-				});
+				await moveWorkflowToFolder(workflowId, card.target_folder_id);
 			} catch (e) {
 				// Non-fatal: a missing folder shouldn't block execution.
 				pageError = getErrorMessage(e);
@@ -691,10 +694,7 @@
 		// `WHERE workflow_id = $wid` — without this UPDATE the card would stay
 		// stuck in 'doing' forever after the workflow finishes.
 		try {
-			await invoke('set_kanban_card_workflow_id', {
-				cardId: card.id,
-				workflowId
-			});
+			await setKanbanCardWorkflowId(card.id, workflowId);
 		} catch (e) {
 			pageError = getErrorMessage(e);
 		}

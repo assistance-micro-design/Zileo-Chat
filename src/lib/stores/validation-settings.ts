@@ -20,7 +20,11 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import {
+	getValidationSettings,
+	resetValidationSettings,
+	updateValidationSettings
+} from '$lib/api/workflows.api';
 import type { ValidationSettings, UpdateValidationSettingsRequest } from '$types/validation';
 import { getErrorMessage } from '$lib/utils/error';
 
@@ -60,7 +64,7 @@ function createValidationSettingsStore() {
 		async loadSettings(): Promise<void> {
 			store.update((s) => ({ ...s, loading: true, error: null }));
 			try {
-				const settings = await invoke<ValidationSettings>('get_validation_settings');
+				const settings = await getValidationSettings();
 				store.update((s) => ({ ...s, settings, loading: false }));
 			} catch (err) {
 				const errorMsg = getErrorMessage(err);
@@ -76,9 +80,7 @@ function createValidationSettingsStore() {
 		async updateSettings(config: UpdateValidationSettingsRequest): Promise<void> {
 			store.update((s) => ({ ...s, saving: true, error: null }));
 			try {
-				const settings = await invoke<ValidationSettings>('update_validation_settings', {
-					config
-				});
+				const settings = await updateValidationSettings(config);
 				store.update((s) => ({ ...s, settings, saving: false }));
 			} catch (err) {
 				const errorMsg = getErrorMessage(err);
@@ -93,7 +95,7 @@ function createValidationSettingsStore() {
 		async resetToDefaults(): Promise<void> {
 			store.update((s) => ({ ...s, saving: true, error: null }));
 			try {
-				const settings = await invoke<ValidationSettings>('reset_validation_settings');
+				const settings = await resetValidationSettings();
 				store.update((s) => ({ ...s, settings, saving: false }));
 			} catch (err) {
 				const errorMsg = getErrorMessage(err);

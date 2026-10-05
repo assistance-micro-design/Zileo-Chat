@@ -27,7 +27,7 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import { getMaxConcurrentWorkflows } from '$lib/api/scheduler.api';
 
 /**
  * The backend's max-concurrent-workflows cap, or `null` until loaded (or if the
@@ -63,7 +63,7 @@ export const kanbanRuntimeStore = {
 			return loadPromise;
 		}
 		loadPromise = (async () => {
-			const max = await invoke<number>('get_max_concurrent_workflows');
+			const max = await getMaxConcurrentWorkflows();
 			store.set(max);
 		})();
 		try {

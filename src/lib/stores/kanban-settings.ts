@@ -21,7 +21,7 @@
  */
 
 import { writable, derived } from 'svelte/store';
-import { tauriInvoke as invoke } from '$lib/tauri';
+import { getKanbanSettings } from '$lib/api/settings.api';
 import type { KanbanSettings } from '$types/kanban-settings';
 
 interface KanbanSupervisorState {
@@ -57,7 +57,7 @@ export const kanbanSupervisorStore = {
 	 */
 	async load(): Promise<void> {
 		try {
-			const settings = await invoke<KanbanSettings>('get_kanban_settings');
+			const settings = await getKanbanSettings();
 			store.set(toState(settings));
 		} catch {
 			// Advisory only — keep the last known ids on a transient failure.

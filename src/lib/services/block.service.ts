@@ -20,7 +20,7 @@
  * @module services/block
  */
 
-import { tauriInvoke as invoke } from '$lib/tauri';
+import { loadWorkflowBlocks } from '$lib/api/workflows.api';
 import type { ChatBlock } from '$types/chat-block';
 import type { Message } from '$types/message';
 
@@ -46,9 +46,7 @@ export const BlockService = {
 		if (!workflowId) return result;
 
 		try {
-			const grouped = await invoke<Record<string, ChatBlock[]>>('load_workflow_blocks', {
-				workflowId
-			});
+			const grouped = await loadWorkflowBlocks(workflowId);
 			for (const [id, blocks] of Object.entries(grouped)) {
 				if (blocks.length > 0) {
 					result.set(id, blocks);

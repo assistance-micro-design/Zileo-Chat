@@ -133,7 +133,7 @@ The streaming execution flow proceeds through these steps: validate inputs (work
 
 The system prompt is **rebuilt every turn** by `build_system_prompt_with_tools` (it depends on live agent config — tools, MCP servers, locale, current date) and is therefore never persisted. In continuation mode, `build_initial_messages` replays the persisted history as-is under the regenerated system prompt, without re-appending `task.description` (the frontend already saved the current user turn before streaming).
 
-See `src-tauri/src/commands/streaming/execution.rs`, `src-tauri/src/commands/streaming/helpers.rs::load_conversation_history`, and `src-tauri/src/agents/execution/tool_loop.rs::build_initial_messages` for the full implementation.
+See `src-tauri/src/commands/streaming/execution.rs`, `src-tauri/src/commands/streaming/helpers.rs::load_conversation_history`, and `src-tauri/src/agents/execution/tool_loop/init.rs::build_initial_messages` for the full implementation.
 
 ### Parallel Execution
 
@@ -258,7 +258,7 @@ Completed executions auto-removed after 10 minutes (`CLEANUP_INTERVAL_MS = 60000
 
 ## Kanban Scheduler
 
-The Kanban board (`/kanban` page) drives workflows through an independent backend scheduler — a tokio task spawned at app startup that ticks every 60s (`src-tauri/src/commands/scheduler.rs`). Three responsibilities per tick:
+The Kanban board (`/kanban` page) drives workflows through an independent backend scheduler — a tokio task spawned at app startup that ticks every 60s (`src-tauri/src/commands/scheduler.rs` façade + `src-tauri/src/commands/scheduler/{runner,queue,recovery,concurrency,service}`). Three responsibilities per tick:
 
 0. **Orphan reclaim** — cards in `doing` with no `workflow_id` past a grace window are reset to `ready` / `todo` by `reclaim_orphaned_doing_cards_core`, freeing any leaked concurrency slot before promotion runs.
 1. **Card execution** — pull `ready` cards into `doing` via `WorkflowExecutorService::execute_workflow_streaming`. `select_cards_to_promote_core` uses an atomic `WHERE status = 'ready'` flip (concurrency cap: 3 in Auto, 1 in Manual/Selective) that prevents two promoters from racing into two workflows for the same card. The card's `workflow_id` is persisted in the same transition so the `/kanban` card report viewer can deep-link to the running workflow on `/agent`.

@@ -138,3 +138,22 @@ export interface KanbanScheduleUpdate {
 	enabled?: boolean | null;
 	skip_if_pending?: boolean;
 }
+
+/**
+ * Verdict of the Kanban report analyzer.
+ *
+ * Mirrors Rust `AnalyzeVerdict` (commands/kanban_analyzer.rs): variants are
+ * PascalCase on the wire (no `rename_all` on the enum).
+ */
+export type AnalyzeVerdict = 'Approve' | 'Reject' | 'NeedsImprovement' | 'Skipped';
+
+/**
+ * Analyzer report for a review card.
+ *
+ * Mirrors Rust `AnalyzeReport` (commands/kanban_analyzer.rs).
+ */
+export interface AnalyzeReport {
+	verdict: AnalyzeVerdict;
+	reasoning: string;
+	suggested_prompt_edit?: string | null;
+}

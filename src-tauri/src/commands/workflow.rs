@@ -267,7 +267,7 @@ pub(crate) async fn load_workflow_full_state_core(
     // cumulative token / cost totals ride through unchanged.
     let wf_query = format!(
         "{} WHERE meta::id(id) = '{}'",
-        &*wf_queries::SELECT_BASE,
+        *wf_queries::SELECT_BASE,
         validated_id
     );
 

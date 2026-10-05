@@ -332,7 +332,12 @@ All `@tauri-apps/*` access is centralized in this adapter (modules: `core`, `eve
 
 ### Tauri Commands
 
-Frontend calls backend via `tauriInvoke()` from `$lib/tauri` (wraps `invoke()` from `@tauri-apps/api/core`). Parameter names are automatically converted from camelCase (TypeScript) to snake_case (Rust).
+Frontend calls backend through the typed clients in `src/lib/api/*.api.ts`
+(one function per Rust command, typed params and `$types/` returns), which
+encapsulate `tauriInvoke()` from `$lib/tauri` (wraps `invoke()` from
+`@tauri-apps/api/core`). No command-name string literals outside `src/lib/api/`.
+Parameter names are automatically converted from camelCase (TypeScript) to
+snake_case (Rust).
 
 ### Streaming (Tauri Events)
 

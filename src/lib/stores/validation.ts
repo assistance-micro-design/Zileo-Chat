@@ -23,10 +23,10 @@
 
 import { writable, derived, get } from 'svelte/store';
 import {
-	tauriInvoke as invoke,
 	tauriListen as listen,
 	type TauriUnlistenFn as UnlistenFn
 } from '$lib/tauri';
+import { approveValidation, rejectValidation } from '$lib/api/workflows.api';
 import type { ValidationRequest, RiskLevel, ValidationType } from '$types/validation';
 import { getErrorMessage } from '$lib/utils/error';
 import type { ValidationRequiredEvent } from '$types/sub-agent';
@@ -246,7 +246,7 @@ export const validationStore = {
 		store.update((s) => ({ ...s, isProcessing: true }));
 
 		try {
-			await invoke('approve_validation', { validationId });
+			await approveValidation(validationId);
 
 			store.update((s) => ({
 				...s,
@@ -279,10 +279,7 @@ export const validationStore = {
 		store.update((s) => ({ ...s, isProcessing: true }));
 
 		try {
-			await invoke('reject_validation', {
-				validationId,
-				reason: reason ?? 'Rejected by user'
-			});
+			await rejectValidation(validationId, reason ?? 'Rejected by user');
 
 			store.update((s) => ({
 				...s,
